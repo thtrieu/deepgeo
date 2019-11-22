@@ -474,6 +474,7 @@ class EqualAnglesBecauseParallel(FundamentalTheorem):
     m1, m2 = AngleMeasure('1"'), AngleMeasure('2"')
     self.conclusion.add(AngleHasMeasure(angle11, m1))
     self.conclusion.add_critical(AngleHasMeasure(angle22, m1))
+
     self.conclusion.add(AngleHasMeasure(angle12, m2))
     self.conclusion.add_critical(AngleHasMeasure(angle21, m2))
 

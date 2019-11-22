@@ -25,6 +25,12 @@ from geometry import PointEndsSegment, HalfplaneCoversAngle, LineBordersHalfplan
 from geometry import LineDirectionPerpendicular, PointCentersCircle
 from geometry import LineContainsPoint, CircleContainsPoint, HalfPlaneContainsPoint
 
+import tensorflow as tf
+
+tf.compat.v1.flags.DEFINE_boolean('pdb', False, '')
+
+FLAGS = tf.compat.v1.flags.FLAGS
+
 
 def print_construction(constructions):
   for c in constructions:
@@ -275,11 +281,15 @@ class ExplorationBackoffDFS(object):
         all_theorems.pop(i)
         continue
 
-  def explore(self):
+  def explore(self, do_pdb=False):
     self._recursive_explore(
-        list(self.init_action_chain), self.init_state, self.init_canvas)
+        list(self.init_action_chain), 
+        self.init_state, 
+        self.init_canvas,
+        do_pdb=do_pdb)
 
-  def _recursive_explore(self, action_chain, state, canvas, depth=None):
+  def _recursive_explore(self, action_chain, state, canvas, 
+                         do_pdb=False, depth=None):
     """DFS."""
     if depth is None:
       depth = len(action_chain) + 1
@@ -324,12 +334,7 @@ class ExplorationBackoffDFS(object):
       # spatial_relations is dict(line: [a1, a2, ..], [b1, b2, ..])
       # where a1, a2 are points on the same halfplane and so are b1, b2..
       # s = time.time()
-      try:
-        line2pointgroups = action.draw(new_canvas)
-      except ZeroDivisionError:
-        # import pdb; pdb.set_trace()
-        print('\t /!\\ Division Zero')
-        return 1
+      line2pointgroups = action.draw(new_canvas)
       # print(' * draw ', time.time() - s)
 
       # s = time.time()
@@ -337,13 +342,14 @@ class ExplorationBackoffDFS(object):
       # print(' * spatial ', time.time() - s)
 
       lengths = self.proof_extractor.collect_proof(
-          action_chain, self.init_state, self.init_canvas, new_canvas)
+          action_chain, self.init_state, self.init_canvas, 
+          new_canvas, do_pdb)
       if sum(lengths):
         self.proof_count += sum(lengths)
         print('\n >>> {}\n'.format(self.proof_count))
 
       backoff = self._recursive_explore(
-          action_chain, new_state, new_canvas, depth+1)
+          action_chain, new_state, new_canvas, do_pdb, depth+1)
       action_chain.pop(-1)
 
       if backoff < depth:
@@ -393,7 +399,8 @@ class ProofExtractor(object):
   def __init__(self):
     self._reservoirs = {}
 
-  def collect_proof(self, action_chain, init_state, init_canvas, canvas):
+  def collect_proof(self, action_chain, init_state, init_canvas, 
+                    canvas, do_pdb=False):
     new_action = action_chain[-1]
     if not isinstance(new_action.theorem, 
                       (theorems.ASA, theorems.SAS, theorems.SSS, 
@@ -471,7 +478,8 @@ class ProofExtractor(object):
             print(i + 1, action.to_str(), duration)
           elif s:
             print(i + 1, action.theorem.name, [r.name for r in sum(s, [])], duration)
-        import pdb; pdb.set_trace()
+        if do_pdb:
+          import pdb; pdb.set_trace()
 
     return all_lengths
 
@@ -506,7 +514,9 @@ def whittle_from(queue, action_chain,
       val, rel1, rel2 = query
       obj1, obj2 = rel1.init_list[0], rel2.init_list[0]
       positions = val.dependency_path(obj1, obj2)
-      dependents = [pos for pos in positions if pos]
+      dependents = [pos for pos in positions if pos is not None]
+      # if dependents == []:
+      #   import pdb; pdb.set_trace()
       dependents += [obj1, obj2]
       queue.extend(dependents)
       # {x.name: {a.name: b for a, b in y.items()} for x, y in val.edges.items()}
@@ -692,6 +702,6 @@ if __name__ == '__main__':
   state, canvas, action_chain = init_by_normal_triangle()
   # state, canvas, action_chain = init_by_thales()
   explorer = ExplorationBackoffDFS(state, canvas, action_chain)
-  explorer.explore()
+  explorer.explore(FLAGS.pdb)
   # explorer.explore_interactive([], state, canvas, mode='theorem')
 

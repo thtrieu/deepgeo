@@ -149,6 +149,13 @@ def match_conclusions(conclusion, state_candidates,
 
     if total_match:  # if yes, move on.
       premise_match = match
+      # for rel in relations:
+      #   matched_rel = premise_match[rel]
+      #   if isinstance(matched_rel, (AngleHasMeasure, 
+      #                               LineHasDirection, 
+      #                               SegmentHasLength)):
+      #     obj, val = new_rel.init_list
+      #     val.add(obj)
       continue
 
     # Otherwise, we need to add new objects into the state.

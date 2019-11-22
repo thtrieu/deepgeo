@@ -173,11 +173,10 @@ class CausalValue(GeometryEntity):
     found = False
     while queue:
       s = queue.pop(0) 
-      # print(self.name, s.name, [r.name for r in self.edges])
-      # import pdb; pdb.set_trace()
-      # if s not in self.edges:
-      #   import pdb; pdb.set_trace()
       for i in self.edges[s]: 
+        if i not in visited:
+          # import pdb; pdb.set_trace()
+          continue
         if not visited[i]: 
           parent[i] = s
           if i == obj2:
