@@ -6,6 +6,8 @@ from __future__ import print_function
 import time
 import geometry
 
+from collections import defaultdict as ddict
+
 from geometry import Point, Line, Segment, Angle, HalfPlane, Circle
 from geometry import SegmentLength, AngleMeasure, LineDirection
 from geometry import SegmentHasLength, AngleHasMeasure, LineHasDirection
@@ -356,6 +358,14 @@ class Conclusion(object):
   def __iter__(self):
     for relations, critical in zip(self.topological_list, self.critical):
       yield relations, critical
+
+  def gather_val2objs(self):
+    self.val2objs = ddict(lambda: [])
+    for constructions in self.topological_list:
+      for rel in constructions:
+        if isinstance(rel, (SegmentHasLength, AngleHasMeasure, LineHasDirection)):
+          obj, val = rel.init_list
+          self.val2objs[val].append(obj)
 
 
 def match_relations(premise_relations, 

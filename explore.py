@@ -288,8 +288,16 @@ class ExplorationBackoffDFS(object):
         self.init_canvas,
         do_pdb=do_pdb)
 
+  def explore_steps(self, steps, do_pdb=False):
+    self._recursive_explore(
+        list(self.init_action_chain), 
+        self.init_state, 
+        self.init_canvas,
+        steps=steps,
+        do_pdb=do_pdb)
+
   def _recursive_explore(self, action_chain, state, canvas, 
-                         do_pdb=False, depth=None):
+                         steps=None, do_pdb=False, depth=None):
     """DFS."""
     if depth is None:
       depth = len(action_chain) + 1
@@ -299,17 +307,31 @@ class ExplorationBackoffDFS(object):
       x = np.arange(depth0, depth)
       backoff = np.random.choice(x, p=x[::-1]*1.0/np.sum(x))
       print('Reach max depth ', depth, ' backoff = ', backoff)
-      # import pdb; pdb.set_trace()
       return backoff
 
-    for action in self.random_action(state, depth, canvas):
-      print(' ' * depth, depth, 
-            type(action.theorem).__name__, action.duration)
-      # print(' * find ', time.time() - start_time)
-      # if time.time() - start_time > self.timeout:
-      #   x = np.arange(1, depth)
-      #   backoff = np.random.choice(x, p=x[::-1]*1.0/np.sum(x))
-      #   return backoff
+    if steps is None:
+      actions = self.random_action(state, depth, canvas)
+    elif steps == []:
+      return 0
+    else:
+      def action_gen(steps):
+        while True:
+          step = steps.pop(0)
+          theorem, command_str = step
+          name_maps = [c.split('=') for c in command_str.split()]
+          mapping = {theorem.names[a]: _find(state, b) for a, b in name_maps}
+          action_gen = theorem.match_from_input_mapping(state, mapping)
+          try:
+            action = action_gen.next()
+          except StopIteration:
+            raise ValueError('Matching not found {} {} {}'.format(
+                depth, theorem.name, command_str))
+          yield action
+
+      actions = action_gen(steps)
+
+    for action in actions:
+      print(' ' * depth, depth, type(action.theorem).__name__, action.duration)
       # This is needed for whittling proof.
       action.set_chain_position(depth - 1)
       action_chain.append(action)
@@ -349,7 +371,8 @@ class ExplorationBackoffDFS(object):
         print('\n >>> {}\n'.format(self.proof_count))
 
       backoff = self._recursive_explore(
-          action_chain, new_state, new_canvas, do_pdb, depth+1)
+          action_chain, new_state, new_canvas,
+          steps=steps, do_pdb=do_pdb, depth=depth+1)
       action_chain.pop(-1)
 
       if backoff < depth:
@@ -478,8 +501,10 @@ class ProofExtractor(object):
             print(i + 1, action.to_str(), duration)
           elif s:
             print(i + 1, action.theorem.name, [r.name for r in sum(s, [])], duration)
-        if do_pdb:
-          import pdb; pdb.set_trace()
+        
+        if isinstance(action.theorem, theorems.ParallelBecauseCorrespondingAngles):
+          if length == 2:
+            import pdb; pdb.set_trace()
 
     return all_lengths
 
@@ -491,6 +516,19 @@ value_entity = (
 value_rels = (
     AngleHasMeasure, SegmentHasLength, LineHasDirection
 )
+
+
+def print_name(dependents):
+  s = []
+  for d in dependents:
+    if isinstance(d, tuple):
+      i, a, b = d
+      s.append('{} {} {}'.format(i.name, a.name, b.name))
+    elif isinstance(d, int):
+      s.append(str(d))
+    else:
+      s.append(d.name)
+  return ', '.join(s)
 
 
 def whittle_from(queue, action_chain, 
@@ -513,14 +551,19 @@ def whittle_from(queue, action_chain,
     if isinstance(query, tuple):
       val, rel1, rel2 = query
       obj1, obj2 = rel1.init_list[0], rel2.init_list[0]
-      positions = val.dependency_path(obj1, obj2)
-      dependents = [pos for pos in positions if pos is not None]
-      # if dependents == []:
+      dependents = val.dependency_path(obj1, obj2)
+      if not all([d is not None for d in dependents]):
+        raise ValueError('Path not found between {} and {} in {}'.format(
+            obj1.name, obj2.name,
+            {x.name: {a.name: b for a, b in y.items()} for x, y in val.edges.items()}))
+      # dependents = [pos for pos in positions if pos is not None]
+      # if obj1.name == '^23' and obj2.name == '^17':
       #   import pdb; pdb.set_trace()
       dependents += [obj1, obj2]
       queue.extend(dependents)
       # {x.name: {a.name: b for a, b in y.items()} for x, y in val.edges.items()}
-      # print('{} {} <= {}'.format(rel1.name, rel2.name, dependents))
+      # import pdb; pdb.set_trace()
+      # print('{} {} <= {}'.format(rel1.name, rel2.name, print_name(dependents)))
       # import pdb; pdb.set_trace()
       continue
 
@@ -536,6 +579,10 @@ def whittle_from(queue, action_chain,
     # the whole action and its premise is visited.
     if (whittled_state and whittled_state[pos] == True 
         or whittled[pos] == True): 
+      # if isinstance(query, int):
+      #   print(' X Skip {}'.format(query))
+      # else:
+      #   print(' X Skip {} because {} fulfilled'.format(query.name, pos))
       continue
 
     action = action_chain[pos]
@@ -568,6 +615,7 @@ def whittle_from(queue, action_chain,
           valrels[val].append(obj)
       dependents += [(val, rel1, rel2) if rel1 != rel2 else rel1
                       for val, (rel1, rel2) in valrels.items()]
+      # print('*', pos, action.theorem.name, '<=', print_name(dependents))
     else:
       found = action.matched_conclusion.topological_list[
           query.conclusion_position]
@@ -578,6 +626,7 @@ def whittle_from(queue, action_chain,
       dependents = sum([c.init_list for c in found
                         if hasattr(c, 'init_list')], tuple())
       non_critical_count -= 1
+      # print(query.name, '<=', print_name(dependents))
 
     # Push dependents into queue.
     for dep in dependents:
@@ -632,20 +681,34 @@ def _find(state, name):
   return state.name2obj[name]
 
 
+def _find_premise(premise_objects, name):
+  for obj in premise_objects:
+    if obj.name.startswith(name):
+      return obj
+  return None
+
+
 def execute_steps(steps, state, canvas):
   action_chain = []
 
   for i, (theorem, command) in enumerate(steps):
     print(i + 1, ' ', type(theorem).__name__, command)
     name_maps = [c.split('=') for c in command.split()]
-    mapping = {theorem.names[a]: _find(state, b) for a, b in name_maps}
-    action_gen = theorem.match_from_input_mapping(state, mapping)
+    mapping = dict(
+        (theorem.names[a], _find(state, b))
+        if a in theorem.names
+        else (_find_premise(theorem.premise_objects, a), _find(state, b))
+        for a, b in name_maps)
+    action_gen = theorem.match_from_input_mapping(state, mapping, randomize=False)
 
     try:
       action = action_gen.next()
     except StopIteration:
       raise ValueError('Matching not found {} {}'.format(theorem, command))
 
+    # print(' '.join(['{}::{}'.format(x.name, y.name)
+    #                 for x, y in action.mapping.items()
+    #                 if isinstance(x, AngleHasMeasure)]))
     action.set_chain_position(i)
     action_chain.append(action)
 
@@ -703,5 +766,5 @@ if __name__ == '__main__':
   # state, canvas, action_chain = init_by_thales()
   explorer = ExplorationBackoffDFS(state, canvas, action_chain)
   explorer.explore(FLAGS.pdb)
-  # explorer.explore_interactive([], state, canvas, mode='theorem')
+  # explorer.explore_interactive([], state, canvas, mode='theorem_input')
 

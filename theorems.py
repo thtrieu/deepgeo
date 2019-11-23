@@ -9,6 +9,7 @@ import trieu_graph_match
 import time
 
 from collections import OrderedDict as odict
+from collections import defaultdict as ddict
 
 from theorems_utils import collinear, concyclic, in_halfplane
 from theorems_utils import divides_halfplanes, line_and_halfplanes
@@ -41,11 +42,14 @@ class Action(object):
     for obj in self.new_objects:
       if obj.chain_position is None:
         obj.set_chain_position(pos)
+
       if isinstance(obj, (SegmentHasLength, AngleHasMeasure, LineHasDirection)):
         val = obj.init_list[1]
         if val not in vals:
           val.set_chain_position(pos)
           vals[val] = True
+        # if val.name == '1m':
+        #   print(val, {x.name: {a.name: b for a, b in y.items()} for x, y in val.edges.items()})
 
   def draw(self, canvas):
     return self.theorem.draw(self.mapping, canvas)
@@ -73,6 +77,7 @@ class FundamentalTheorem(object):
 
   def __init__(self):
     self.gather_objects()
+    self.conclusion.gather_val2objs()
 
   def draw(self, mapping, canvas):
     return {}
@@ -127,7 +132,7 @@ class FundamentalTheorem(object):
     except trieu_graph_match.Timeout:
       return
 
-  def match_from_input_mapping(self, state, mapping):
+  def match_from_input_mapping(self, state, mapping, randomize=False):
     # Check if there is a unique match that does not conflict with mapping.
     timeout = []
     matches = trieu_graph_match.match_relations(
@@ -136,6 +141,7 @@ class FundamentalTheorem(object):
         augmented_relations=self.get_augmented_relations(state),
         conclusion=self.conclusion,
         distinct=self.distinct,
+        randomize=randomize,
         mapping=mapping,
         timeout=None,
     )
@@ -349,6 +355,10 @@ class ConstructParallelLine(FundamentalTheorem):
     self.conclusion.add(LineHasDirection(l, d))
     self.conclusion.add_critical(
         LineContainsPoint(l2, A), LineHasDirection(l2, d))
+    # self.conclusion.add_critical(
+    #     LineHasDirection(l, d),
+    #     LineContainsPoint(l2, A),
+    #     LineHasDirection(l2, d))
 
     self.for_drawing = [l2, A, l]
     self.names = dict(A=A, l=l)
@@ -439,6 +449,8 @@ class ParallelBecauseCorrespondingAngles(FundamentalTheorem):
     d = LineDirection('d')
     self.conclusion.add(LineHasDirection(l2, d))
     self.conclusion.add_critical(LineHasDirection(l3, d))
+    # self.conclusion.add_critical(LineHasDirection(l2, d),
+    #                              LineHasDirection(l3, d))
 
     self.names = dict(l=l1, l1=l2, l2=l3)
 
@@ -474,12 +486,13 @@ class EqualAnglesBecauseParallel(FundamentalTheorem):
     m1, m2 = AngleMeasure('1"'), AngleMeasure('2"')
     self.conclusion.add(AngleHasMeasure(angle11, m1))
     self.conclusion.add_critical(AngleHasMeasure(angle22, m1))
+    # self.conclusion.add_critical(AngleHasMeasure(angle11, m1),
+    #                              AngleHasMeasure(angle22, m1))
 
     self.conclusion.add(AngleHasMeasure(angle12, m2))
     self.conclusion.add_critical(AngleHasMeasure(angle21, m2))
-
-    # self.conclusion.add_critical(*have_measure('1"', angle11, angle22))
-    # self.conclusion.add_critical(*have_measure('2"', angle21, angle12))
+    # self.conclusion.add_critical(AngleHasMeasure(angle12, m2),
+    #                              AngleHasMeasure(angle21, m2))
 
     self.names = dict(l=l, l1=l1, l2=l2)
     super(EqualAnglesBecauseParallel, self).__init__()
@@ -552,12 +565,18 @@ class SAS(Congruences):
     l1, m1, m2 = SegmentLength('l1'), AngleMeasure('1"'), AngleMeasure('2"')
     conclusion.add(SegmentHasLength(AC, l1))
     conclusion.add_critical(SegmentHasLength(DF, l1))
+    # conclusion.add_critical(SegmentHasLength(AC, l1),
+    #                         SegmentHasLength(DF, l1))
 
     conclusion.add(AngleHasMeasure(BAC, m1))
     conclusion.add_critical(AngleHasMeasure(EDF, m1))
+    # conclusion.add_critical(AngleHasMeasure(BAC, m1),
+    #                         AngleHasMeasure(EDF, m1))
 
     conclusion.add(AngleHasMeasure(BCA, m2))
     conclusion.add_critical(AngleHasMeasure(EFD, m2))
+    # conclusion.add_critical(AngleHasMeasure(BCA, m2),
+    #                         AngleHasMeasure(EFD, m2))
 
     self.conclusion = conclusion
     self._distinct = [(AB, DE), 
@@ -756,12 +775,18 @@ class ASA(Congruences):
 
     self.conclusion.add(SegmentHasLength(AB, l1)) 
     self.conclusion.add_critical(SegmentHasLength(DE, l1)) 
+    # self.conclusion.add_critical(SegmentHasLength(AB, l1),
+    #                              SegmentHasLength(DE, l1)) 
 
     self.conclusion.add(SegmentHasLength(BC, l2))
     self.conclusion.add_critical(SegmentHasLength(EF, l2))
+    # self.conclusion.add_critical(SegmentHasLength(BC, l2),
+    #                              SegmentHasLength(EF, l2))
 
     self.conclusion.add(AngleHasMeasure(ABC, m0)) 
     self.conclusion.add_critical(AngleHasMeasure(DEF, m0)) 
+    # self.conclusion.add_critical(AngleHasMeasure(ABC, m0),
+    #                              AngleHasMeasure(DEF, m0)) 
 
     # self.conclusion.add_critical(*have_length('l1', AB, DE))
     # self.conclusion.add_critical(*have_length('l2', BC, EF))

@@ -12,6 +12,7 @@ import pyximport; pyximport.install()
 
 import theorems_utils
 from theorems_utils import Conclusion
+from collections import defaultdict as ddict
 
 from geometry import Point, Line, Segment, Angle, HalfPlane, Circle 
 from geometry import SegmentLength, AngleMeasure, LineDirection
@@ -135,6 +136,9 @@ def match_conclusions(conclusion, state_candidates,
   matched_conclusion = Conclusion()
   conclusion_position = 0
 
+  # new value to objects, new ones created in this conclusion,
+  # will be used to create dependency path.
+  val2objs = ddict(lambda: [])
   for relations, critical in conclusion:
     # For each of the construction step in the conclusion
     # we check if it is already in the premise
@@ -149,17 +153,12 @@ def match_conclusions(conclusion, state_candidates,
 
     if total_match:  # if yes, move on.
       premise_match = match
-      # for rel in relations:
-      #   matched_rel = premise_match[rel]
-      #   if isinstance(matched_rel, (AngleHasMeasure, 
-      #                               LineHasDirection, 
-      #                               SegmentHasLength)):
-      #     obj, val = new_rel.init_list
-      #     val.add(obj)
+      # Collect objects into value buckets
       continue
 
     # Otherwise, we need to add new objects into the state.
     new_constructions = []
+    # Loop through the relation and create new objects on demand:
     for rel in relations:
       new_init_list = []
 
@@ -194,12 +193,6 @@ def match_conclusions(conclusion, state_candidates,
         state_candidates[type(rel)] = []
       state_candidates[type(rel)].append(new_rel)
 
-      if isinstance(new_rel, (AngleHasMeasure, 
-                              LineHasDirection, 
-                              SegmentHasLength)):
-        obj, val = new_rel.init_list
-        val.add(obj)
-
       new_constructions.append(new_rel)
       new_rel.set_critical(critical)
       new_rel.set_conclusion_position(conclusion_position)
@@ -207,11 +200,20 @@ def match_conclusions(conclusion, state_candidates,
       premise_match[rel] = new_rel
       # premise_match[new_rel] = rsel
 
+      if isinstance(rel, (SegmentHasLength, AngleHasMeasure, LineHasDirection)):
+        _, val = rel.init_list
+        # Mark that val is involved in a new relation
+        val2objs[val] = conclusion.val2objs[val]
+
     if critical:
       matched_conclusion.add_critical(*new_constructions)
     else:
       matched_conclusion.add(*new_constructions)
     conclusion_position += 1
+
+  # Finally we map val2objs into state space.
+  for val, objs in val2objs.items():
+    premise_match[val].add(map(premise_match.get, objs))
 
   return matched_conclusion, premise_match
 

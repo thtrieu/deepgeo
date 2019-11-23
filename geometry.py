@@ -3,6 +3,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from collections import defaultdict as ddict
+
 
 name_to_obj = {}
 
@@ -133,7 +135,7 @@ class CausalValue(GeometryEntity):
   """Handles transitivity causal dependency."""
 
   def __init__(self, name=None, obj=None):
-    self.edges = {}
+    self.edges = ddict(lambda: {})
     if obj:
       self.edges[obj] = {}
     super(CausalValue, self).__init__(name)
@@ -145,23 +147,28 @@ class CausalValue(GeometryEntity):
                    for obj, neighbors in self.edges.items()}
     return self2
 
-  def add(self, obj):
-    # print('**', {x.name: {a.name: b for a, b in y.items()} for x, y in self.edges.items()})
-    for source in self.edges:
-      if source != obj:
-        self.edges[source][obj] = None
-    if obj not in self.edges:
-      self.edges[obj] = {x: None for x in self.edges.keys()}
-    # print(' ==>  ', {x.name: {a.name: b for a, b in y.items()} for x, y in self.edges.items()})
+  def add(self, objs):
+    # for source in self.edges:
+    #   if source != obj:
+    #     self.edges[source][obj] = None
+    # if obj not in self.edges:
+    #   self.edges[obj] = {x: None for x in self.edges.keys()}
+    if len(objs) < 2:
+      return
+
+    # Loop through all pairs of objects
+    for i, obj1 in enumerate(objs[:-1]):
+      for j, obj2 in enumerate(objs[i+1:]):
+        if obj2 not in self.edges[obj1]:
+          self.edges[obj1][obj2] = None
+        if obj1 not in self.edges[obj2]:
+          self.edges[obj2][obj1] = None
 
   def merge(self, val):
     # print('**', {x.name: {a.name: b for a, b in y.items()} for x, y in val.edges.items()})
     # print('**', {x.name: {a.name: b for a, b in y.items()} for x, y in self.edges.items()})
     for node, neighbors in val.edges.items():
-      if node in self.edges:
-        self.edges[node].update(neighbors)
-      else:
-        self.edges[node] = neighbors
+      self.edges[node].update(neighbors)
 
   def dependency_path(self, obj1, obj2):
     visited = {obj: False for obj in self.edges}
@@ -175,7 +182,6 @@ class CausalValue(GeometryEntity):
       s = queue.pop(0) 
       for i in self.edges[s]: 
         if i not in visited:
-          # import pdb; pdb.set_trace()
           continue
         if not visited[i]: 
           parent[i] = s
