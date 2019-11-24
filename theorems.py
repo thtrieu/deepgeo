@@ -214,6 +214,35 @@ class ConstructMidPoint(FundamentalTheorem):
     return canvas.add_midpoint(C, A, B)
 
 
+class ConstructMirrorPoint(FundamentalTheorem):
+
+  def __init__(self):
+    A, B = map(Point, 'AB')
+    l = Line('l')
+
+    self.premise = collinear(l, A, B)
+
+    C = Point('C')
+    AB, BC = Segment('AB'), Segment('BC')
+    self.conclusion = Conclusion()
+    l1 = SegmentLength('l1')
+    self.conclusion.add(*segment_def(AB, A, B))
+    self.conclusion.add(SegmentHasLength(AB, l1))
+    self.conclusion.add_critical(*(
+        collinear(l, C) +
+        segment_def(BC, B, C) +
+        [SegmentHasLength(BC, l1)]
+    ))
+
+    self.for_drawing = [C, A, B]
+    self.names = dict(A=A, B=B)
+    super(ConstructMirrorPoint, self).__init__()
+
+  def draw(self, mapping, canvas):
+    C, A, B = map(mapping.get, self.for_drawing)
+    return canvas.add_mirrorpoint(C, A, B)
+
+
 class ConstructIntersectLineLine(FundamentalTheorem):
 
   def __init__(self):
@@ -455,6 +484,38 @@ class ParallelBecauseCorrespondingAngles(FundamentalTheorem):
     self.names = dict(l=l1, l1=l2, l2=l3)
 
     super(ParallelBecauseCorrespondingAngles, self).__init__()
+
+
+class ParallelBecauseInteriorAngles(FundamentalTheorem):
+
+  def __init__(self):
+    l1, l1_hp1, l1_hp2 = line_and_halfplanes('l1')
+    l2, l2_hp, _ = line_and_halfplanes('l2')
+    l3, l3_hp, _ = line_and_halfplanes('l3')
+    X, Y = Point('X'), Point('Y')
+
+    angle12, angle13 = Angle('l12'), Angle('l13')
+    self.premise = (
+        collinear(l1, X, Y) +
+        collinear(l2, X) +
+        collinear(l3, Y) +
+        divides_halfplanes(l1, l1_hp1, l1_hp2) +
+        divides_halfplanes(l2, l2_hp, p1=Y) +
+        divides_halfplanes(l3, l3_hp, p1=X) +
+        angle_def(angle12, l1_hp1, l2_hp) +
+        angle_def(angle13, l1_hp2, l3_hp) +
+        have_measure('\'1', angle12, angle13)
+    )
+
+    self.conclusion = Conclusion()
+    d = LineDirection('d')
+    self.conclusion.add(LineHasDirection(l2, d))
+    self.conclusion.add_critical(LineHasDirection(l3, d))
+    # self.conclusion.add_critical(LineHasDirection(l2, d),
+    #                              LineHasDirection(l3, d))
+
+    self.names = dict(l=l1, l1=l2, l2=l3)
+    super(ParallelBecauseInteriorAngles, self).__init__()
 
 
 class EqualAnglesBecauseParallel(FundamentalTheorem):
@@ -902,11 +963,13 @@ class ASA_(Congruences):
 
 all_theorems = {
     'mid': ConstructMidPoint(),  # 0.000365972518921
+    'mirror': ConstructMirrorPoint(),
     'seg_line': ConstructIntersectSegmentLine(),
     'parallel': ConstructParallelLine(),
     'line': ConstructThirdLine(),
     'eq': EqualAnglesBecauseParallel(),  # 1.73088312149
     'sas': SAS(),  # 0.251692056656
     'asa': ASA(),  # 2.26002907753 3.96637487411
-    '.parallel': ParallelBecauseCorrespondingAngles()
+    '.parallel': ParallelBecauseCorrespondingAngles(),
+    '.parallel2': ParallelBecauseInteriorAngles(),
 }

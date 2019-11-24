@@ -50,7 +50,7 @@ class ExplorationBackoffDFS(object):
                init_state,
                init_canvas,
                init_action_chain,
-               max_construction=5,
+               max_construction=6,
                max_depth=30,
                max_line=6,
                max_point=8,
@@ -69,6 +69,7 @@ class ExplorationBackoffDFS(object):
     self.proof_extractor = ProofExtractor()
     self.construct_theorems = [
         theorems.all_theorems['mid'],
+        theorems.all_theorems['mirror'],
         theorems.all_theorems['seg_line'],
         theorems.all_theorems['parallel'],
         theorems.all_theorems['line'],
@@ -76,6 +77,7 @@ class ExplorationBackoffDFS(object):
     self.deduct_theorems = [
         theorems.all_theorems['eq'],
         theorems.all_theorems['.parallel'],
+        theorems.all_theorems['.parallel2'],
         theorems.all_theorems['sas'],
         theorems.all_theorems['asa'],
     ]
@@ -406,15 +408,28 @@ class ProofReservoir(object):
     pass
 
 
-def is_quantitative_construction(construction):
-  if len(construction) < 3:
-    return False
+def get_state_and_proof_objects(last_action):
+  # Collect all value to rel in conclusion
+  val2rels = {}
+  for rel in last_action.conclusion_objects:
+    if isinstance(rel, (SegmentHasLength, LineHasDirection, AngleHasMeasure)):
+      obj, val = rel.init_list
+      if val not in val2rels:
+        val2rels[val] = []
+      val2rels[val].append(rel)
 
-  if not isinstance(construction[0],
-                    (LineDirection, SegmentLength)):
-    return False
-  return True
+  # Collect new value to rel in conclusion:
+  new_val2rels = {}
+  for rel in last_action.new_objects:
+    if isinstance(rel, (SegmentHasLength, LineHasDirection, AngleHasMeasure)):
+      _, val = rel.init_list
+      new_val2rels[val.name] = [val] + val2rels[val]
 
+  for val_name in new_val2rels:
+    queue = new_val2rels[val_name]
+    state_queue = [r.init_list[0] for r in queue[1:]]
+    proof_queue = [tuple(queue)]
+    yield state_queue, proof_queue
 
 
 class ProofExtractor(object):
@@ -431,22 +446,18 @@ class ProofExtractor(object):
       return []
 
     # Extract all value -> value_rel
-    val2rels = {}
-    for obj in action_chain[-1].new_objects:
-      if isinstance(obj, value_rels):
-        val = obj.init_list[1]
-        if val not in val2rels:
-          val2rels[val] = []
-        val2rels[val].append(obj)
+    # val2rels = {}
+    # for obj in action_chain[-1].new_objects:
+    #   if isinstance(obj, value_rels):
+    #     val = obj.init_list[1]
+    #     if val not in val2rels:
+    #       val2rels[val] = []
+    #     val2rels[val].append(obj)
 
     all_lengths = []
-    for val in val2rels:
-      rels = val2rels[val]
-      if len(rels) != 2:
-        continue
-
-      problem_queue = [r.init_list[0] for r in rels]
-      proof_queue = [(val,) + tuple(rels)]
+    for problem_queue, proof_queue in get_state_and_proof_objects(action_chain[-1]):
+      # problem_queue = [r.init_list[0] for r in rels]
+      # proof_queue = [(val,) + tuple(rels)]
 
       problem_constructions = whittle_from(
           list(problem_queue), action_chain)
@@ -485,7 +496,7 @@ class ProofExtractor(object):
       length = sum([1 for x in proof_whittled if x != []])
       all_lengths.append(length)
 
-      if length >= 1:
+      if length >= 5:
         print()
         print(action.theorem.name, length)
         for i, (action, s) in enumerate(zip(action_chain, problem_constructions)):
@@ -494,7 +505,7 @@ class ProofExtractor(object):
             print(i + 1, action.to_str(), duration)
           elif s:
             print(i + 1, action.theorem.name, [r.name for r in sum(s, [])], duration)
-        print('----------', [r.name for r in rels])
+        print('----------', [r.name for r in proof_queue[0]])
         for i, (action, s) in enumerate(zip(action_chain, proof_whittled)):
           duration = action.duration
           if s == True:
@@ -502,9 +513,7 @@ class ProofExtractor(object):
           elif s:
             print(i + 1, action.theorem.name, [r.name for r in sum(s, [])], duration)
         
-        if isinstance(action.theorem, theorems.ParallelBecauseCorrespondingAngles):
-          if length == 2:
-            import pdb; pdb.set_trace()
+        import pdb; pdb.set_trace()
 
     return all_lengths
 
@@ -688,7 +697,7 @@ def _find_premise(premise_objects, name):
   return None
 
 
-def execute_steps(steps, state, canvas):
+def execute_steps(steps, state, canvas, verbose=False):
   action_chain = []
 
   for i, (theorem, command) in enumerate(steps):
@@ -712,7 +721,8 @@ def execute_steps(steps, state, canvas):
     action.set_chain_position(i)
     action_chain.append(action)
 
-    # print('\tAdd : {}'.format([obj.name for obj in action.new_objects]))
+    if verbose:
+      print('\tAdd : {}'.format([obj.name for obj in action.new_objects]))
     state.add_relations(action.new_objects)
     line2pointgroups = action.draw(canvas)
     state.add_spatial_relations(line2pointgroups)

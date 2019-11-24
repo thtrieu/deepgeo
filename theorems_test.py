@@ -283,18 +283,7 @@ def triangle_seed():
   return init_state, init_canvas
 
 
-used_theorems = {
-    'mid': theorems.ConstructMidPoint(),
-    # 'line_line': theorems.ConstructIntersectLineLine(),
-    'seg_line': theorems.ConstructIntersectSegmentLine(),
-    'parallel': theorems.ConstructParallelLine(),
-    'line': theorems.ConstructThirdLine(),
-    'eq': theorems.EqualAnglesBecauseParallel(),
-    'sas': theorems.SAS(),
-    'asa': theorems.ASA(),
-    '.parallel': theorems.ParallelBecauseCorrespondingAngles()
-
-}
+used_theorems = theorems.all_theorems
 
 
 def test_thales():
@@ -899,6 +888,57 @@ def test_whittle4():
   assert len(proved_problem.name2obj) == 68, len(proved_problem.name2obj)
 
 
+def test_whittle5():
+  geometry.reset()
+  init_state, init_canvas = triangle_seed()
+  state, canvas = init_state.copy(), init_canvas.copy()
+  steps = [
+      (used_theorems['parallel'], 'A=A l=bc'),  # l1
+      (used_theorems['parallel'], 'A=C l=ab'),  # l2
+      (used_theorems['mid'], 'A=C B=A'),  # P1
+      (used_theorems['mirror'], 'A=C B=A'),  # P2
+
+      (used_theorems['eq'], 'l=ca l1=l2 l2=ab'),
+      (used_theorems['eq'], 'l=ca l1=bc l2=l1'),
+      (used_theorems['asa'], 'A=C B=B C=A D=A F=C de=l1 ef=l2'),  # P3
+      (used_theorems['sas'], 'A=P1 B=C C=P3 D=P1 E=A F=B'),
+  ]
+
+  print('\nRunning Parallel proof redundant:')
+  state, canvas, action_chain = explore.execute_steps(steps, state, canvas)
+  state_queue, proof_queue = get_state_and_proof_objects(action_chain[-1], '7m')
+
+  s = time.time()
+  problem, problem_canvas, proof_steps = whittle(
+      state_queue, proof_queue, action_chain,
+      init_state, init_canvas, canvas)
+  print('whittle time ', time.time()-s)
+
+  assert len(problem_canvas.points) == 5
+  assert len(problem_canvas.lines) == 5
+  assert len(problem.name2obj) == 27, len(problem.name2obj)
+
+  # Test if we have the correct proof steps
+  chosen_proof_steps = [i for i, step in enumerate(proof_steps)
+                        if step is not None]
+  assert len(chosen_proof_steps) == 4
+  assert chosen_proof_steps == [4, 5, 6, 7]
+
+  steps = [
+      (used_theorems['eq'], 'l=ca l1=l2 l2=ab'),
+      (used_theorems['eq'], 'l=ca l1=bc l2=l1'),
+      (used_theorems['asa'], 'A=C B=B C=A D=A F=C de=l1 ef=l2'),  # P3
+      (used_theorems['sas'], 'A=P1 B=C C=P3 D=P1 E=A F=B'),
+  ]
+
+  proved_problem, proved_canvas, _ = explore.execute_steps(
+      steps, problem, problem_canvas)
+
+  assert len(proved_canvas.points) == 5 
+  assert len(proved_canvas.lines) == 7
+  assert len(proved_problem.name2obj) == 59, len(proved_problem.name2obj)
+
+
 def test_explore1():
   geometry.reset()
   state, canvas, action_chain = explore.init_by_normal_triangle()
@@ -1000,6 +1040,7 @@ if __name__ == '__main__':
   test_whittle2()
   test_whittle3()
   test_whittle4()
+  test_whittle5()
   sas_hp()
   conclusion_match()
   sas()

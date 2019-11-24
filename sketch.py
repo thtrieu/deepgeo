@@ -197,6 +197,11 @@ class Canvas(object):
     self.update_point(mid, p1.midpoint(p2))
     return self.line2hps
 
+  def add_mirrorpoint(self, mirror, p1, p2):
+    p1, p2 = self.points[p1], self.points[p2]
+    self.update_point(mirror, p1 + (p2 - p1) * 2.0)
+    return self.line2hps
+
   def add_parallel_line(self, new_line, p, line):
     p = self.points[p]
     line = self.lines[line]
