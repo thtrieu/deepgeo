@@ -12,6 +12,7 @@ import time
 import os
 import trieu_graph_match
 import glob
+import pickle as pkl
 
 from collections import defaultdict as ddict
 
@@ -456,13 +457,14 @@ class ProofReservoir(object):
   def dump(self):
     files = os.path.join(self.out_dir, self.name)
     flush_count = len(glob.glob(files + '*'))
+
     filename = '{}.part.{:05}'.format(self.name, flush_count)
-    print('\n\t/!\\ Flushing {} ..\n'.format(filename))
     all_arrays = sum([example.arrays for example in self.store], [])
-    with tf.io.gfile.GFile(os.path.join(self.out_dir, filename), 'w'):
-    # with open(os.path.join(self.out_dir, filename), 'w'):
-      np.savez_compressed(os.path.join(self.out_dir, filename), *all_arrays)
-    # tf.io.gfile.copy()
+    
+    print('\n\t/!\\ Flushing {} ..\n'.format(filename))
+    with tf.io.gfile.GFile(os.path.join(self.out_dir, filename), 'w') as f:
+      f.write(pkl.dumps(all_arrays, protocol=pkl.HIGHEST_PROTOCOL))
+    
     self.store = []
 
 
