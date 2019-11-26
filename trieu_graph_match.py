@@ -213,7 +213,7 @@ def match_conclusions(conclusion, state_candidates,
 
   # Finally we map val2objs into state space.
   for val, objs in val2objs.items():
-    premise_match[val].add(map(premise_match.get, objs))
+    premise_match[val].add_new_clique(map(premise_match.get, objs))
 
   return matched_conclusion, premise_match
 
@@ -252,6 +252,7 @@ def match_relations(premise_relations,
       timeout=timeout)
 
   if augmented_relations:
+    # We build state candidates without the augmented relations.
     conclusion_state_candidates = {rel_type: [] for rel_type in state_candidates}
     for relation in state_relations:
       rel_type = type(relation)

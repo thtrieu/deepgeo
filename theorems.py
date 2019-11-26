@@ -46,8 +46,10 @@ class Action(object):
       if isinstance(obj, (SegmentHasLength, AngleHasMeasure, LineHasDirection)):
         val = obj.init_list[1]
         if val not in vals:
+          # print('set {} to {} {} : {}'.format(pos, val, val.name, {x.name: {a.name: b for a, b in y.items()} for x, y in val.edges.items()}))
           val.set_chain_position(pos)
           vals[val] = True
+          # print('now ', {x.name: {a.name: b for a, b in y.items()} for x, y in val.edges.items()})
         # if val.name == '1m':
         #   print(val, {x.name: {a.name: b for a, b in y.items()} for x, y in val.edges.items()})
 
@@ -163,7 +165,80 @@ class FundamentalTheorem(object):
   @property
   def timeout(self):
     return 0.1
-  
+
+
+class Check(object):
+
+  def found(self, state, goal_objects):
+    _, rel1, rel2 = goal_objects
+    obj1 = rel1.init_list[0]
+    obj2 = rel2.init_list[0]
+
+    seg1, seg2 = self.equals
+
+    mapping1 = {obj1: seg1, obj2: seg2}
+    mapping2 = {obj1: seg2, obj2: seg1}
+
+    matches_gen1 = trieu_graph_match.match_relations(
+        premise_relations=self.premise,
+        state_relations=state.relations,
+        mapping=mapping1
+    )
+
+    matches_gen2 = trieu_graph_match.match_relations(
+        premise_relations=self.premise,
+        state_relations=state.relations,
+        mapping=mapping2
+    )
+
+    def matched(matches_gen):
+      try:
+        matches_gen.next()
+        return True
+      except StopIteration:
+        return False
+
+    return matched(matches_gen2) or matched(matches_gen1)
+
+
+class ThalesCheck(Check):
+
+  def __init__(self):
+    A, B, C, M, N = map(Point, 'ABCMN')
+    l, ab, bc, ca = map(Line, 'l ab bc ca'.split())
+    MA, MB, NA, NC = map(Segment, 'MA MB NA NC'.split())
+
+    self.premise = (
+        collinear(ab, A, B, M) +
+        segment_def(MA, M, A) +
+        segment_def(MB, M, B) +
+        have_length('1m', MA, MB) +
+        collinear(bc, B, C) +
+        collinear(l, M, N) +
+        have_direction('d1', bc, l) +
+        collinear(ca, C, A, N) +
+        segment_def(NA, N, A) +
+        segment_def(NC, N, C)
+    )
+
+    self.equals = [NA, NC]
+
+
+class OppositeAnglesCheck(Check):
+
+  def __init__(self):
+    l1, l1_hp1, l1_hp2 = line_and_halfplanes('l1')
+    l2, l2_hp1, l2_hp2 = line_and_halfplanes('l2')
+    angle11, angle22 = Angle('^11'), Angle('^22')
+
+    self.premise = (
+        divides_halfplanes(l1, l1_hp1, l1_hp2) +
+        divides_halfplanes(l2, l2_hp1, l2_hp2) +
+        angle_def(angle11, l1_hp1, l2_hp1) +
+        angle_def(angle22, l1_hp2, l2_hp2)
+    )
+
+    self.equals = [angle11, angle22]
 
 
 class ConstructNormalTriangle(FundamentalTheorem):

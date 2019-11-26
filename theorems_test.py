@@ -268,7 +268,7 @@ def triangle_seed():
   AB, BC, CA = map(Segment, 'AB BC CA'.split())
 
   init_state.add_relations(
-      [A, B, C, AB, BC, CA, ab, bc, ca] +
+      # [A, B, C, AB, BC, CA, ab, bc, ca] +
       segment_def(AB, A, B) +
       segment_def(BC, B, C) +
       segment_def(CA, C, A) +
@@ -453,11 +453,6 @@ def test_thales_whittle2():
   state, canvas, action_chain = explore.execute_steps(steps, state, canvas)
 
   # Extract state queue & proof queue that prove P2 is mid AC
-  # conclusion = action_chain[-1].matched_conclusion
-  # queue = list(conclusion.topological_list[-6])
-  # queue += conclusion.topological_list[-5]
-  # state_queue = [r.init_list[0] for r in queue[1:]]
-  # proof_queue = [tuple(queue)]
   state_queue, proof_queue = get_state_and_proof_objects(action_chain[-1], '10m')
 
   s = time.time()
@@ -470,7 +465,7 @@ def test_thales_whittle2():
   assert len(problem_canvas.points) == 5
   assert len(problem_canvas.lines) == 4
   assert len(problem_canvas.circles) == 0
-  assert len(problem.name2obj) == 23, len(problem.name2obj)
+  assert len(problem.name2obj) == 26, len(problem.name2obj)
 
   # Test if we have the correct proof steps
   chosen_proof_steps = [i for i, step in enumerate(proof_steps)
@@ -478,6 +473,10 @@ def test_thales_whittle2():
 
   assert len(chosen_proof_steps) == 8
   assert chosen_proof_steps == [4, 5, 7, 8, 10, 11, 13, 14]
+
+  thales_check = theorems.ThalesCheck()
+  if not thales_check.found(problem, proof_queue[0]):
+    import pdb; pdb.set_trace()
 
   # Test if the correct proof step applied on the problem statement
   # give the correct solution
@@ -500,7 +499,7 @@ def test_thales_whittle2():
   assert len(proved_canvas.points) == 6
   assert len(proved_canvas.lines) == 6
   assert len(proved_canvas.circles) == 0
-  assert len(proved_problem.name2obj) == 68, len(proved_problem.name2obj)
+  assert len(proved_problem.name2obj) == 70, len(proved_problem.name2obj)
   # action = used_theorems['asa'].match_one_random(proved_problem)
   # assert action is None
 
@@ -549,7 +548,7 @@ def test_whittle0():
   # Test if we are having the correct problem statement
   assert len(problem_canvas.points) == 4
   assert len(problem_canvas.lines) == 5
-  assert len(problem.name2obj) == 23, len(problem.name2obj)
+  assert len(problem.name2obj) == 21, len(problem.name2obj)
 
   # Test if we have the correct proof steps
   chosen_proof_steps = [i for i, step in enumerate(proof_steps)
@@ -568,7 +567,7 @@ def test_whittle0():
 
   assert len(proved_canvas.points) == 4
   assert len(proved_canvas.lines) == 5
-  assert len(proved_problem.name2obj) == 40, len(proved_problem.name2obj)
+  assert len(proved_problem.name2obj) == 39, len(proved_problem.name2obj)
 
 
 def test_whittle1():
@@ -916,7 +915,7 @@ def test_whittle5():
 
   assert len(problem_canvas.points) == 5
   assert len(problem_canvas.lines) == 5
-  assert len(problem.name2obj) == 27, len(problem.name2obj)
+  assert len(problem.name2obj) == 26, len(problem.name2obj)
 
   # Test if we have the correct proof steps
   chosen_proof_steps = [i for i, step in enumerate(proof_steps)
@@ -936,36 +935,69 @@ def test_whittle5():
 
   assert len(proved_canvas.points) == 5 
   assert len(proved_canvas.lines) == 7
-  assert len(proved_problem.name2obj) == 59, len(proved_problem.name2obj)
+  assert len(proved_problem.name2obj) == 58, len(proved_problem.name2obj)
 
 
-def test_explore1():
+def test_whittle6():
   geometry.reset()
-  state, canvas, action_chain = explore.init_by_normal_triangle()
-  explorer = explore.ExplorationBackoffDFS(state, canvas, action_chain)
+  init_state, init_canvas = triangle_seed()
+  state, canvas = init_state.copy(), init_canvas.copy()
+  steps = [
+      (used_theorems['parallel'], 'A=A l=bc'),  # l1
+      (used_theorems['parallel'], 'A=B l=ca'),  # l2
+      (used_theorems['parallel'], 'A=C l=ab'),  # l3
+      (used_theorems['eq'], 'l=ca l1=ab l2=l3'),
+      (used_theorems['eq'], 'l=ca l1=bc l2=l1'),
+      (used_theorems['eq'], 'l=ab l1=ca l2=l2'),
+      (used_theorems['eq'], 'l=ab l1=bc l2=l1'),
+      (used_theorems['asa'], 'A=A B=B C=C D=C F=A de=l3 ef=l1'),  # P1
+      (used_theorems['asa'], 'A=A B=C C=B D=B F=A de=l2 ef=l1'),  # P2
+  ]
+
+  print('\nRunning Parallel proof redundant:')
+  state, canvas, action_chain = explore.execute_steps(steps, state, canvas)
+
+  obj1 = state.name2obj['s2']
+  obj2 = state.name2obj['s4']
+  rel1 = state.obj2valrel[obj1]
+  rel2 = state.obj2valrel[obj2]
+  assert rel1.init_list[1] == rel2.init_list[1]
+  val = rel1.init_list[1]
+
+  state_queue = [obj1, obj2]
+  proof_queue = [(val, rel1, rel2)]
+
+  s = time.time()
+  problem, problem_canvas, proof_steps = whittle(
+      state_queue, proof_queue, action_chain,
+      init_state, init_canvas, canvas)
+  print('whittle time ', time.time()-s)
+
+  assert len(problem_canvas.points) == 5
+  assert len(problem_canvas.lines) == 6
+  assert len(problem.name2obj) == 27, len(problem.name2obj)
+
+  # Test if we have the correct proof steps
+  chosen_proof_steps = [i for i, step in enumerate(proof_steps)
+                        if step is not None]
+  assert len(chosen_proof_steps) == 6
+  assert chosen_proof_steps == [3, 4, 5, 6, 7, 8]
 
   steps = [
-      (used_theorems['mid'], 'A=B B=A'),  # P1
-      (used_theorems['parallel'], 'A=C l=ab'),  # l1
-      (used_theorems['line'], 'A=P1 B=C'),  # l2
-      (used_theorems['parallel'], 'A=B l=l2'),  # l3
-      (used_theorems['mid'], 'A=P1 B=C'),  # P2
-
-      (used_theorems['eq'], 'l=bc l1=ab l2=l1'),
-      (used_theorems['eq'], 'l=l2 l1=ab l2=l1'),
-      (used_theorems['eq'], 'l=bc l1=l3 l2=l2'),
-
-      (used_theorems['asa'], 'A=C B=P1 C=B D=B de=l3 ef=l1 F=C'),  # P3
-      (used_theorems['eq'], 'l=l3 l1=ab l2=l1'),
-      (used_theorems['sas'], 'A=A B=P1 C=C D=P3 E=C F=P1'),  # l4
-
-      (used_theorems['eq'], 'l=l4 l1=l1 l2=ab'),  # <-- 11
-      (used_theorems['eq'], 'l=ca l1=l1 l2=ab'),
-      (used_theorems['asa'], 'A=B B=C C=P3 D=C de=bc ef=ab F=P1'),
-      (used_theorems['.parallel'], 'l=ab l1=l4 l2=ca'), # <-- 14
+      (used_theorems['eq'], 'l=ca l1=ab l2=l3'),
+      (used_theorems['eq'], 'l=ca l1=bc l2=l1'),
+      (used_theorems['eq'], 'l=ab l1=ca l2=l2'),
+      (used_theorems['eq'], 'l=ab l1=bc l2=l1'),
+      (used_theorems['asa'], 'A=A B=B C=C D=C F=A de=l3 ef=l1'),  # P1
+      (used_theorems['asa'], 'A=A B=C C=B D=B F=A de=l2 ef=l1'),  # P2
   ]
-  explorer.explore_steps(steps)
 
+  proved_problem, proved_canvas, _ = explore.execute_steps(
+      steps, problem, problem_canvas)
+
+  assert len(proved_canvas.points) == 5 
+  assert len(proved_canvas.lines) == 6
+  assert len(proved_problem.name2obj) == 56, len(proved_problem.name2obj)
 
 
 def whittle(state_queue, proof_queue, action_chain, 
@@ -981,8 +1013,8 @@ def whittle(state_queue, proof_queue, action_chain,
 
   for i, p in enumerate(proof_whittled):
     if not (p == [] or p == True):
-      if whittled_state[i] != True:
-        whittled_state[i] += p
+      # if whittled_state[i] != True:
+      #   whittled_state[i] += p
       proof_whittled[i] = []
 
   new_state = init_state.copy()
@@ -1032,17 +1064,18 @@ def whittle(state_queue, proof_queue, action_chain,
 
 
 if __name__ == '__main__':
-  test_thales()
-  test_thales_whittle1()
+  # test_thales()
+  # test_thales_whittle1()
   test_thales_whittle2()
-  test_whittle0()
-  test_whittle1()
-  test_whittle2()
-  test_whittle3()
-  test_whittle4()
-  test_whittle5()
-  sas_hp()
-  conclusion_match()
-  sas()
-  state_merge_and_copy()
+  # test_whittle0()
+  # test_whittle1()
+  # test_whittle2()
+  # test_whittle3()
+  # test_whittle4()
+  # test_whittle5()
+  # test_whittle6()
+  # sas_hp()
+  # conclusion_match()
+  # sas()
+  # state_merge_and_copy()
   print('OK')

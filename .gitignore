@@ -2,3 +2,5 @@
 untitled.py
 *.pyc
 test.py
+data*
+test*

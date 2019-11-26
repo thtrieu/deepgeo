@@ -117,6 +117,8 @@ class State(object):
     self.val2valrel = {}
     self.valrel2pos = {}
     self.name2obj = {}
+    self.all_points = []
+    self.all_hps = []
 
     self.line2hps = {}
     self.hp2points = {}
@@ -143,6 +145,9 @@ class State(object):
     copied.valrel2pos = _copy(self.valrel2pos)
     copied.name2obj = _copy(self.name2obj)
 
+    copied.all_points = _copy(self.all_points)
+    copied.all_hps = _copy(self.all_hps)
+
     # For identifying halfplanes
     copied.line2hps = _copy(self.line2hps)
     copied.hp2points = _copy(self.hp2points)
@@ -150,10 +155,22 @@ class State(object):
 
   def add_one(self, entity):
     if isinstance(entity, tuple(non_relations)):
-      self.name2obj[entity.name] = entity
+      # if isinstance(entity, Point):
+      #   self.all_points.append(entity)
+      # elif isinstance(entity, HalfPlane):
+      #   self.all_hps.append(entity)
+      # self.name2obj[entity.name] = entity
       return
         
     relation = entity
+    for obj in relation.init_list:
+      if obj.name not in self.name2obj:
+        self.name2obj[obj.name] = obj
+        if isinstance(obj, Point):
+          self.all_points.append(obj)
+        elif isinstance(obj, HalfPlane):
+          self.all_hps.append(obj)
+
     if isinstance(relation, 
                   (AngleHasMeasure, SegmentHasLength, LineHasDirection)):
       self.add_transitive_relation(relation)
@@ -201,6 +218,8 @@ class State(object):
 
   def add_transitive_relation(self, relation):
     obj, new_value = relation.init_list
+    self.name2obj[obj.name] = obj
+    self.name2obj[new_value.name] = new_value
 
     # import pdb; pdb.set_trace()
     if obj not in self.obj2valrel:
@@ -277,6 +296,7 @@ class State(object):
 
     # Remove old value from self.val2valrel
     self.val2valrel.pop(old_value)
+    self.name2obj.pop(old_value.name)
 
   def add_relations(self, relations):
     for rel in relations:
@@ -321,15 +341,15 @@ class State(object):
         hp1, hp2 = hp2, hp1
 
       if points1:
-        if hp1.name not in self.name2obj:
-          self.add_one(hp1)
+        # if hp1.name not in self.name2obj:
+          # self.add_one(hp1)
         for p in points1:
           if p not in points_hp1:
             self.add_one(HalfPlaneContainsPoint(hp1, p))
 
       if points2:
-        if hp2.name not in self.name2obj:
-          self.add_one(hp2)
+        # if hp2.name not in self.name2obj:
+          # self.add_one(hp2)
         for p in points2:
           if p not in points_hp2:
             self.add_one(HalfPlaneContainsPoint(hp2, p))

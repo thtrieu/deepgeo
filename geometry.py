@@ -138,6 +138,8 @@ class CausalValue(GeometryEntity):
     self.edges = ddict(lambda: {})
     if obj:
       self.edges[obj] = {}
+    # This is to add a new clique when there is new equality
+    self.edges_tmp = ddict(lambda: {})
     super(CausalValue, self).__init__(name)
 
 
@@ -147,7 +149,7 @@ class CausalValue(GeometryEntity):
                    for obj, neighbors in self.edges.items()}
     return self2
 
-  def add(self, objs):
+  def add_new_clique(self, objs):
     # for source in self.edges:
     #   if source != obj:
     #     self.edges[source][obj] = None
@@ -156,13 +158,16 @@ class CausalValue(GeometryEntity):
     if len(objs) < 2:
       return
 
+    # Clear edges_tmp
+    self.edges_tmp = ddict(lambda: {})
+
     # Loop through all pairs of objects
     for i, obj1 in enumerate(objs[:-1]):
       for j, obj2 in enumerate(objs[i+1:]):
-        if obj2 not in self.edges[obj1]:
-          self.edges[obj1][obj2] = None
-        if obj1 not in self.edges[obj2]:
-          self.edges[obj2][obj1] = None
+        if obj2 not in self.edges_tmp[obj1]:
+          self.edges_tmp[obj1][obj2] = None
+        if obj1 not in self.edges_tmp[obj2]:
+          self.edges_tmp[obj2][obj1] = None
 
   def merge(self, val):
     # print('**', {x.name: {a.name: b for a, b in y.items()} for x, y in val.edges.items()})
@@ -204,9 +209,13 @@ class CausalValue(GeometryEntity):
   def set_chain_position(self, pos):
     if not hasattr(self, '_chain_position'):
       self._chain_position = pos
-    for p1, neighbors in self.edges.items():
-      for p2, old_pos in neighbors.items():
-        neighbors[p2] = pos if old_pos is None else old_pos
+
+    # Set the clique
+    for p1, neighbors in self.edges_tmp.items():
+      for p2 in neighbors:
+        neighbors[p2] = pos
+      # Merge
+      self.edges[p1].update(neighbors)
 
 
 class LineDirection(CausalValue):

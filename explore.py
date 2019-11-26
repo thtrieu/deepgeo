@@ -9,7 +9,10 @@ import sketch
 import theorems
 import numpy as np
 import time
+import os
 import trieu_graph_match
+
+from collections import defaultdict as ddict
 
 from theorems_utils import collinear, concyclic, in_halfplane
 from theorems_utils import divides_halfplanes, line_and_halfplanes
@@ -28,8 +31,15 @@ from geometry import LineContainsPoint, CircleContainsPoint, HalfPlaneContainsPo
 import tensorflow as tf
 
 tf.compat.v1.flags.DEFINE_boolean('pdb', False, '')
+tf.compat.v1.flags.DEFINE_string('out_dir', '/Users/thtrieu/deepgeo/data/', '')
 
 FLAGS = tf.compat.v1.flags.FLAGS
+
+
+non_relations = [
+    Point, Line, Segment, Angle, HalfPlane, Circle,
+    SegmentLength, AngleMeasure, LineDirection
+]
 
 
 def print_construction(constructions):
@@ -49,9 +59,10 @@ class ExplorationBackoffDFS(object):
   def __init__(self, 
                init_state,
                init_canvas,
+               out_dir,
                init_action_chain,
-               max_construction=6,
-               max_depth=30,
+               max_construction=7,
+               max_depth=45,
                max_line=6,
                max_point=8,
                max_circle=0):
@@ -66,7 +77,7 @@ class ExplorationBackoffDFS(object):
     self.max_point = max_point
     self.max_circle = max_circle
 
-    self.proof_extractor = ProofExtractor()
+    self.proof_extractor = ProofExtractor(out_dir)
     self.construct_theorems = [
         theorems.all_theorems['mid'],
         theorems.all_theorems['mirror'],
@@ -306,7 +317,7 @@ class ExplorationBackoffDFS(object):
 
     if depth > self.max_depth:
       depth0 = len(self.init_action_chain) + 1
-      x = np.arange(depth0, depth)
+      x = np.arange(depth0, self.max_construction)
       backoff = np.random.choice(x, p=x[::-1]*1.0/np.sum(x))
       print('Reach max depth ', depth, ' backoff = ', backoff)
       return backoff
@@ -365,12 +376,14 @@ class ExplorationBackoffDFS(object):
       new_state.add_spatial_relations(line2pointgroups)
       # print(' * spatial ', time.time() - s)
 
-      lengths = self.proof_extractor.collect_proof(
+      s = time.time()
+      self.proof_extractor.collect_proof(
           action_chain, self.init_state, self.init_canvas, 
-          new_canvas, do_pdb)
-      if sum(lengths):
-        self.proof_count += sum(lengths)
-        print('\n >>> {}\n'.format(self.proof_count))
+          new_state, new_canvas, do_pdb)
+      print(' '.join(['{}: {}'.format(key, reservoir.size)
+                      for key, reservoir in sorted(
+                      self.proof_extractor.reservoirs.items()
+                      ) if reservoir.size > 0]))
 
       backoff = self._recursive_explore(
           action_chain, new_state, new_canvas,
@@ -386,136 +399,363 @@ class ExplorationBackoffDFS(object):
       self.explore()
     else:
       depth0 = len(self.init_action_chain) + 1
-      x = np.arange(depth0, depth)
+      x = np.arange(depth0, self.max_construction)
       backoff = np.random.choice(x, p=x[::-1]*1.0/np.sum(x))
       print('Out of option at depth ', depth, ' backoff = ', backoff)
       # import pdb; pdb.set_trace()
       return backoff
 
 
+def get_state_and_proof_objects(last_action, state):
+  # Collect new value to rel in conclusion:
+  new_objs, val2objs = [], {}
+  for rel in last_action.new_objects:
+    if isinstance(rel, (SegmentHasLength, LineHasDirection, AngleHasMeasure)):
+      obj, val = rel.init_list
+      new_objs.append(obj)
+      val2objs[val] = state.val2valrel[val]
+
+  # Loop through values correspond to new objects
+  for val, rels in val2objs.items():
+    # if there are < 2 objs associated with this val
+    # then we move on
+    if len(rels) < 2:
+      continue
+
+    # Loop through all distinct pair of rels
+    for i, rel1 in enumerate(rels[:-1]):
+      for rel2 in rels[i+1:]:
+        # both objects are not new, move on.
+        obj1, obj2 = rel1.init_list[0], rel2.init_list[0]
+        if obj1 not in new_objs and obj2 not in new_objs:
+          continue
+        # Else yield the state and proof queues
+        problem_queue = [obj1, obj2]
+        proof_queue = [(val, rel1, rel2)]
+        yield problem_queue, proof_queue
+
+
 class ProofReservoir(object):
 
-  def __init__(self, max_store=1000):
-    self._store = []
-    self._max_store = max_store
+  def __init__(self, nameid, out_dir, max_store=1000):
+    self.id = nameid
+    self.out_dir = out_dir
+    self.store = []
+    self.max_store = max_store
+    self.size = 0
+    self.flush_count = 0
 
   def add(self, proof):
-    self._store.append(proof)
-    if len(self._store) == self._max_store:
+    self.store.append(proof)
+    self.size += 1
+    if len(self.store) == self.max_store:
       self.dump()
 
   def dump(self):
-    pass
-
-
-def get_state_and_proof_objects(last_action):
-  # Collect all value to rel in conclusion
-  val2rels = {}
-  for rel in last_action.conclusion_objects:
-    if isinstance(rel, (SegmentHasLength, LineHasDirection, AngleHasMeasure)):
-      obj, val = rel.init_list
-      if val not in val2rels:
-        val2rels[val] = []
-      val2rels[val].append(rel)
-
-  # Collect new value to rel in conclusion:
-  new_val2rels = {}
-  for rel in last_action.new_objects:
-    if isinstance(rel, (SegmentHasLength, LineHasDirection, AngleHasMeasure)):
-      _, val = rel.init_list
-      new_val2rels[val.name] = [val] + val2rels[val]
-
-  for val_name in new_val2rels:
-    queue = new_val2rels[val_name]
-    state_queue = [r.init_list[0] for r in queue[1:]]
-    proof_queue = [tuple(queue)]
-    yield state_queue, proof_queue
+    filename = 'res.depth.{:02}.part.{:05}'.format(self.id, self.flush_count)
+    print('\n\t/!\\ Flushing {} ..\n'.format(filename))
+    all_arrays = sum([example.arrays for example in self.store], [])
+    np.savez_compressed(os.path.join(self.out_dir, filename), *all_arrays)
+    self.store = []
+    self.flush_count += 1
 
 
 class ProofExtractor(object):
 
-  def __init__(self):
-    self._reservoirs = {}
+  def __init__(self, out_dir, max_state_size=127):
+    self.max_state_size = max_state_size
+    self.reservoirs = {i: ProofReservoir(i, out_dir)
+                       for i in range(100)}
+    self.opposite_angle_check = theorems.OppositeAnglesCheck()
+    self.thales_check = theorems.ThalesCheck()
+    # self.checks = [theorems.ThalesCheck(), 
+    #                theorems.OppositeAnglesCheck()]
 
   def collect_proof(self, action_chain, init_state, init_canvas, 
-                    canvas, do_pdb=False):
+                    full_state, full_canvas, do_pdb=False):
     new_action = action_chain[-1]
     if not isinstance(new_action.theorem, 
                       (theorems.ASA, theorems.SAS, theorems.SSS, 
-                       theorems.ParallelBecauseCorrespondingAngles)):
+                       theorems.ParallelBecauseCorrespondingAngles,
+                       theorems.ParallelBecauseInteriorAngles)):
       return []
 
-    # Extract all value -> value_rel
-    # val2rels = {}
-    # for obj in action_chain[-1].new_objects:
-    #   if isinstance(obj, value_rels):
-    #     val = obj.init_list[1]
-    #     if val not in val2rels:
-    #       val2rels[val] = []
-    #     val2rels[val].append(obj)
-
     all_lengths = []
-    for problem_queue, proof_queue in get_state_and_proof_objects(action_chain[-1]):
-      # problem_queue = [r.init_list[0] for r in rels]
-      # proof_queue = [(val,) + tuple(rels)]
+    last_action = action_chain[-1]
+    all_discoveries = get_state_and_proof_objects(last_action, full_state)
 
+    for problem_queue, proof_queue in all_discoveries:    
       problem_constructions = whittle_from(
           list(problem_queue), action_chain)
-      proof_whittled = whittle_from(
+      proof_steps = whittle_from(
           list(proof_queue), action_chain, 
           problem_queue, problem_constructions)
 
-      for i, p in enumerate(proof_whittled):
-        if not (p == [] or p == True):
+      # Transfer all partial steps into problem formulation
+      for i, step in enumerate(proof_steps):
+        if not (step == [] or step == True):
           if problem_constructions[i] != True:
-            problem_constructions[i] += p
-          proof_whittled[i] = []
+            problem_constructions[i] += step
+          proof_steps[i] = []
+      # So now all proof steps are True or []
 
-      problem_state = init_state.copy()
-      problem_canvas = init_canvas.copy()
-
-      for step, action in zip(problem_constructions, action_chain):
-        if step == []:
-          continue
-        if step == True:
-          problem_state.add_relations(action.conclusion_objects)
-        else:
-          all_constructions = sum(step, [])
-          problem_state.add_relations(all_constructions)
-
-      info = {}
-      for name, obj in problem_state.name2obj.items():
-        if isinstance(obj, Point):
-          problem_canvas.update_point(obj, canvas.points[obj])
-        elif isinstance(obj, Line):
-          problem_canvas.update_line(obj, canvas.lines[obj])
-        elif isinstance(obj, Circle):
-          problem_canvas.circles[obj] = canvas.circles[obj]
-      problem_state.add_spatial_relations(problem_canvas.line2hps)
-
-      length = sum([1 for x in proof_whittled if x != []])
+      length = sum([1 for x in proof_steps if x != []])
       all_lengths.append(length)
 
-      if length >= 5:
-        print()
-        print(action.theorem.name, length)
-        for i, (action, s) in enumerate(zip(action_chain, problem_constructions)):
-          duration = action.duration
-          if s == True:
-            print(i + 1, action.to_str(), duration)
-          elif s:
-            print(i + 1, action.theorem.name, [r.name for r in sum(s, [])], duration)
-        print('----------', [r.name for r in proof_queue[0]])
-        for i, (action, s) in enumerate(zip(action_chain, proof_whittled)):
-          duration = action.duration
-          if s == True:
-            print(i + 1, action.to_str(), duration)
-          elif s:
-            print(i + 1, action.theorem.name, [r.name for r in sum(s, [])], duration)
-        
-        import pdb; pdb.set_trace()
+      # if length >= 5:
+      print()
+      print(action_chain[-1].theorem.name, length)
+      for i, (action, s) in enumerate(zip(action_chain, problem_constructions)):
+        duration = action.duration
+        if s == True:
+          print(i + 1, action.to_str(), duration)
+        elif s:
+          print(i + 1, action.theorem.name, [r.name for r in sum(s, [])], duration)
+      print('----------', [r.name for r in proof_queue[0]])
+      for i, (action, s) in enumerate(zip(action_chain, proof_steps)):
+        duration = action.duration
+        if s == True:
+          print(i + 1, action.to_str(), duration)
+        elif s:
+          print(i + 1, action.theorem.name, [r.name for r in sum(s, [])], duration)
 
-    return all_lengths
+      self.create_training_examples(
+          init_state,
+          full_state,
+          action_chain,
+          problem_constructions,
+          proof_queue[0],
+          proof_steps)
+
+  def create_training_examples(
+      self, 
+      init_state, 
+      full_state,
+      action_chain,
+      problem_constructions,
+      goal_objects,
+      proof_steps):
+
+    # Copy the init state
+    problem_state = init_state.copy()
+
+    redundant_actions = []  # for data aug
+    for action, construction, step in zip(action_chain,
+                                          problem_constructions,
+                                          proof_steps):
+      if construction == [] and step == []:
+        redundant_actions.append(action)
+
+    # Add relation to state
+    for construction, action in zip(problem_constructions, action_chain):
+      if construction == []:
+        continue
+      if construction == True:
+        problem_state.add_relations(action.conclusion_objects)
+      else:
+        all_constructions = sum(construction, [])
+        all_constructions = list(set(all_constructions))
+        problem_state.add_relations(all_constructions)
+
+    # Add spatial relations
+    for name, obj in problem_state.name2obj.items():
+      if isinstance(obj, Line):
+        hp1, hp2 = full_state.line2hps[obj]
+        # problem_state.add_one(hp1)
+        # problem_state.add_one(hp2)
+        problem_state.add_one(LineBordersHalfplane(obj, hp1))
+        problem_state.add_one(LineBordersHalfplane(obj, hp2))
+
+    for hp in problem_state.all_hps:
+      for p in full_state.hp2points[hp]:
+        if p in problem_state.all_points:
+          problem_state.add_one(HalfPlaneContainsPoint(hp, p))
+
+    if self.opposite_angle_check.found(problem_state, goal_objects):
+      return  # Nothing to look at here.
+
+    found_thales = self.thales_check.found(problem_state, goal_objects)
+
+    # Now we loop through actions in the proof steps
+    proof_actions = [action for action, step in 
+                     zip(action_chain, proof_steps)
+                     if step != []]
+
+    for i, action in enumerate(proof_actions):
+      # print('Try {}'.format(action.to_str()))
+      # The current graph is too big (size = # nodes)
+      graph_size = len(problem_state.name2obj) + 1
+      if graph_size > self.max_state_size:
+        break
+
+      # Now we randomly add various amount of redundant actions
+      # into the problem state to augment the training examples
+      size_maxed = True
+      for example in self.augment_and_serialize(
+          problem_state, goal_objects, action, full_state, redundant_actions):
+        size_maxed = False
+
+        # We isolate the first step of thales proof into reservoir 0
+        if i == 0 and found_thales:
+          reservoir_id = 0
+        else:
+          reservoir_id = len(proof_actions) - i  # always >= 1
+        self.reservoirs[reservoir_id].add(example)
+
+      if size_maxed:
+        break
+
+      # Now we add the action into the problem state
+      add_action(problem_state, action, full_state)
+
+  def augment_and_serialize(
+      self, state, goal_objects, action, full_state, redundant_actions):
+    state = state.copy()
+    np.random.shuffle(redundant_actions)
+
+    # Yield the non augmented version.
+    if len(state.name2obj) + 1 > self.max_state_size:
+      return  # No example for this one.
+    example = self.serialize(state, goal_objects, action)
+    if example is None:
+      # [r.name for r in action.premise_objects if r not in state.relations and r.name not in state.name2obj]
+      # {l.name: (h1.name, h2.name) for l, (h1, h2) in state.line2hps.items()}
+      # {hp.name: [p.name for p in ps] for hp, ps in state.hp2points.items()}
+      # {l.name: ([p.name for p in p1], [p.name for p in p2]) for l, (p1, p2) in canvas.line2hps.items()}
+      # import pdb; pdb.set_trace()
+      # raise ValueError()
+      import pdb; pdb.set_trace()
+      raise ValueError('Cannot apply action {}'.format(action.to_str()))
+
+    yield example
+
+    # Add redundant action until reach full size
+    for red_action in redundant_actions:
+      # print(' * Try ', red_action.to_str())
+      add_action(state, red_action, full_state)
+      if len(state.name2obj) + 1 > self.max_state_size:
+        break
+      example = self.serialize(state, goal_objects, action)
+      if example:
+        yield example
+
+  def serialize(self, state, goal_objects, action):
+    assert len(state.name2obj) + 1 <= self.max_state_size
+    match = {y: action.mapping[y]
+             for x, y in action.theorem.names.items()}
+    action_gen = action.theorem.match_from_input_mapping(
+      state, match)
+    try:
+      new_action = action_gen.next()
+    except StopIteration:
+      match = {x: action.mapping[y].name
+               for x, y in action.theorem.names.items()}
+      print(match)
+      print('Failed matching {} {}'.format(action.theorem.name, match))
+      # [r.name for r in action.premise_objects if r not in state.relations]
+      # {l.name: (h1.name, h2.name) for l, (h1, h2) in state.line2hps.items()}
+      # {hp.name: [p.name for p in ps] for hp, ps in state.hp2points.items()}
+      # {l.name: ([p.name for p in p1], [p.name for p in p2]) for l, (p1, p2) in canvas.line2hps.items()}
+      # import pdb; pdb.set_trace()
+      # raise ValueError()
+      return None
+
+    seq = [1]  # CLS
+    obj2idx = {}
+    connections = []
+
+    for relation in state.relations:
+      for obj in relation.init_list:
+        if obj not in obj2idx:
+          obj2idx[obj] = len(seq)
+          seq.append(vocab[type(obj)])
+
+      obj1, obj2 = relation.init_list
+      connections.append((obj2idx[obj1], obj2idx[obj2]))
+      connections.append((obj2idx[obj2], obj2idx[obj1]))
+
+    val, rel1, rel2 = goal_objects
+    obj1, obj2 = rel1.init_list[0], rel2.init_list[0]
+
+    val_idx = len(seq)
+    seq.append(vocab[type(val)])
+    connections.append((val_idx, obj2idx[obj1]))
+    connections.append((val_idx, obj2idx[obj2]))
+    connections.append((obj2idx[obj1], val_idx))
+    connections.append((obj2idx[obj2], val_idx))
+
+    # if len(obj2idx) != len(state.name2obj):
+    #   import pdb; pdb.set_trace()
+
+    attention_mask = np.zeros([len(seq), len(seq)], dtype=bool)
+    for id1, id2 in connections:
+      attention_mask[id1, id2] = True
+    # CLS look at everything and vice versa.
+    attention_mask[:, 0] = True
+    attention_mask[0, :] = True
+
+    target = [obj2idx[action.mapping[obj]]
+              for _, obj in sorted(action.theorem.names.items())]
+    target = [action_vocab[type(action.theorem)]] + target
+
+    return Example(np.array(seq, np.int8), 
+                   attention_mask,
+                   np.array(target, np.int8))
+
+
+class Example(object):
+
+  def __init__(self, sequence, attention_mask, target):
+    self.sequence = sequence
+    self.attention_mask = attention_mask
+    self.target = target
+    self.arrays = [sequence, attention_mask, target]
+
+
+action_vocab = {
+    theorems.ConstructMidPoint: 0,  # 0.000365972518921
+    theorems.ConstructMirrorPoint: 1,
+    theorems.ConstructIntersectSegmentLine: 2,
+    theorems.ConstructParallelLine: 3,
+    theorems.ConstructThirdLine: 4,
+    theorems.EqualAnglesBecauseParallel: 5,  # 1.73088312149
+    theorems.SAS: 6,  # 0.251692056656
+    theorems.ASA: 7,  # 2.26002907753 3.96637487411
+    theorems.ParallelBecauseCorrespondingAngles: 8,
+    theorems.ParallelBecauseInteriorAngles: 9,
+}
+
+vocab = {
+    # PAD: 0
+    # CLS: 1
+    Point: 2,
+    Segment: 3,
+    Line: 4,
+    HalfPlane: 5,
+    Angle: 6,
+    Circle: 7,
+    SegmentLength: 8,
+    AngleMeasure: 9,
+    LineDirection: 10
+}
+
+def add_action(state, action, full_state):
+  for obj in action.conclusion_objects:
+    # if obj.name in state.name2obj:
+    #   continue
+    state.add_one(obj)
+    if isinstance(obj, Line):
+      # canvas.update_line(obj, full_canvas.lines[obj])
+      hp1, hp2 = full_state.line2hps[obj]
+      # state.add_one(hp1)
+      # state.add_one(hp2)
+      state.add_one(LineBordersHalfplane(obj, hp1))
+      state.add_one(LineBordersHalfplane(obj, hp2))
+
+  for hp in state.all_hps:
+    for p in full_state.hp2points[hp]:
+      if p in state.all_points:
+        state.add_one(HalfPlaneContainsPoint(hp, p))
 
 
 value_entity = (
@@ -562,6 +802,7 @@ def whittle_from(queue, action_chain,
       obj1, obj2 = rel1.init_list[0], rel2.init_list[0]
       dependents = val.dependency_path(obj1, obj2)
       if not all([d is not None for d in dependents]):
+        import pdb; pdb.set_trace()
         raise ValueError('Path not found between {} and {} in {}'.format(
             obj1.name, obj2.name,
             {x.name: {a.name: b for a, b in y.items()} for x, y in val.edges.items()}))
@@ -651,20 +892,6 @@ def whittle_from(queue, action_chain,
   return whittled
 
 
-class Proof(object):
-
-  def __init__(self, whittled_state_pos, full_state_actions, 
-               proof_actions, goal_objects):
-    self.whittled_state_pos = whittled_state_pos
-    self.full_state_actions = full_state_actions
-    self.proof_actions = proof_actions
-    self.goal_objects = goal_objects
-    self.length = len(proof_actions)
-
-  def create_state(self, action_chain):
-    pass
-
-
 def _is_numeric(string):
   try:
     _ = int(string)
@@ -740,7 +967,7 @@ def init_by_normal_triangle():
   AB, BC, CA = map(Segment, 'AB BC CA'.split())
 
   state.add_relations(
-      [A, B, C, ab, bc, ca, AB, BC, CA] +
+      # [A, B, C, ab, bc, ca, AB, BC, CA] +
       segment_def(AB, A, B) +
       segment_def(BC, B, C) +
       segment_def(CA, C, A) +
@@ -774,7 +1001,7 @@ def init_by_thales():
 if __name__ == '__main__':
   state, canvas, action_chain = init_by_normal_triangle()
   # state, canvas, action_chain = init_by_thales()
-  explorer = ExplorationBackoffDFS(state, canvas, action_chain)
+  explorer = ExplorationBackoffDFS(state, canvas, FLAGS.out_dir, action_chain)
   explorer.explore(FLAGS.pdb)
   # explorer.explore_interactive([], state, canvas, mode='theorem_input')
 
