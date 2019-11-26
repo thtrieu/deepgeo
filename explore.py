@@ -459,7 +459,10 @@ class ProofReservoir(object):
     filename = '{}.part.{:05}'.format(self.name, flush_count)
     print('\n\t/!\\ Flushing {} ..\n'.format(filename))
     all_arrays = sum([example.arrays for example in self.store], [])
-    np.savez_compressed(os.path.join(self.out_dir, filename), *all_arrays)
+    with tf.io.gfile.GFile(os.path.join(self.out_dir, filename), 'w'):
+    # with open(os.path.join(self.out_dir, filename), 'w'):
+      np.savez_compressed(os.path.join(self.out_dir, filename), *all_arrays)
+    # tf.io.gfile.copy()
     self.store = []
 
 
