@@ -34,6 +34,8 @@ import tensorflow as tf
 
 tf.compat.v1.flags.DEFINE_boolean('pdb', False, '')
 tf.compat.v1.flags.DEFINE_string('out_dir', '/Users/thtrieu/deepgeo/data/', '')
+tf.compat.v1.flags.DEFINE_string('tmp_dir', '', '')
+
 tf.compat.v1.flags.DEFINE_integer('worker_id', 0, '')
 
 FLAGS = tf.compat.v1.flags.FLAGS
@@ -462,8 +464,18 @@ class ProofReservoir(object):
     all_arrays = sum([example.arrays for example in self.store], [])
     
     print('\n\t/!\\ Flushing {} ..\n'.format(filename))
-    with tf.io.gfile.GFile(os.path.join(self.out_dir, filename), 'wb') as f:
+
+    target_file = os.path.join(self.out_dir, filename)
+    write_to = target_file
+
+    if FLAGS.tmp_dir:
+      write_to = os.path.join(FLAGS.tmp_dir, filename)
+    with tf.io.gfile.GFile(write_to, 'wb') as f:
       f.write(pkl.dumps(all_arrays, protocol=pkl.HIGHEST_PROTOCOL))
+
+    if FLAGS.tmp_dir:
+      tf.io.gfile.copy(write_to, target_file)
+      tf.io.gfile.remove(write_to)
     
     self.store = []
 
@@ -619,7 +631,6 @@ class ProofExtractor(object):
   def augment_and_serialize(
       self, state, goal_objects, action, full_state, redundant_actions):
     state = state.copy()
-    np.random.shuffle(redundant_actions)
 
     # Yield the non augmented version.
     if len(state.name2obj) + 1 > self.max_state_size:
@@ -638,6 +649,7 @@ class ProofExtractor(object):
     yield example
 
     # Add redundant action until reach full size
+    np.random.shuffle(redundant_actions)
     for red_action in redundant_actions:
       # print(' * Try ', red_action.to_str())
       add_action(state, red_action, full_state)
