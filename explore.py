@@ -33,6 +33,7 @@ from geometry import LineContainsPoint, CircleContainsPoint, HalfPlaneContainsPo
 import tensorflow as tf
 
 tf.compat.v1.flags.DEFINE_boolean('pdb', False, '')
+tf.compat.v1.flags.DEFINE_boolean('verbose', False, '')
 tf.compat.v1.flags.DEFINE_string('out_dir', '/Users/thtrieu/deepgeo/data/', '')
 tf.compat.v1.flags.DEFINE_string('tmp_dir', '', '')
 
@@ -325,6 +326,7 @@ class ExplorationBackoffDFS(object):
       x = np.arange(depth0, self.max_construction)
       backoff = np.random.choice(x, p=x[::-1]*1.0/np.sum(x))
       print('Reach max depth ', depth, ' backoff = ', backoff)
+      print(self.proof_extractor.sizes())
       return backoff
 
     if steps is None:
@@ -349,7 +351,8 @@ class ExplorationBackoffDFS(object):
       actions = action_gen(steps)
 
     for action in actions:
-      print(' ' * depth, depth, type(action.theorem).__name__, action.duration)
+      if FLAGS.verbose:
+        print(' ' * depth, depth, type(action.theorem).__name__, action.duration)
       # This is needed for whittling proof.
       action.set_chain_position(depth - 1)
       action_chain.append(action)
@@ -385,10 +388,6 @@ class ExplorationBackoffDFS(object):
       self.proof_extractor.collect_proof(
           action_chain, self.init_state, self.init_canvas, 
           new_state, new_canvas, do_pdb)
-      print(' '.join(['{}: {}'.format(key, reservoir.size)
-                      for key, reservoir in sorted(
-                      self.proof_extractor.reservoirs.items()
-                      ) if reservoir.size > 0]))
 
       backoff = self._recursive_explore(
           action_chain, new_state, new_canvas,
@@ -401,12 +400,14 @@ class ExplorationBackoffDFS(object):
     if depth == 1:
       # Out of option at depth = 1, do it again.
       print('Out of option at depth 1, start a new Backoff DFS.')
+      print(self.proof_extractor.sizes())
       self.explore()
     else:
       depth0 = len(self.init_action_chain) + 1
       x = np.arange(depth0, self.max_construction)
       backoff = np.random.choice(x, p=x[::-1]*1.0/np.sum(x))
       print('Out of option at depth ', depth, ' backoff = ', backoff)
+      print(self.proof_extractor.sizes())
       # import pdb; pdb.set_trace()
       return backoff
 
@@ -493,6 +494,12 @@ class ProofExtractor(object):
     # self.checks = [theorems.ThalesCheck(), 
     #                theorems.OppositeAnglesCheck()]
 
+  def sizes(self):
+    return(' '.join(['{}: {}'.format(key, reservoir.size)
+                     for key, reservoir in sorted(
+                     self.reservoirs.items()
+                    ) if reservoir.size > 0]))
+
   def collect_proof(self, action_chain, init_state, init_canvas, 
                     full_state, full_canvas, do_pdb=False):
     new_action = action_chain[-1]
@@ -525,21 +532,22 @@ class ProofExtractor(object):
       all_lengths.append(length)
 
       # if length >= 5:
-      print()
-      print(action_chain[-1].theorem.name, length)
-      for i, (action, s) in enumerate(zip(action_chain, problem_constructions)):
-        duration = action.duration
-        if s == True:
-          print(i + 1, action.to_str(), duration)
-        elif s:
-          print(i + 1, action.theorem.name, [r.name for r in sum(s, [])], duration)
-      print('----------', [r.name for r in proof_queue[0]])
-      for i, (action, s) in enumerate(zip(action_chain, proof_steps)):
-        duration = action.duration
-        if s == True:
-          print(i + 1, action.to_str(), duration)
-        elif s:
-          print(i + 1, action.theorem.name, [r.name for r in sum(s, [])], duration)
+      if FLAGS.verbose:
+        print()
+        print(action_chain[-1].theorem.name, length)
+        for i, (action, s) in enumerate(zip(action_chain, problem_constructions)):
+          duration = action.duration
+          if s == True:
+            print(i + 1, action.to_str(), duration)
+          elif s:
+            print(i + 1, action.theorem.name, [r.name for r in sum(s, [])], duration)
+        print('----------', [r.name for r in proof_queue[0]])
+        for i, (action, s) in enumerate(zip(action_chain, proof_steps)):
+          duration = action.duration
+          if s == True:
+            print(i + 1, action.to_str(), duration)
+          elif s:
+            print(i + 1, action.theorem.name, [r.name for r in sum(s, [])], duration)
 
       self.create_training_examples(
           init_state,
@@ -672,8 +680,9 @@ class ProofExtractor(object):
     except StopIteration:
       match = {x: action.mapping[y].name
                for x, y in action.theorem.names.items()}
-      print(match)
-      print('Failed matching {} {}'.format(action.theorem.name, match))
+      if FLAGS.verbose:
+        print(match)
+        print('Failed matching {} {}'.format(action.theorem.name, match))
       # [r.name for r in action.premise_objects if r not in state.relations]
       # {l.name: (h1.name, h2.name) for l, (h1, h2) in state.line2hps.items()}
       # {hp.name: [p.name for p in ps] for hp, ps in state.hp2points.items()}
