@@ -32,6 +32,7 @@ import tensorflow as tf
 
 tf.compat.v1.flags.DEFINE_boolean('pdb', False, '')
 tf.compat.v1.flags.DEFINE_string('out_dir', '/Users/thtrieu/deepgeo/data/', '')
+tf.compat.v1.flags.DEFINE_integer('worker_id', 0, '')
 
 FLAGS = tf.compat.v1.flags.FLAGS
 
@@ -437,8 +438,9 @@ def get_state_and_proof_objects(last_action, state):
 
 class ProofReservoir(object):
 
-  def __init__(self, nameid, out_dir, max_store=1000):
-    self.id = nameid
+  def __init__(self, depth, out_dir, max_store=1000):
+    self.depth = depth
+    self.name = 'res.{:03}.depth.{:02}'.format(FLAGS.worker_id, depth)
     self.out_dir = out_dir
     self.store = []
     self.max_store = max_store
@@ -452,7 +454,7 @@ class ProofReservoir(object):
       self.dump()
 
   def dump(self):
-    filename = 'res.depth.{:02}.part.{:05}'.format(self.id, self.flush_count)
+    filename = '{}.part.{:05}'.format(self.name, self.flush_count)
     print('\n\t/!\\ Flushing {} ..\n'.format(filename))
     all_arrays = sum([example.arrays for example in self.store], [])
     np.savez_compressed(os.path.join(self.out_dir, filename), *all_arrays)
@@ -464,8 +466,8 @@ class ProofExtractor(object):
 
   def __init__(self, out_dir, max_state_size=127):
     self.max_state_size = max_state_size
-    self.reservoirs = {i: ProofReservoir(i, out_dir)
-                       for i in range(100)}
+    self.reservoirs = {depth: ProofReservoir(depth, out_dir)
+                       for depth in range(100)}
     self.opposite_angle_check = theorems.OppositeAnglesCheck()
     self.thales_check = theorems.ThalesCheck()
     # self.checks = [theorems.ThalesCheck(), 
