@@ -11,6 +11,7 @@ import numpy as np
 import time
 import os
 import trieu_graph_match
+import glob
 
 from collections import defaultdict as ddict
 
@@ -445,7 +446,6 @@ class ProofReservoir(object):
     self.store = []
     self.max_store = max_store
     self.size = 0
-    self.flush_count = 0
 
   def add(self, proof):
     self.store.append(proof)
@@ -454,12 +454,13 @@ class ProofReservoir(object):
       self.dump()
 
   def dump(self):
-    filename = '{}.part.{:05}'.format(self.name, self.flush_count)
+    files = os.path.join(self.out_dir, self.name)
+    flush_count = len(glob.glob(files + '*'))
+    filename = '{}.part.{:05}'.format(self.name, flush_count)
     print('\n\t/!\\ Flushing {} ..\n'.format(filename))
     all_arrays = sum([example.arrays for example in self.store], [])
     np.savez_compressed(os.path.join(self.out_dir, filename), *all_arrays)
     self.store = []
-    self.flush_count += 1
 
 
 class ProofExtractor(object):
@@ -1001,6 +1002,7 @@ def init_by_thales():
 
 
 if __name__ == '__main__':
+  np.random.seed(int(time.time() % 42949671) * 100 + FLAGS.worker_id)
   state, canvas, action_chain = init_by_normal_triangle()
   # state, canvas, action_chain = init_by_thales()
   explorer = ExplorationBackoffDFS(state, canvas, FLAGS.out_dir, action_chain)
