@@ -470,8 +470,10 @@ class ProofReservoir(object):
 
     if FLAGS.tmp_dir:
       write_to = os.path.join(FLAGS.tmp_dir, filename)
-    with tf.io.gfile.GFile(write_to, 'wb') as f:
-      f.write(pkl.dumps(all_arrays, protocol=pkl.HIGHEST_PROTOCOL))
+    # with tf.io.gfile.GFile(write_to, 'wb') as f:
+      # f.write(pkl.dumps(all_arrays, protocol=pkl.HIGHEST_PROTOCOL))
+    with open(write_to, 'wb') as f:
+      np.savez_compressed(f, *all_arrays)
 
     if FLAGS.tmp_dir:
       tf.io.gfile.copy(write_to, target_file)
