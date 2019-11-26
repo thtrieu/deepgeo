@@ -462,7 +462,7 @@ class ProofReservoir(object):
     all_arrays = sum([example.arrays for example in self.store], [])
     
     print('\n\t/!\\ Flushing {} ..\n'.format(filename))
-    with tf.io.gfile.GFile(os.path.join(self.out_dir, filename), 'w') as f:
+    with tf.io.gfile.GFile(os.path.join(self.out_dir, filename), 'wb') as f:
       f.write(pkl.dumps(all_arrays, protocol=pkl.HIGHEST_PROTOCOL))
     
     self.store = []
