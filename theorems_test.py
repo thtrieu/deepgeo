@@ -311,7 +311,7 @@ def test_thales():
   s = time.time()
   state, canvas, action_chain = explore.execute_steps(steps, state, canvas)
   print('thales exec time ', time.time()-s)
-  assert len(state.name2obj) == 68, len(state.name2obj)
+  assert len(state.name2obj) == 70, len(state.name2obj)
   assert len(canvas.points) == 6, len(canvas.points)
   assert len(canvas.lines) == 6, len(canvas.lines)
   assert len(canvas.circles) == 0, len(canvas.circles)
@@ -389,7 +389,7 @@ def test_thales_whittle1():
   assert len(problem_canvas.points) == 5
   assert len(problem_canvas.lines) == 4
   assert len(problem_canvas.circles) == 0
-  assert len(problem.name2obj) == 23, len(problem.name2obj)
+  assert len(problem.name2obj) == 26, len(problem.name2obj)
 
   # Test if we have the correct proof steps
   chosen_proof_steps = [i for i, step in enumerate(proof_steps)
@@ -418,7 +418,7 @@ def test_thales_whittle1():
   assert len(proved_canvas.points) == 6
   assert len(proved_canvas.lines) == 6
   assert len(proved_canvas.circles) == 0
-  assert len(proved_problem.name2obj) == 68, len(proved_problem.name2obj)
+  assert len(proved_problem.name2obj) == 70, len(proved_problem.name2obj)
   # action = used_theorems['asa'].match_one_random(proved_problem)
   # assert action is None
 
@@ -548,7 +548,7 @@ def test_whittle0():
   # Test if we are having the correct problem statement
   assert len(problem_canvas.points) == 4
   assert len(problem_canvas.lines) == 5
-  assert len(problem.name2obj) == 21, len(problem.name2obj)
+  assert len(problem.name2obj) == 25, len(problem.name2obj)
 
   # Test if we have the correct proof steps
   chosen_proof_steps = [i for i, step in enumerate(proof_steps)
@@ -567,7 +567,7 @@ def test_whittle0():
 
   assert len(proved_canvas.points) == 4
   assert len(proved_canvas.lines) == 5
-  assert len(proved_problem.name2obj) == 39, len(proved_problem.name2obj)
+  assert len(proved_problem.name2obj) == 43, len(proved_problem.name2obj)
 
 
 def test_whittle1():
@@ -608,7 +608,7 @@ def test_whittle1():
   # Test if we are having the correct problem statement
   assert len(problem_canvas.points) == 4
   assert len(problem_canvas.lines) == 5
-  assert len(problem.name2obj) == 21, len(problem.name2obj)
+  assert len(problem.name2obj) == 25, len(problem.name2obj)
 
   # Test if we have the correct proof steps
   chosen_proof_steps = [i for i, step in enumerate(proof_steps)
@@ -627,7 +627,7 @@ def test_whittle1():
 
   assert len(proved_canvas.points) == 4
   assert len(proved_canvas.lines) == 5
-  assert len(proved_problem.name2obj) == 39, len(proved_problem.name2obj)
+  assert len(proved_problem.name2obj) == 43, len(proved_problem.name2obj)
 
 
 def test_whittle2():
@@ -663,7 +663,7 @@ def test_whittle2():
   print('whittle time ', time.time()-s)
   assert len(problem_canvas.points) == 4
   assert len(problem_canvas.lines) == 5
-  assert len(problem.name2obj) == 21, len(problem.name2obj)
+  assert len(problem.name2obj) == 25, len(problem.name2obj)
 
   # Test if we have the correct proof steps
   chosen_proof_steps = [i for i, step in enumerate(proof_steps)
@@ -682,7 +682,7 @@ def test_whittle2():
 
   assert len(proved_canvas.points) == 4
   assert len(proved_canvas.lines) == 5
-  assert len(proved_problem.name2obj) == 39, len(proved_problem.name2obj)
+  assert len(proved_problem.name2obj) == 43, len(proved_problem.name2obj)
 
 
 def test_whittle3():
@@ -723,7 +723,7 @@ def test_whittle3():
 
   assert len(problem_canvas.points) == 6
   assert len(problem_canvas.lines) == 7
-  assert len(problem.name2obj) == 35, len(problem.name2obj)
+  assert len(problem.name2obj) == 39, len(problem.name2obj)
 
   # Test if we have the correct proof steps
   chosen_proof_steps = [i for i, step in enumerate(proof_steps)
@@ -745,7 +745,7 @@ def test_whittle3():
 
   assert len(proved_canvas.points) == 6
   assert len(proved_canvas.lines) == 7
-  assert len(proved_problem.name2obj) == 62, len(proved_problem.name2obj)
+  assert len(proved_problem.name2obj) == 65, len(proved_problem.name2obj)
 
 
 def test_whittle3a():
@@ -793,7 +793,7 @@ def test_whittle3a():
 
   assert len(problem_canvas.points) == 6
   assert len(problem_canvas.lines) == 7
-  assert len(problem.name2obj) == 35, len(problem.name2obj)
+  assert len(problem.name2obj) == 39, len(problem.name2obj)
 
   # Test if we have the correct proof steps
   chosen_proof_steps = [i for i, step in enumerate(proof_steps)
@@ -861,7 +861,7 @@ def test_whittle4():
 
   assert len(problem_canvas.points) == 5
   assert len(problem_canvas.lines) == 7
-  assert len(problem.name2obj) == 31, len(problem.name2obj)
+  assert len(problem.name2obj) == 35, len(problem.name2obj)
 
   # Test if we have the correct proof steps
   chosen_proof_steps = [i for i, step in enumerate(proof_steps)
@@ -884,7 +884,7 @@ def test_whittle4():
 
   assert len(proved_canvas.points) == 5
   assert len(proved_canvas.lines) == 7
-  assert len(proved_problem.name2obj) == 68, len(proved_problem.name2obj)
+  assert len(proved_problem.name2obj) == 70, len(proved_problem.name2obj)
 
 
 def test_whittle5():
@@ -915,7 +915,7 @@ def test_whittle5():
 
   assert len(problem_canvas.points) == 5
   assert len(problem_canvas.lines) == 5
-  assert len(problem.name2obj) == 26, len(problem.name2obj)
+  assert len(problem.name2obj) == 30, len(problem.name2obj)
 
   # Test if we have the correct proof steps
   chosen_proof_steps = [i for i, step in enumerate(proof_steps)
@@ -935,7 +935,7 @@ def test_whittle5():
 
   assert len(proved_canvas.points) == 5 
   assert len(proved_canvas.lines) == 7
-  assert len(proved_problem.name2obj) == 58, len(proved_problem.name2obj)
+  assert len(proved_problem.name2obj) == 62, len(proved_problem.name2obj)
 
 
 def test_whittle6():
@@ -975,7 +975,7 @@ def test_whittle6():
 
   assert len(problem_canvas.points) == 5
   assert len(problem_canvas.lines) == 6
-  assert len(problem.name2obj) == 27, len(problem.name2obj)
+  assert len(problem.name2obj) == 31, len(problem.name2obj)
 
   # Test if we have the correct proof steps
   chosen_proof_steps = [i for i, step in enumerate(proof_steps)
@@ -997,7 +997,7 @@ def test_whittle6():
 
   assert len(proved_canvas.points) == 5 
   assert len(proved_canvas.lines) == 6
-  assert len(proved_problem.name2obj) == 56, len(proved_problem.name2obj)
+  assert len(proved_problem.name2obj) == 60, len(proved_problem.name2obj)
 
 
 def whittle(state_queue, proof_queue, action_chain, 
@@ -1064,18 +1064,18 @@ def whittle(state_queue, proof_queue, action_chain,
 
 
 if __name__ == '__main__':
-  # test_thales()
-  # test_thales_whittle1()
+  test_thales()
+  test_thales_whittle1()
   test_thales_whittle2()
-  # test_whittle0()
-  # test_whittle1()
-  # test_whittle2()
-  # test_whittle3()
-  # test_whittle4()
-  # test_whittle5()
-  # test_whittle6()
-  # sas_hp()
-  # conclusion_match()
-  # sas()
-  # state_merge_and_copy()
+  test_whittle0()
+  test_whittle1()
+  test_whittle2()
+  test_whittle3()
+  test_whittle4()
+  test_whittle5()
+  test_whittle6()
+  sas_hp()
+  conclusion_match()
+  sas()
+  state_merge_and_copy()
   print('OK')
