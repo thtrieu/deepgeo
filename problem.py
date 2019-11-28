@@ -77,7 +77,7 @@ def get_examples_from_depth(
                    targets=target,
                    depth=[depth])
 
-    print('Depth {}, file {}/{}: {} done in {}s'.format(
+    tf.logging.info('Depth {}, file {}/{}: {} done in {}s'.format(
         depth, count+1, len(files), f, time.time() - start_time))
 
 
