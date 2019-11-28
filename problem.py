@@ -20,6 +20,10 @@ from geometry import Point, Line, Segment, HalfPlane, Angle
 from geometry import SegmentLength, AngleMeasure, LineDirection
 
 
+
+tf.logging.set_verbosity(tf.logging.INFO)
+
+
 def bin2dec_v3(bool_array):
   """Turn bool array a[N, n_bit] into signed integer.
 
