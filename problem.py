@@ -52,6 +52,8 @@ def get_examples_from_depth(
       os.path.join(tmp_dir, '*.depth.{:02}.*'.format(depth)))
 
   for count, f in enumerate(sorted(files)):
+    tf.logging.info('Depth {}, file {}/{}: {}'.format(
+        depth, count+1, len(files), f))
     start_time = time.time()
     with np.load(f) as loaded:
     # loaded = dict(np.load(f))
@@ -80,9 +82,7 @@ def get_examples_from_depth(
                    theorem=[theorem],
                    targets=target,
                    depth=[depth])
-
-    tf.logging.info('Depth {}, file {}/{}: {} done in {}s'.format(
-        depth, count+1, len(files), f, time.time() - start_time))
+    tf.logging.info('Done in {}s'.format(time.time() - start_time))
 
 
 @registry.register_problem
