@@ -13,6 +13,10 @@ from __future__ import print_function
 from tensor2tensor.bin import t2t_datagen
 
 import problem
+import tensorflow as tf
+
+
+tf.logging.set_verbosity(tf.logging.INFO)
 
 
 
