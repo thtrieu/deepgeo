@@ -74,6 +74,7 @@ if n_bit == 4:
 # start = time.time()
 # bin2dec_v2(np.random.randint(2, size=(batch_size, n_bit)))
 # print(time.time() - start)
+
 batch_size = 4096
 
 start = time.time()
