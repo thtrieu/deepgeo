@@ -1,7 +1,7 @@
 """
 python t2t_datagen.py \
 --problem=geo_upto5 \
---tmp_dir=data_small \
+--tmp_dir=data_np \
 --data_dir=data \
 --alsologtostderr
 
@@ -14,10 +14,6 @@ from tensor2tensor.bin import t2t_datagen
 
 import problem
 import tensorflow as tf
-
-
-tf.logging.set_verbosity(tf.logging.INFO)
-
 
 
 if __name__ == '__main__':

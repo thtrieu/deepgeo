@@ -1,3 +1,10 @@
+"""
+python problem_test.py \
+--model=graph_transformer \
+--problem=geo_upto5 \
+--hparams_set=graph_transformer_local \
+--data_dir=data
+"""
 import problem
 import model
 import tensorflow as tf
@@ -132,7 +139,7 @@ dataset = geo_problem.input_fn(
                         shuffle_buffer_size=8))
 
 features = dataset.make_one_shot_iterator().get_next()[0]
-features.update(attention_mask=model.dec_to_att_mask(features['attention_mask']))
+features.update(attention_mask=model.dec_to_bin_att_mask(features['attention_mask']))
 
 keys = ['sequence', 'theorem', 'attention_mask', 'targets', 'depth']
 sess = tf.Session()

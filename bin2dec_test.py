@@ -8,7 +8,7 @@ import model
 n_bit = 32
 
 a_dec = tf.placeholder(tf.int32, [None, 512])
-a_bin = model.dec_to_att_mask(a_dec)
+a_bin = model.dec_to_bin_att_mask(a_dec)
 
 # def bin2dec_v1_(arr):
 #   arr = arr[::-1]
