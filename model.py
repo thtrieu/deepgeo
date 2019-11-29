@@ -68,6 +68,18 @@ def premise_gather_nd(sequence_output, premise):
   return premise_vecs
 
 
+
+def accuracy(logits, labels):
+  predictions = tf.argmax(  # shape [batch, num_classes]
+      logits, axis=-1, output_type=tf.int32)
+  return tf.metrics.accuracy(
+      # Shape of model_outputs['labels'] is [batch_size, 1]
+      # because T2T on TPU expects these tensors to have rank >= 2
+      labels=tf.reshape(labels, [-1]),
+      predictions=predictions)  # shape [batch, num_classes]
+
+
+
 class BaseModel(t2t_model.T2TModel):
   """Base Image Model; subclass needs to implement body()."""
 
@@ -81,58 +93,50 @@ class BaseModel(t2t_model.T2TModel):
     )
     return features
 
-  # def get_eval_metrics(self, model_outputs):
-  #   predictions = tf.argmax(  # shape [batch, num_classes]
-  #       model_outputs['logits'], axis=-1, output_type=tf.int32)
-  #   accuracy = tf.metrics.accuracy(
-  #       # Shape of model_outputs['labels'] is [batch_size, 1]
-  #       # because T2T on TPU expects these tensors to have rank >= 2
-  #       labels=tf.reshape(model_outputs['labels'], [-1]),
-  #       predictions=predictions)  # shape [batch, num_classes]
-  #   eval_metrics = dict(accuracy=accuracy)
-  #   return eval_metrics
+  def estimator_spec_eval(self, features, logits, labels, loss, losses_dict):
+    """Constructs `tf.estimator.EstimatorSpec` for EVAL (evaluation) mode."""
+    del losses_dict
 
-  # def estimator_spec_eval(self, features, logits, labels, loss, losses_dict):
-  #   """Constructs `tf.estimator.EstimatorSpec` for EVAL (evaluation) mode."""
-  #   del losses_dict
-  #   # hparams = self.hparams
+    assert not t2t_model.common_layers.is_xla_compiled(), (
+        'Currently not supported eval on TPU.')
+    eval_metrics = dict(
+        theorem_accuracy=accuracy(logits['theorem_logits'], logits['theorem_labels']),
+        premise_accuracy=accuracy(logits['premise_logits'], logits['premise_labels'])
+    )
+    predictions = logits
 
-  #   assert not t2t_model.common_layers.is_xla_compiled(), (
-  #       'Currently not supported eval on TPU.')
-  #   # The returned logits dict from self.body() is what expected by
-  #   # bert_pretraining.metric_fn.
-  #   eval_metrics = self.get_eval_metrics(logits)
-  #   predictions = logits
+    evaluation_hooks = []
 
-  #   evaluation_hooks = []
-  #   # Create a SummarySaverHook
-  #   eval_dir = os.path.join(
-  #       self.hparams.model_dir,
-  #       self.hparams.get('eval_dir_name', 'eval'))
-  #   eval_summary_hook = tf.train.SummarySaverHook(
-  #       save_steps=1,
-  #       output_dir=eval_dir,
-  #       summary_op=tf.summary.merge_all())
-  #   evaluation_hooks.append(eval_summary_hook)
-  #   evaluation_hooks += self.hparams.problem.eval_hooks(
-  #       features, logits, self.hparams)
+    # Create a SummarySaverHook
+    eval_dir = os.path.join(
+        self.hparams.model_dir,
+        self.hparams.get('eval_dir_name', 'eval'))
+    eval_summary_hook = tf.train.SummarySaverHook(
+        save_steps=1,
+        output_dir=eval_dir,
+        summary_op=tf.summary.merge_all())
+    evaluation_hooks.append(eval_summary_hook)
+    evaluation_hooks += self.hparams.problem.eval_hooks(
+        features, logits, self.hparams)
 
-  #   return tf.estimator.EstimatorSpec(
-  #       tf.estimator.ModeKeys.EVAL,
-  #       predictions=predictions,
-  #       eval_metric_ops=eval_metrics,
-  #       evaluation_hooks=evaluation_hooks,
-  #       loss=loss)
+    return tf.estimator.EstimatorSpec(
+        tf.estimator.ModeKeys.EVAL,
+        predictions=predictions,
+        eval_metric_ops=eval_metrics,
+        evaluation_hooks=evaluation_hooks,
+        loss=loss)
 
-  # def optimize(self, loss, num_async_replicas=1, use_tpu=False):
-  #   lr = t2t_model.learning_rate.learning_rate_schedule(self.hparams)
-  #   if num_async_replicas > 1:
-  #     lr /= math.sqrt(float(num_async_replicas))
-  #   # if is_running_locally():
-  #   #   lr = tf.Print(lr, [lr], message='learning rate')
-  #   tf.logging.info('Use T2T resnet optimizer: lr={}'.format(lr))
-  #   return t2t_model.optimize.optimize(
-  #       loss, lr, self.hparams, use_tpu=use_tpu)
+  def optimize(self, loss, num_async_replicas=1, use_tpu=False, variables=None):
+    """Return a training op minimizing loss."""
+    lr = t2t_model.learning_rate.learning_rate_schedule(self.hparams)
+    tf.summary.scalar('learning_rate', lr)
+    if num_async_replicas > 1:
+      log_info("Dividing learning rate by num_async_replicas: %d",
+               num_async_replicas)
+    lr /= math.sqrt(float(num_async_replicas))
+    train_op = t2t_model.optimize.optimize(
+        loss, lr, self.hparams, use_tpu=use_tpu, variables=variables)
+    return train_op
 
 
 @registry.register_model
@@ -316,8 +320,8 @@ def graph_transformer():
       learning_rate=0.1,
 
       dropout_prob=0.1,
-      hidden_size=128,
-      intermediate_size=512,
+      hidden_size=512,
+      intermediate_size=1024,
 
       initializer_range=0.02,
       hidden_act='gelu',
