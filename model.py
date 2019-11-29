@@ -97,16 +97,27 @@ class BaseModel(t2t_model.T2TModel):
     """Constructs `tf.estimator.EstimatorSpec` for EVAL (evaluation) mode."""
     del losses_dict
 
-    assert not t2t_model.common_layers.is_xla_compiled(), (
-        'Currently not supported eval on TPU.')
-    eval_metrics = dict(
-        theorem_accuracy=accuracy(logits['theorem_logits'], logits['theorem_labels']),
-        premise_accuracy=accuracy(logits['premise_logits'], logits['premise_labels'])
-    )
-    predictions = logits
+    def eval_metrics_fn(theorem_logits, theorem_labels,
+                        premise_logits, premise_labels):
+      return dict(
+          theorem_accuracy=accuracy(theorem_logits, theorem_labels),
+          premise_accuracy=accuracy(premise_logits, premise_labels)
+      )
+
+    if t2t_model.common_layers.is_xla_compiled():
+      # Note: important to call this before remove_summaries()
+      if self.hparams.tpu_enable_host_call:
+        host_call = self.create_eval_host_call()
+      else:
+        host_call = None
+      remove_summaries()
+      return tf.contrib.tpu.TPUEstimatorSpec(
+          tf.estimator.ModeKeys.EVAL,
+          eval_metrics=(eval_metrics_fn, logits),
+          host_call=host_call,
+          loss=loss)
 
     evaluation_hooks = []
-
     # Create a SummarySaverHook
     eval_dir = os.path.join(
         self.hparams.model_dir,
@@ -121,8 +132,8 @@ class BaseModel(t2t_model.T2TModel):
 
     return tf.estimator.EstimatorSpec(
         tf.estimator.ModeKeys.EVAL,
-        predictions=predictions,
-        eval_metric_ops=eval_metrics,
+        predictions=logits,
+        eval_metric_ops=eval_metrics_fn(**logits),
         evaluation_hooks=evaluation_hooks,
         loss=loss)
 
