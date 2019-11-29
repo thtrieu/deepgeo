@@ -110,7 +110,7 @@ class BaseModel(t2t_model.T2TModel):
         host_call = self.create_eval_host_call()
       else:
         host_call = None
-      remove_summaries()
+      t2t_model.remove_summaries()
       return tf.contrib.tpu.TPUEstimatorSpec(
           tf.estimator.ModeKeys.EVAL,
           eval_metrics=(eval_metrics_fn, logits),
