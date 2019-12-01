@@ -35,6 +35,7 @@ def bin2dec_v3(bool_array):
   """
   bool_array = bool_array[:, ::-1]
   # sign = first bit AND (OR [other bits])
+  # sign = 1 if negative, 0 if positive
   sign = bool_array[:, :1] * np.logical_or.reduce(
       bool_array[:, 1:], -1, keepdims=True)
 

@@ -34,10 +34,9 @@ import tensorflow as tf
 
 tf.compat.v1.flags.DEFINE_boolean('pdb', False, '')
 tf.compat.v1.flags.DEFINE_boolean('verbose', False, '')
-tf.compat.v1.flags.DEFINE_string('out_dir', '/Users/thtrieu/deepgeo/data/', '')
-tf.compat.v1.flags.DEFINE_string('tmp_dir', '', '')
+tf.compat.v1.flags.DEFINE_string('out_dir', '/Users/thtrieu/deepgeo/data_small/', '')
 
-tf.compat.v1.flags.DEFINE_integer('worker_id', 0, '')
+tf.compat.v1.flags.DEFINE_integer('explore_worker_id', 0, '')
 
 FLAGS = tf.compat.v1.flags.FLAGS
 
@@ -445,7 +444,7 @@ class ProofReservoir(object):
 
   def __init__(self, depth, out_dir, max_store=1000):
     self.depth = depth
-    self.name = 'res.{:03}.depth.{:02}'.format(FLAGS.worker_id, depth)
+    self.name = 'res.{:03}.depth.{:02}'.format(FLAGS.explore_worker_id, depth)
     self.out_dir = out_dir
     self.store = []
     self.max_store = max_store
@@ -469,16 +468,8 @@ class ProofReservoir(object):
     target_file = os.path.join(self.out_dir, filename)
     write_to = target_file
 
-    if FLAGS.tmp_dir:
-      write_to = os.path.join(FLAGS.tmp_dir, filename)
-    # with tf.io.gfile.GFile(write_to, 'wb') as f:
-      # f.write(pkl.dumps(all_arrays, protocol=pkl.HIGHEST_PROTOCOL))
     with open(write_to, 'wb') as f:
       np.savez_compressed(f, *all_arrays)
-
-    if FLAGS.tmp_dir:
-      tf.io.gfile.copy(write_to, target_file)
-      tf.io.gfile.remove(write_to)
     
     self.store = []
 
@@ -532,7 +523,8 @@ class ProofExtractor(object):
       all_lengths.append(length)
 
       # if length >= 5:
-      if FLAGS.verbose:
+      # if FLAGS.verbose:
+      if length <= 5:
         print()
         print(action_chain[-1].theorem.name, length)
         for i, (action, s) in enumerate(zip(action_chain, problem_constructions)):
@@ -548,6 +540,8 @@ class ProofExtractor(object):
             print(i + 1, action.to_str(), duration)
           elif s:
             print(i + 1, action.theorem.name, [r.name for r in sum(s, [])], duration)
+        import pdb; pdb.set_trace()
+        # if length >
 
       self.create_training_examples(
           init_state,
@@ -691,39 +685,18 @@ class ProofExtractor(object):
       # raise ValueError()
       return None
 
-    seq = [1]  # CLS
-    obj2idx = {}
-    connections = []
-
-    for relation in state.relations:
-      for obj in relation.init_list:
-        if obj not in obj2idx:
-          obj2idx[obj] = len(seq)
-          seq.append(vocab[type(obj)])
-
-      obj1, obj2 = relation.init_list
-      connections.append((obj2idx[obj1], obj2idx[obj2]))
-      connections.append((obj2idx[obj2], obj2idx[obj1]))
+    seq, _, obj2idx, attention_mask = serialize_state(state)
 
     val, rel1, rel2 = goal_objects
     obj1, obj2 = rel1.init_list[0], rel2.init_list[0]
 
     val_idx = len(seq)
     seq.append(vocab[type(val)])
-    connections.append((val_idx, obj2idx[obj1]))
-    connections.append((val_idx, obj2idx[obj2]))
-    connections.append((obj2idx[obj1], val_idx))
-    connections.append((obj2idx[obj2], val_idx))
 
-    # if len(obj2idx) != len(state.name2obj):
-    #   import pdb; pdb.set_trace()
-
-    attention_mask = np.zeros([len(seq), len(seq)], dtype=bool)
-    for id1, id2 in connections:
-      attention_mask[id1, id2] = True
-    # CLS look at everything and vice versa.
-    attention_mask[:, 0] = True
-    attention_mask[0, :] = True
+    for obj in [obj1, obj2]:
+      obj_idx = obj2idx[obj]
+      attention_mask[val_idx, obj_idx] = True
+      attention_mask[obj_idx, val_idx] = True
 
     target = [obj2idx[action.mapping[obj]]
               for _, obj in sorted(action.theorem.names.items())]
@@ -732,6 +705,35 @@ class ProofExtractor(object):
     return Example(np.array(seq, np.int8), 
                    attention_mask,
                    np.array(target, np.int8))
+
+
+def serialize_state(state):
+  seq = [1]  # CLS
+  obj_list = ['CLS']
+  obj2idx = {}
+  connections = []
+
+  for relation in state.relations:
+    for obj in relation.init_list:
+      if obj not in obj2idx:
+        obj2idx[obj] = len(seq)
+        seq.append(vocab[type(obj)])
+        obj_list.append(obj)
+
+    obj1, obj2 = relation.init_list
+    connections.append((obj2idx[obj1], obj2idx[obj2]))
+    connections.append((obj2idx[obj2], obj2idx[obj1]))
+
+  attention_mask = np.zeros([len(seq) + 1,  # +1 for goal val.
+                             len(seq) + 1], dtype=bool)
+  for id1, id2 in connections:
+    attention_mask[id1, id2] = True
+  # CLS look at everything and vice versa.
+  attention_mask[:, 0] = True
+  attention_mask[0, :] = True
+
+  return seq, obj_list, obj2idx, attention_mask
+
 
 
 class Example(object):
@@ -757,8 +759,8 @@ action_vocab = {
 }
 
 vocab = {
-    # PAD: 0
-    # CLS: 1
+    'PAD': 0,
+    'CLS': 1,
     Point: 2,
     Segment: 3,
     Line: 4,
@@ -959,7 +961,7 @@ def execute_steps(steps, state, canvas, verbose=False):
   action_chain = []
 
   for i, (theorem, command) in enumerate(steps):
-    print(i + 1, ' ', type(theorem).__name__, command)
+    # print(i + 1, ' ', type(theorem).__name__, command)
     name_maps = [c.split('=') for c in command.split()]
     mapping = dict(
         (theorem.names[a], _find(state, b))
@@ -976,6 +978,7 @@ def execute_steps(steps, state, canvas, verbose=False):
     # print(' '.join(['{}::{}'.format(x.name, y.name)
     #                 for x, y in action.mapping.items()
     #                 if isinstance(x, AngleHasMeasure)]))
+    print(i+1, action.to_str())
     action.set_chain_position(i)
     action_chain.append(action)
 
@@ -1030,7 +1033,7 @@ def init_by_thales():
 
 
 if __name__ == '__main__':
-  np.random.seed(int(time.time() % 42949671) * 100 + FLAGS.worker_id)
+  np.random.seed(int(time.time() % 42949671) * 100 + FLAGS.explore_worker_id)
   state, canvas, action_chain = init_by_normal_triangle()
   # state, canvas, action_chain = init_by_thales()
   explorer = ExplorationBackoffDFS(state, canvas, FLAGS.out_dir, action_chain)

@@ -66,11 +66,11 @@ class Action(object):
                         ]
     s = self.theorem.name + ': '
     s += ' '.join(
-        ['{}::{}'.format(x, y)
+        ['{}={}'.format(x, y)
          for x, y in sorted(names_match)])
     s += ' => '
     s += ' '.join(
-        ['{}::{}'.format(x, y)
+        ['{}={}'.format(x, y)
          for x, y in sorted(conclusion_match)])
     return s
 
@@ -318,32 +318,31 @@ class ConstructMirrorPoint(FundamentalTheorem):
     return canvas.add_mirrorpoint(C, A, B)
 
 
-class ConstructIntersectLineLine(FundamentalTheorem):
+class UserConstructIntersectLineLine(FundamentalTheorem):
 
   def __init__(self):
-    A = Point('A')
-    l, l1, l2 = map(Line, 'l l1 l2'.split())
+    l1, l2 = map(Line, 'l1 l2'.split())
+    hp1, hp2 = map(HalfPlane, 'hp1 hp2'.split())
 
-    self.premise = (
-        collinear(l1, A) +
-        collinear(l2, A) +
-        have_direction('d1', l1, l)
-    )
+    self.premise = [LineBordersHalfplane(l1, hp1), 
+                    LineBordersHalfplane(l2, hp2)]
 
     B = Point('B')
     self.conclusion = Conclusion(*(
-        collinear(l, B) + collinear(l2, B)
+        collinear(l1, B) + collinear(l2, B)
     ))
     # AB = Segment('AB')
     # self.conclusion.add(*segment_def(AB, A, B))
 
-    self.for_drawing = [B, l, l2]
-    self.names = dict(l=l, l1=l1, l2=l2)
-    super(ConstructIntersectLineLine, self).__init__()
+    self.for_drawing = [B, l1, l2]
+    self.names = dict(l1=l1, l2=l2)
+    super(UserConstructIntersectLineLine, self).__init__()
 
   def draw(self, mapping, canvas):
-    B, l, l2 = map(mapping.get, self.for_drawing)
-    return canvas.add_intersect_line_line(B, l, l2)
+    B, l1, l2 = map(mapping.get, self.for_drawing)
+    info = canvas.add_intersect_line_line(B, l1, l2)
+    return info
+
 
 
 
@@ -1040,6 +1039,7 @@ all_theorems = {
     'mid': ConstructMidPoint(),  # 0.000365972518921
     'mirror': ConstructMirrorPoint(),
     'seg_line': ConstructIntersectSegmentLine(),
+    'line_line': UserConstructIntersectLineLine(),
     'parallel': ConstructParallelLine(),
     'line': ConstructThirdLine(),
     'eq': EqualAnglesBecauseParallel(),  # 1.73088312149

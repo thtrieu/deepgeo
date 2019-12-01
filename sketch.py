@@ -84,12 +84,18 @@ def line_segment_intersection(l, A, B):
   return Point(x1 + alpha * dx, y1 + alpha * dy)
 
 
+class InvalidLineIntersect(BaseException):
+  pass
+
+
 def line_line_intersection(l1, l2):
   a1, b1, c1 = map(float, l1.coefficients)
   a2, b2, c2 = map(float, l2.coefficients)
   # a1x + b1y + c1 = 0
   # a2x + b2y + c2 = 0
   d = a1 * b2 - a2 * b1
+  if d == 0:
+    raise InvalidLineIntersect
   x = (c2 * b1 - c1 * b2) / d
   y = (c1 * a2 - c2 * a1) / d
   return Point(x, y)
@@ -182,7 +188,11 @@ class Canvas(object):
 
   def add_intersect_line_line(self, new_point, line1, line2):
     line1, line2 = self.lines[line1], self.lines[line2]
-    self.update_point(new_point, line_line_intersection(line1, line2))
+    sym_point = line_line_intersection(line1, line2)
+    if sym_point is None:
+      return None
+
+    self.update_point(new_point, sym_point)
     return self.line2hps
 
   def add_intersect_seg_line(self, new_point, line, p1, p2):

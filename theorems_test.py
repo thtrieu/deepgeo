@@ -322,6 +322,48 @@ def test_thales():
   # assert action is None
 
 
+def test_intersect_line_line():
+  geometry.reset()
+  init_state, init_canvas = triangle_seed()
+  state, canvas = init_state.copy(), init_canvas.copy()
+
+  print('Running thales:')
+  steps = [
+      (used_theorems['parallel'], 'A=A l=bc'),  # l1
+      (used_theorems['parallel'], 'A=C l=ab'),  # l2
+      (used_theorems['line_line'], 'l1=l1 l2=l2'),  # l3
+  ]
+
+  s = time.time()
+  state, canvas, action_chain = explore.execute_steps(steps, state, canvas)
+  print('line line exec time ', time.time()-s)
+  assert len(state.name2obj) == 24, len(state.name2obj)
+  assert len(canvas.points) == 4, len(canvas.points)
+  assert len(canvas.lines) == 5, len(canvas.lines)
+  assert len(canvas.circles) == 0, len(canvas.circles)
+
+
+def test_intersect_line_line2():
+  geometry.reset()
+  init_state, init_canvas = triangle_seed()
+  state, canvas = init_state.copy(), init_canvas.copy()
+
+  print('Running thales:')
+  steps = [
+      (used_theorems['parallel'], 'A=A l=bc'),  # l1
+      (used_theorems['line_line'], 'l1=l1 l2=bc'),  # l3
+  ]
+
+  s = time.time()
+  try:
+    state, canvas, action_chain = explore.execute_steps(steps, state, canvas)
+  except sketch.InvalidLineIntersect:
+    print('Invalid ok.')
+    return
+
+  assert False
+
+
 def get_state_and_proof_objects(last_action, val_name):
   val2rels = {}
   for rel in last_action.conclusion_objects:
@@ -1064,6 +1106,8 @@ def whittle(state_queue, proof_queue, action_chain,
 
 
 if __name__ == '__main__':
+  test_intersect_line_line()
+  test_intersect_line_line2()
   test_thales()
   test_thales_whittle1()
   test_thales_whittle2()

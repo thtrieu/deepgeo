@@ -598,6 +598,145 @@ def transformer_model(input_tensor,
     return final_output
 
 
+def cached_transformer_model(
+    input_vector,
+    cached_layers,
+    attention_mask=None,
+    hidden_size=768,
+    num_hidden_layers=12,
+    num_attention_heads=12,
+    intermediate_size=3072,
+    intermediate_act_fn=gelu,
+    hidden_dropout_prob=0.1,
+    attention_probs_dropout_prob=0.1,
+    initializer_range=0.02,
+    do_return_all_layers=False):
+  """Multi-headed, multi-layer Transformer from 'Attention is All You Need'.
+
+  This is almost an exact implementation of the original Transformer encoder.
+
+  See the original paper:
+  https://arxiv.org/abs/1706.03762
+
+  Also see:
+  https://github.com/tensorflow/tensor2tensor/blob/master/tensor2tensor/models/transformer.py
+
+  Args:
+    input_vector: float Tensor of shape [batch_size, 1, hidden_size].
+    cached_layers: list of float Tensor of shape [batch_size, seq_length, hidden_size]
+    attention_mask: (optional) int32 Tensor of shape [batch_size, 1,
+      current_length + 1], with 1 for positions that can be attended to and 0 in
+      positions that should not be.
+    hidden_size: int. Hidden size of the Transformer.
+    num_hidden_layers: int. Number of layers (blocks) in the Transformer.
+    num_attention_heads: int. Number of attention heads in the Transformer.
+    intermediate_size: int. The size of the 'intermediate' (a.k.a., feed
+      forward) layer.
+    intermediate_act_fn: function. The non-linear activation function to apply
+      to the output of the intermediate/feed-forward layer.
+    hidden_dropout_prob: float. Dropout probability for the hidden layers.
+    attention_probs_dropout_prob: float. Dropout probability of the attention
+      probabilities.
+    initializer_range: float. Range of the initializer (stddev of truncated
+      normal).
+    do_return_all_layers: Whether to also return all layers or just the final
+      layer.
+
+  Returns:
+    float Tensor of shape [batch_size, 1, hidden_size], the final
+    hidden layer of the Transformer.
+
+  Raises:
+    ValueError: A Tensor shape or parameter is invalid.
+  """
+  if hidden_size % num_attention_heads != 0:
+    raise ValueError(
+        'The hidden size (%d) is not a multiple of the number of attention '
+        'heads (%d)' % (hidden_size, num_attention_heads))
+
+  attention_head_size = int(hidden_size / num_attention_heads)
+  input_shape = get_shape_list(cached_layers[0], expected_rank=3)
+  input_width = input_shape[2]
+
+  # The Transformer performs sum residuals on all layers so the input needs
+  # to be the same as the hidden size.
+  if input_width != hidden_size:
+    raise ValueError('The width of the input tensor (%d) != hidden size (%d)' %
+                     (input_width, hidden_size))
+
+  prev_output = input_vector
+
+  all_layer_outputs = []
+  for layer_idx in range(num_hidden_layers):
+    with tf.variable_scope('layer_%d' % layer_idx):
+      layer_input = prev_output  # [batch, 1, hid_size]
+      # Add layer_input into the cache:
+      cached_layers[layer_idx] = tf.concat(  # [batch, current_len+1, hid_size]
+          [cached_layers[layer_idx], layer_input], 1)
+
+      with tf.variable_scope('attention'):
+        attention_heads = []
+        with tf.variable_scope('self'):
+          # [batch_size, 1, hid_size = num_attention_heads * size_per_head]
+          attention_head = attention_layer(  # [batch, 1, hid_size]
+              from_tensor=layer_input,  # [batch, 1, hid_size]
+              to_tensor=cached_layers[layer_idx],  # [batch, current_len+1, hid_size]
+              attention_mask=attention_mask,
+              num_attention_heads=num_attention_heads,
+              size_per_head=attention_head_size,
+              attention_probs_dropout_prob=attention_probs_dropout_prob,
+              initializer_range=initializer_range)
+              # do_return_2d_tensor=False,
+              # batch_size=batch_size,
+              # from_seq_length=1,
+              # to_seq_length=seq_length)
+
+          attention_heads.append(attention_head)
+
+        attention_output = None
+        if len(attention_heads) == 1:
+          attention_output = attention_heads[0]
+        else:
+          # In the case where we have other sequences, we just concatenate
+          # them to the self-attention head before the projection.
+          attention_output = tf.concat(attention_heads, axis=-1)
+
+        # Run a linear projection of `hidden_size` then add a residual
+        # with `layer_input`.
+        with tf.variable_scope('output'):
+          attention_output = tf.layers.dense(  # [batch_size, 1, hid_size] 
+              attention_output,  # [batch_size, 1, hid_size]
+              hidden_size,  
+              kernel_initializer=create_initializer(initializer_range))
+          attention_output = dropout(attention_output, hidden_dropout_prob)
+          attention_output = layer_norm(attention_output + layer_input)
+
+      # The activation is only applied to the 'intermediate' hidden layer.
+      with tf.variable_scope('intermediate'):
+        # [batch_size, 1, intermediate_size]
+        intermediate_output = tf.layers.dense(
+            attention_output,  # [batch_size, 1, hid_size]
+            intermediate_size,  
+            activation=intermediate_act_fn,
+            kernel_initializer=create_initializer(initializer_range))
+
+      # Down-project back to `hidden_size` then add the residual.
+      with tf.variable_scope('output'):
+        layer_output = tf.layers.dense(  # [batch_size, 1, hid_size]
+            intermediate_output,  # [batch_size, 1, intermediate_size]
+            hidden_size,
+            kernel_initializer=create_initializer(initializer_range))
+        layer_output = dropout(layer_output, hidden_dropout_prob)
+        layer_output = layer_norm(layer_output + attention_output)
+        prev_output = layer_output  # [batch_size, 1, hid_size]
+        all_layer_outputs.append(layer_output)
+
+  if do_return_all_layers:
+    return all_layer_outputs
+  else:
+    return prev_output
+
+
 def get_shape_list(tensor, expected_rank=None, name=None):
   """Returns a list of the shape of tensor, preferring static dimensions.
 
