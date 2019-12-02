@@ -1,10 +1,9 @@
 """
 python t2t_datagen.py \
---problem=geo_upto5 \
+--problem=geo_upto_depth7 \
 --tmp_dir=data_np \
---data_dir=data \
+--data_dir=data7 \
 --alsologtostderr
-
 """
 from __future__ import absolute_import
 from __future__ import division

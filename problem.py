@@ -156,3 +156,89 @@ class GeoUpto5(text_problems.Text2TextProblem):
   def batch_size_means_tokens(self):
     """Batch size does *not* mean token, obviously, duh."""
     return False
+
+
+@registry.register_problem
+class GeoUptoDepthN(GeoUpto5):
+
+  def generate_encoded_samples(self, data_dir, tmp_dir, dataset_split):
+    """A generator that generates samples that are encoded.
+    Args:
+      data_dir: data directory
+      tmp_dir: temp directory
+      dataset_split: dataset split
+    Yields:
+      A dict.
+    """
+    generators = [get_examples_from_depth(
+                      tmp_dir, i, self.max_seq_len, self.max_target)
+                  for i in range(1, self.depth+1)]
+
+    while True:
+      exhausted = False
+      for gen in generators:
+        try:
+          yield next(gen)
+        except StopIteration:
+          # The first generator that run out of
+          # example stops everything. In our case the 6th
+          exhausted = True
+          break
+      if exhausted:
+        break
+
+
+@registry.register_problem
+class GeoUptoDepth6(GeoUptoDepthN):
+
+  @property
+  def depth(self):
+    return 6
+  
+
+@registry.register_problem
+class GeoUptoDepth7(GeoUptoDepthN):
+
+  @property
+  def depth(self):
+    return 7
+
+
+@registry.register_problem
+class GeoUptoDepth8(GeoUptoDepthN):
+
+  @property
+  def depth(self):
+    return 8
+
+
+@registry.register_problem
+class GeoUptoDepth9(GeoUptoDepthN):
+
+  @property
+  def depth(self):
+    return 9
+
+
+@registry.register_problem
+class GeoUptoDepth10(GeoUptoDepthN):
+
+  @property
+  def depth(self):
+    return 10
+
+
+@registry.register_problem
+class GeoUptoDepth11(GeoUptoDepthN):
+
+  @property
+  def depth(self):
+    return 11
+
+
+@registry.register_problem
+class GeoUptoDepth12(GeoUptoDepthN):
+
+  @property
+  def depth(self):
+    return 12

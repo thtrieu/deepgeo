@@ -5,7 +5,8 @@ python decode.py \
 --model=graph_transformer \
 --hparams_set=graph_transformer \
 --data_dir=data \
---checkpoint_path=/Users/thtrieu/deepgeo/gs_ckpt/enc8dec8_lr0d05/model.ckpt-250000 \
+--checkpoint_path=/Users/thtrieu/deepgeo/gs_ckpt/enc12dec12_lr0d05/model.ckpt-500000 \
+--hparams=num_encode_layers=12,num_decode_layers=12 \
 --problem=geo_upto5
 """
 
@@ -72,6 +73,13 @@ def initialize_from_ckpt(ckpt_path):
   for model_var_name in fails:
     tf.logging.info('>>> FAIL to find {} in checkpoint'.format(
         model_var_name))
+
+  if fails:
+    ok = raw_input('OK? (y/n) ')
+    if ok.lower() == 'y':
+      pass
+    else:
+      exit()
 
   def scaffold_fn():
     tf.train.init_from_checkpoint(ckpt_path, variable_map)
@@ -486,10 +494,6 @@ def convert_text_inputs_to_action_steps(text_input):
 
 def interactive_text_inputs():
   while True:
-    print('Given triangle ABC. l1=parallel: A=A, l=bc. '
-          'l2=parallel: A=C, l=ab. D=line_line:l1=l1,l2=l2. DA=BC')
-    print('Given triangle ABC. M=mid:A=A,B=B. l=parallel:A=M,l=bc. '
-          'N=seg_line:l=l,A=A,B=C. AN=CN')
     # Parrallelogram
     # l1=parallel: A=A, l=bc. l2=parallel: A=C, l=ab. D=line_line:l1=l1,l2=l2. DA=BC
     # l1=parallel: A=B, l=ca. l2=parallel: A=C, l=ab. D=line_line:l1=l1,l2=l2. DB=CA
@@ -499,11 +503,16 @@ def interactive_text_inputs():
     # M=mid:A=A,B=C. l=line:A=B,B=M. l1=parallel:A=A,l=l. l2=parallel:A=B,l=ca. D=line_line:l1=l1,l2=l2. DB=MC
     # M=mid:A=A,B=C. l=line:A=B,B=M. l1=parallel:A=A,l=l. l2=parallel:A=B,l=ca. D=line_line:l1=l1,l2=l2. DA=BM
     # M=mid:A=A,B=C. l=line:A=B,B=M. l1=parallel:A=A,l=l. l2=parallel:A=B,l=ca. D=line_line:l1=l1,l2=l2. DM=BC
+    # lc=parallel:A=C,l=ab. la=parallel:A=A,l=bc. D=mid:A=B,B=C. E=mirror:A=A,B=B. F=line_line:l1=la,l2=lc. DF=DE
+    # lc=parallel:A=C,l=ab. la=parallel:A=A,l=bc. E=mirror:A=A,B=B. F=line_line:l1=la,l2=lc. bf=ec
 
     # parallel fail
     # M=mid:A=A,B=B. N=mid:A=A,C=C. lm=parallel:A=M,l=ca. ln=parallel:A=N,l=ab. P=line_line:l1=lm,l2=ln. pb=mn
 
-    user_input = raw_input('Given triangle ABC. ')
+    # Thales:
+    # M=mid:A=A,B=B. l=parallel:A=M,l=bc. N=seg_line:l=l,A=A,B=C. AN=CN
+
+    user_input = raw_input('\n>>> Given triangle ABC. ')
     if user_input == 'q':
       break
     yield user_input
