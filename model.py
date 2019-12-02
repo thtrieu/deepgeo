@@ -12,7 +12,52 @@ import tensorflow as tf
 
 import modeling
 
-# pylint: disable=logging-format-interpolation
+
+def get_scaffold_fn(ckpt_path):
+  variable_map = get_variable_map(ckpt_path)
+
+  def scaffold_fn():
+    tf.train.init_from_checkpoint(ckpt_path, variable_map)
+
+  return scaffold_fn
+
+
+def get_variable_map(ckpt_path):
+  """Initialize variables from given directory."""
+
+  def _get_body_name(var_name):
+    if '/body/' not in var_name:
+      return var_name
+    body_name = var_name.split('/body/')
+    assert len(body_name) == 2, var_name
+    return body_name[-1]
+
+  ckpt_vars = {}
+  for var_name, shape in tf.train.list_variables(ckpt_path):
+    ckpt_vars[_get_body_name(var_name)] = var_name, shape
+
+  variable_map = {}
+  fails = []
+  for var in tf.contrib.framework.get_trainable_variables():
+    model_var_name = var.op.name
+    model_var_body_name = _get_body_name(model_var_name)
+    if model_var_body_name in ckpt_vars:
+      ckpt_var_name, shape = ckpt_vars[model_var_body_name]
+      assert var.shape.as_list() == list(shape)
+      tf.logging.info('>>> LOAD ckpt var {} to model var {}'.format(
+          ckpt_var_name, model_var_name))
+      variable_map[ckpt_var_name] = var
+    else:
+      fails.append(model_var_name)
+
+  for model_var_name in fails:
+    tf.logging.info('>>> FAIL to find {} in checkpoint'.format(
+        model_var_name))
+
+  if fails:
+    raise ValueError('Failed to initialize from checkpoint.')
+
+  return variable_map
 
 
 def dec2bin32(dec):
@@ -150,6 +195,9 @@ class BaseModel(t2t_model.T2TModel):
     train_op = t2t_model.optimize.optimize(
         loss, lr, self.hparams, use_tpu=use_tpu, variables=variables)
     return train_op
+
+  def initialize_from_ckpt(self, ckpt_path):
+    get_scaffold_fn(ckpt_path)()
 
 
 @registry.register_model
@@ -509,11 +557,30 @@ def graph_transformer():
   )
 
 
+@registry.register_hparams
+def graph_transformer_base():
+  return update_hparams(
+      graph_transformer(),
+      learning_rate=0.05,
+      num_encode_layers=12,
+      num_decode_layers=12,
+  )
+
+
 
 @registry.register_hparams
 def graph_transformer_local():
   return update_hparams(
       graph_transformer(),
+      batch_shuffle_size=8,
+      batch_size=2,
+  )
+
+
+@registry.register_hparams
+def graph_transformer_base_local():
+  return update_hparams(
+      graph_transformer_base(),
       batch_shuffle_size=8,
       batch_size=2,
   )

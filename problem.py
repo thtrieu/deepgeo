@@ -51,8 +51,9 @@ def get_examples_from_depth(
       tmp_dir, depth, max_seq_len=128, max_target=8):
   files = tf.io.gfile.glob(
       os.path.join(tmp_dir, '*.depth.{:02}.*'.format(depth)))
+  np.random.shuffle(files)
 
-  for count, f in enumerate(sorted(files)):
+  for count, f in enumerate(files):
     start_time = time.time()
     with np.load(f) as loaded:
     # loaded = dict(np.load(f))

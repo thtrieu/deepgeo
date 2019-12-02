@@ -1,9 +1,9 @@
 """
 python problem_test.py \
 --model=graph_transformer \
---problem=geo_upto5 \
+--problem=geo_upto_depth6 \
 --hparams_set=graph_transformer_local \
---data_dir=data
+--data_dir=data6
 """
 import problem
 import model
@@ -120,7 +120,7 @@ data_fields = dict(
 )
 
 
-geo_problem = problem.GeoUpto5()
+geo_problem = t2t_trainer.registry.problem(tf.flags.FLAGS.problem)
 
 hparams = t2t_trainer.create_hparams()
 t2t_trainer.trainer_lib.add_problem_hparams(hparams, tf.flags.FLAGS.problem)
@@ -130,7 +130,7 @@ hparams.batch_shuffle_size = 8
 dataset = geo_problem.input_fn(
     tf.estimator.ModeKeys.TRAIN,
     hparams,
-    data_dir='data',
+    data_dir=tf.flags.FLAGS.data_dir,
     params=None,
     config=None,
     force_repeat=False,
@@ -163,4 +163,4 @@ while True:
           depth=depth[0])
 
 
-
+sess.close()
