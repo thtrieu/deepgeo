@@ -159,6 +159,32 @@ class GeoUpto5(text_problems.Text2TextProblem):
     return False
 
 
+
+@registry.register_problem
+class GeoAll12(GeoUpto5):
+
+  def generate_encoded_samples(self, data_dir, tmp_dir, dataset_split):
+    """A generator that generates samples that are encoded.
+    Args:
+      data_dir: data directory
+      tmp_dir: temp directory
+      dataset_split: dataset split
+    Yields:
+      A dict.
+    """
+    generators = [get_examples_from_depth(
+                      tmp_dir, i, self.max_seq_len, self.max_target)
+                  for i in range(1, 13)]
+
+    while generators:
+      i = np.random.choice(len(generators))
+      gen = generators[i]
+      try:
+        yield next(gen)
+      except StopIteration:
+        generators.pop(i)
+
+
 @registry.register_problem
 class GeoUptoDepthN(GeoUpto5):
 

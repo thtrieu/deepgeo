@@ -8,6 +8,14 @@ python decode.py \
 --checkpoint_path=/Users/thtrieu/deepgeo/gs_ckpt/enc12dec12_lr0d05/model.ckpt-500000 \
 --hparams=num_encode_layers=12,num_decode_layers=12 \
 --problem=geo_upto5
+
+python decode.py \
+--alsologtostderr \
+--model=graph_transformer \
+--hparams_set=graph_transformer_base \
+--data_dir=data6 \
+--checkpoint_path=/Users/thtrieu/deepgeo/gs_ckpt/enc12dec12_depth6_lr0d01/model.ckpt-100000 \
+--problem=geo_upto_depth6
 """
 
 from __future__ import absolute_import
@@ -378,7 +386,11 @@ class StepLoop(object):
 
   def multi_step_generator(self, user_action_steps_generator):
     for steps, obj_names, goal_objs in user_action_steps_generator:
-      self.init_with_user_action_steps(steps, obj_names, goal_objs)
+      try:
+        self.init_with_user_action_steps(steps, obj_names, goal_objs)
+      except Exception:
+        print(Exception)
+        continue
       while True:
         yield self.make_features_from_state_and_goal()
         if self.found_goal() or self.pdb_dead:
@@ -490,7 +502,11 @@ def main(_):
 
   def user_action_steps_generator():
     for text_input in interactive_text_inputs():
-      yield convert_text_inputs_to_action_steps(text_input)
+      try:
+        yield convert_text_inputs_to_action_steps(text_input)
+      except Exception:
+        print(Exception)
+        continue
 
   StepLoop().predict(estimator, user_action_steps_generator())
 
