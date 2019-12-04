@@ -8,6 +8,14 @@ python decode.py \
 --checkpoint_path=/Users/thtrieu/deepgeo/gs_ckpt/enc12dec12_lr0d05/model.ckpt-500000 \
 --hparams=num_encode_layers=12,num_decode_layers=12 \
 --problem=geo_upto5
+
+python decode.py \
+--alsologtostderr \
+--model=graph_transformer \
+--hparams_set=graph_transformer_base \
+--data_dir=data6 \
+--checkpoint_path=/Users/thtrieu/deepgeo/gs_ckpt/enc12dec12_depth6_lr0d01/model.ckpt-100000 \
+--problem=geo_upto_depth6
 """
 
 from __future__ import absolute_import
@@ -42,52 +50,6 @@ flags.DEFINE_bool('load_checkpoint', True, '')
 FLAGS = flags.FLAGS
 
 
-def initialize_from_ckpt(ckpt_path):
-  """Initialize variables from given directory."""
-
-  def _get_body_name(var_name):
-    if '/body/' not in var_name:
-      return var_name
-    body_name = var_name.split('/body/')
-    assert len(body_name) == 2, var_name
-    return body_name[-1]
-
-  ckpt_vars = {}
-  for var_name, shape in tf.train.list_variables(ckpt_path):
-    ckpt_vars[_get_body_name(var_name)] = var_name, shape
-
-  variable_map = {}
-  fails = []
-  for var in tf.contrib.framework.get_trainable_variables():
-    model_var_name = var.op.name
-    model_var_body_name = _get_body_name(model_var_name)
-    if model_var_body_name in ckpt_vars:
-      ckpt_var_name, shape = ckpt_vars[model_var_body_name]
-      assert var.shape.as_list() == list(shape)
-      tf.logging.info('>>> LOAD ckpt var {} to model var {}'.format(
-          ckpt_var_name, model_var_name))
-      variable_map[ckpt_var_name] = var
-    else:
-      fails.append(model_var_name)
-
-  for model_var_name in fails:
-    tf.logging.info('>>> FAIL to find {} in checkpoint'.format(
-        model_var_name))
-
-  if fails:
-    ok = raw_input('OK? (y/n) ')
-    if ok.lower() == 'y':
-      pass
-    else:
-      exit()
-
-  def scaffold_fn():
-    tf.train.init_from_checkpoint(ckpt_path, variable_map)
-
-  return scaffold_fn
-
-
-
 def get_model_fn(model_name, hparams, init_checkpoint):
   """Get model fn."""
   model_cls = t2t_decoder.registry.model(model_name)
@@ -112,7 +74,7 @@ def get_model_fn(model_name, hparams, init_checkpoint):
 
     predictions, _ = this_model(features)
 
-    scaffold_fn = (initialize_from_ckpt(init_checkpoint)
+    scaffold_fn = (model.get_scaffold_fn(init_checkpoint)
                    if FLAGS.load_checkpoint else None)
 
     if mode == tf.estimator.ModeKeys.TRAIN:
@@ -424,7 +386,11 @@ class StepLoop(object):
 
   def multi_step_generator(self, user_action_steps_generator):
     for steps, obj_names, goal_objs in user_action_steps_generator:
-      self.init_with_user_action_steps(steps, obj_names, goal_objs)
+      try:
+        self.init_with_user_action_steps(steps, obj_names, goal_objs)
+      except Exception:
+        print(Exception)
+        continue
       while True:
         yield self.make_features_from_state_and_goal()
         if self.found_goal() or self.pdb_dead:
@@ -536,7 +502,11 @@ def main(_):
 
   def user_action_steps_generator():
     for text_input in interactive_text_inputs():
-      yield convert_text_inputs_to_action_steps(text_input)
+      try:
+        yield convert_text_inputs_to_action_steps(text_input)
+      except Exception:
+        print(Exception)
+        continue
 
   StepLoop().predict(estimator, user_action_steps_generator())
 
