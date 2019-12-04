@@ -51,8 +51,9 @@ def get_examples_from_depth(
       tmp_dir, depth, max_seq_len=128, max_target=8):
   files = tf.io.gfile.glob(
       os.path.join(tmp_dir, '*.depth.{:02}.*'.format(depth)))
+  np.random.shuffle(files)
 
-  for count, f in enumerate(sorted(files)):
+  for count, f in enumerate(files):
     start_time = time.time()
     with np.load(f) as loaded:
     # loaded = dict(np.load(f))
@@ -76,9 +77,13 @@ def get_examples_from_depth(
         attention_mask = list(bin2dec_v3(attention_mask))
         # import pdb; pdb.set_trace()
 
+        sequence = [int(x) for x in sequence]
+        attention_mask = [int(x) for x in attention_mask]
+        theorem = [int(theorem)]
+        target = [int(x) for x in target]
         yield dict(sequence=sequence, 
                    attention_mask=attention_mask,
-                   theorem=[theorem],
+                   theorem=theorem,
                    targets=target,
                    depth=[depth])
     tf.logging.info('Depth {}, file {}/{}: {} done in {}s'.format(
