@@ -16,6 +16,14 @@ python decode.py \
 --data_dir=data6 \
 --checkpoint_path=/Users/thtrieu/deepgeo/gs_ckpt/enc12dec12_depth6_lr0d01/model.ckpt-100000 \
 --problem=geo_upto_depth6
+
+python decode.py \
+--alsologtostderr \
+--model=graph_transformer2 \
+--hparams_set=graph_transformer2_base \
+--data_dir=data6 \
+--checkpoint_path=/Users/thtrieu/deepgeo/local_ckpt/model.ckpt-0 \
+--problem=geo_upto_depth6
 """
 
 from __future__ import absolute_import
@@ -37,6 +45,7 @@ import theorems
 import explore
 import problem
 import model
+import model2
 
 from geometry import Point, Line, Segment, Angle, HalfPlane, Circle
 from geometry import SegmentLength, AngleMeasure, LineDirection
