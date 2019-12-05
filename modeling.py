@@ -670,9 +670,20 @@ def cached_transformer_model(
   for layer_idx in range(num_hidden_layers):
     with tf.variable_scope('layer_%d' % layer_idx):
       layer_input = prev_output  # [batch, 1, hid_size]
+
       # Add layer_input into the cache:
-      cached_layers[layer_idx] = tf.concat(  # [batch, current_len+1, hid_size]
-          [cached_layers[layer_idx], layer_input], 1)
+      if layer_idx < len(cached_layers):
+        cached_layers[layer_idx] = tf.concat(  # [batch, current_len+1, hid_size]
+            [cached_layers[layer_idx], layer_input], 1)
+      else:
+        # If there is no cache at this layer, then layer input
+        # is the initialized value of cache[layer_idx]
+        cached_layers.append(layer_input)  # self-attention.
+      
+      # Slice the attention_mask accordingly.
+      to_tensor = cached_layers[layer_idx]
+      to_tensor_len = to_tensor.shape.as_list()[1]
+      layer_attention_mask = attention_mask[:, :, -to_tensor_len:]
 
       with tf.variable_scope('attention'):
         attention_heads = []
@@ -680,8 +691,8 @@ def cached_transformer_model(
           # [batch_size, 1, hid_size = num_attention_heads * size_per_head]
           attention_head = attention_layer(  # [batch, 1, hid_size]
               from_tensor=layer_input,  # [batch, 1, hid_size]
-              to_tensor=cached_layers[layer_idx],  # [batch, current_len+1, hid_size]
-              attention_mask=attention_mask,
+              to_tensor=to_tensor,  # [batch, current_len+1, hid_size]
+              attention_mask=layer_attention_mask,
               num_attention_heads=num_attention_heads,
               size_per_head=attention_head_size,
               attention_probs_dropout_prob=attention_probs_dropout_prob,

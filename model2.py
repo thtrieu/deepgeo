@@ -16,6 +16,25 @@ import model
 # pylint: disable=logging-format-interpolation
 
 
+def add_positional_embedding(name, input_tensor, max_length, hparams):
+  input_length = input_tensor.shape.as_list()[1]
+  # [decode_length, hid_size]
+  pos_embedding, _ = modeling.embedding_lookup(
+      input_ids=tf.range(input_length),  # [input_length]
+      vocab_size=max_length,  # >= premise_len
+      embedding_size=hparams.hidden_size, 
+      initializer_range=hparams.initializer_range,
+      word_embedding_name=name,
+  )
+  pos_embedding = tf.reshape(
+      pos_embedding, [1, input_length, hparams.hidden_size])
+
+  return modeling.layer_norm_and_dropout(
+      input_tensor +  # [batch, input_length, hid_size]
+      pos_embedding,   # [1,     input_length, hid_size]
+      hparams.dropout_prob)  # [batch, input_length, hid_size]
+
+
 @registry.register_model
 class GraphTransformer2(model.BaseModel):
   """Conv and Att on sparser patches."""
@@ -119,10 +138,8 @@ class GraphTransformer2(model.BaseModel):
     # Now we build the static unrolling of 8-step decoding,
     # each step update a new value for decoder_input
     for count in range(8):
-      current_lengths = [layer.shape.as_list()[1]
-                         for layer in cached_layers]
-      assert current_lengths[1:] == current_lengths[:-1]
-      current_length = current_lengths[0]
+      before_lengths = [layer.shape.as_list()[1]
+                        for layer in cached_layers]
       with tf.variable_scope('decoder', reuse=tf.AUTO_REUSE):
         # cached_layers will be updated inside this method.
         # Feed this single token into the decoder transformer.
@@ -136,7 +153,10 @@ class GraphTransformer2(model.BaseModel):
 
       # After this step, all tensors in cached_layers 
       # increased 1 in length:
-      assert cached_layers[0].shape.as_list()[1] == current_length + 1
+      after_lengths = [layer.shape.as_list()[1]
+                       for layer in cached_layers]
+      assert all([after == before + 1 for before, after in 
+                  zip(before_lengths, after_lengths)])
 
       # Next the output vector is used to predict theorem
       # if we are at step 0, otherwise predict premise.
@@ -169,20 +189,9 @@ class GraphTransformer2(model.BaseModel):
 
     with tf.variable_scope('embeddings', reuse=tf.AUTO_REUSE):
       # Add positional embedding of shape [1, hid_size]
-      pos_embedding, _ = modeling.embedding_lookup(
-          input_ids=tf.constant([current_len-sequence_length]),  # [1]
-          vocab_size=hparams.max_premise,  # >= premise_len
-          embedding_size=hparams.hidden_size, 
-          initializer_range=hparams.initializer_range,
-          word_embedding_name='positional_embedding',
-      )
-      pos_embedding = tf.reshape(
-          pos_embedding, [1, 1, hparams.hidden_size])
-
-      decoder_input = modeling.layer_norm_and_dropout(
-          decoder_input +  # [batch, 1, hid_size]
-          pos_embedding,   # [1,     1, hid_size]
-          hparams.dropout_prob)  # [batch, 1, hid_size]
+      decoder_input = add_positional_embedding(
+          'premise_positional_embedding', 
+          decoder_input, hparams.max_premise, hparams)
 
     with tf.variable_scope('transformer', reuse=tf.AUTO_REUSE):
       # In this decoding transformer layer, our tensor can
@@ -196,7 +205,7 @@ class GraphTransformer2(model.BaseModel):
           cached_layers=cached_layers,
           attention_mask=causal_attention_mask,
           hidden_size=hparams.hidden_size,
-          num_hidden_layers=1,
+          num_hidden_layers=hparams.num_decode_layers,
           num_attention_heads=hparams.num_attention_heads,
           intermediate_size=hparams.intermediate_size,
           intermediate_act_fn=modeling.get_activation(hparams.hidden_act),
@@ -247,21 +256,9 @@ class GraphTransformer2(model.BaseModel):
         decode_length = decoder_input.shape.as_list()[1]
         assert decode_length == premise_len
 
-        # [decode_length, hid_size]
-        pos_embedding, _ = modeling.embedding_lookup(
-            input_ids=tf.range(decode_length),  # [decode_length]
-            vocab_size=hparams.max_premise,  # >= premise_len
-            embedding_size=hparams.hidden_size, 
-            initializer_range=hparams.initializer_range,
-            word_embedding_name='positional_embedding',
-        )
-        pos_embedding = tf.reshape(
-            pos_embedding, [1, decode_length, hparams.hidden_size])
-
-        decoder_input = modeling.layer_norm_and_dropout(
-            decoder_input +  # [batch, decode_length, hid_size]
-            pos_embedding,   # [1,     decode_length, hid_size]
-            hparams.dropout_prob)  # [batch, decode_length, hid_size]
+        decoder_input = add_positional_embedding(
+            'premise_positional_embedding', 
+            decoder_input, hparams.max_premise, hparams)
 
       with tf.variable_scope('transformer', reuse=tf.AUTO_REUSE):
         causal_attention_mask = t2t_model.common_layers.ones_matrix_band_part(
@@ -276,18 +273,23 @@ class GraphTransformer2(model.BaseModel):
         causal_attention_mask = tf.concat([
             tf.ones([1, decode_length, sequence_len], dtype=tf.float32),
             causal_attention_mask
-        ], axis=-1)  # [1, decode_length, decode_length + sequence_len]
+        ], axis=-1)  # [1, decode_length, sequence_len+decode_length]
 
         # [batch, decode_length, decode_length + sequence_len]
         causal_attention_mask = tf.tile(
             causal_attention_mask, [batch_size, 1, 1])
+
+        # Add positional embedding to sequence output to break symmetry:
+        sequence_output = add_positional_embedding(
+            'seq_positional_embedding', 
+            sequence_output, hparams.max_sequence_length, hparams)
 
         all_decoder_layers = modeling.cached_transformer_model(
             input_vector=decoder_input,
             cached_layers=[sequence_output],
             attention_mask=causal_attention_mask,
             hidden_size=hparams.hidden_size,
-            num_hidden_layers=1,
+            num_hidden_layers=hparams.num_decode_layers,
             num_attention_heads=hparams.num_attention_heads,
             intermediate_size=hparams.intermediate_size,
             intermediate_act_fn=modeling.get_activation(hparams.hidden_act),
@@ -346,7 +348,9 @@ class GraphTransformer2(model.BaseModel):
 def graph_transformer2_base():
   return model.update_hparams(
       model.graph_transformer_base(),
-      num_encode_layers=24,
+      max_sequence_length=256,
+      num_encode_layers=12,
+      num_decode_layers=12,
   )
 
 
