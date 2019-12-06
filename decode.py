@@ -482,10 +482,20 @@ def interactive_text_inputs():
     # lc=parallel:A=C,l=ab. la=parallel:A=A,l=bc. E=mirror:A=A,B=B. F=line_line:l1=la,l2=lc. bf=ec
 
     # parallel fail
-    # M=mid:A=A,B=B. N=mid:A=A,C=C. lm=parallel:A=M,l=ca. ln=parallel:A=N,l=ab. P=line_line:l1=lm,l2=ln. pb=mn
+    # M=mid:A=A,B=B. lm=parallel:A=M,l=ca. N=mid:A=A,C=C. ln=parallel:A=N,l=ab. P=line_line:l1=lm,l2=ln. pb=mn
 
     # Thales:
     # M=mid:A=A,B=B. l=parallel:A=M,l=bc. N=seg_line:l=l,A=A,B=C. AN=CN
+
+    # Thales hint:
+    # M=mid:A=A,B=B. l=parallel:A=M,l=bc. N=seg_line:l=l,A=A,B=C. l1=parallel:A=C,l=ab. AN=CN
+    # M=mid:A=A,B=B. l=parallel:A=M,l=bc. N=seg_line:l=l,A=A,B=C. l1=parallel:A=N,l=ab. AN=CN
+
+    # Thales hint fail:
+    # M=mid:A=A,B=B. l=parallel:A=M,l=bc. N=seg_line:l=l,A=A,B=C. l1=line:A=M,B=C. AN=CN
+    # M=mid:A=A,B=B. l=parallel:A=M,l=bc. N=seg_line:l=l,A=A,B=C. l1=parallel:A=M,l=ca. AN=CN
+    # M=mid:A=A,B=B. l=parallel:A=M,l=bc. N=seg_line:l=l,A=A,B=C. l1=line:A=B,B=N. AN=CN
+    # M=mid:A=A,B=B. l=parallel:A=M,l=bc. N=seg_line:l=l,A=A,B=C. l1=parallel:A=B,l=ca. AN=CN
 
     user_input = raw_input('\n>>> Given triangle ABC. ')
     if user_input == 'q':
@@ -494,7 +504,6 @@ def interactive_text_inputs():
 
 
 def main(_):
-  tf.logging.set_verbosity(tf.logging.INFO)
   t2t_decoder.trainer_lib.set_random_seed(FLAGS.random_seed)
   t2t_decoder.usr_dir.import_usr_dir(FLAGS.t2t_usr_dir)
 

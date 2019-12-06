@@ -163,9 +163,8 @@ class GeoUpto5(text_problems.Text2TextProblem):
     return False
 
 
-
 @registry.register_problem
-class GeoAll12(GeoUpto5):
+class GeoAllN(GeoUpto5):
 
   def generate_encoded_samples(self, data_dir, tmp_dir, dataset_split):
     """A generator that generates samples that are encoded.
@@ -178,7 +177,7 @@ class GeoAll12(GeoUpto5):
     """
     generators = [get_examples_from_depth(
                       tmp_dir, i, self.max_seq_len, self.max_target)
-                  for i in range(1, 13)]
+                  for i in range(1, self.depth+1)]
 
     while generators:
       i = np.random.choice(len(generators))
@@ -187,6 +186,22 @@ class GeoAll12(GeoUpto5):
         yield next(gen)
       except StopIteration:
         generators.pop(i)
+
+
+@registry.register_problem
+class GeoAll12(GeoAllN):
+
+  @property
+  def depth(self):
+    return 12
+
+
+@registry.register_problem
+class GeoAll7(GeoAllN):
+
+  @property
+  def depth(self):
+    return 7
 
 
 @registry.register_problem
