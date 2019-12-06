@@ -183,6 +183,7 @@ class GeoAllN(GeoUpto5):
       i = np.random.choice(len(generators))
       gen = generators[i]
       try:
+      
         yield next(gen)
       except StopIteration:
         generators.pop(i)
@@ -194,6 +195,14 @@ class GeoAll12(GeoAllN):
   @property
   def depth(self):
     return 12
+
+
+@registry.register_problem
+class GeoAll20(GeoAllN):
+
+  @property
+  def depth(self):
+    return 20
 
 
 @registry.register_problem

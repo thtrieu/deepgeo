@@ -1,8 +1,8 @@
 """
 python t2t_datagen.py \
---problem=geo_upto_depth7 \
+--problem=geo_all20 \
 --tmp_dir=data_np \
---data_dir=data7 \
+--data_dir=data_all20 \
 --alsologtostderr
 """
 from __future__ import absolute_import
