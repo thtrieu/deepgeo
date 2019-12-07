@@ -190,6 +190,22 @@ class GeoAllN(GeoUpto5):
 
 
 @registry.register_problem
+class GeoAll6(GeoAllN):
+
+  @property
+  def depth(self):
+    return 6
+
+
+@registry.register_problem
+class GeoAll7(GeoAllN):
+
+  @property
+  def depth(self):
+    return 7
+
+
+@registry.register_problem
 class GeoAll12(GeoAllN):
 
   @property
@@ -205,12 +221,6 @@ class GeoAll20(GeoAllN):
     return 20
 
 
-@registry.register_problem
-class GeoAll7(GeoAllN):
-
-  @property
-  def depth(self):
-    return 7
 
 
 @registry.register_problem
