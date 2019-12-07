@@ -10,6 +10,10 @@ import math
 from collections import OrderedDict as odict
 from sympy import Point, Line, Segment, Circle, Ray
 
+import matplotlib
+# matplotlib.use('MacOSX')
+from matplotlib import pyplot as plt
+
 
 def circle_intersection(o1, o2):
   c1, c2 = o1.center, o2.center
@@ -128,6 +132,65 @@ class Canvas(object):
     # point_matrix[:, i] = point[i].x, point[i].y
     self.point_matrix = np.zeros((3, 0))
 
+  def show(self):
+    points = self.points.keys()
+    lines = self.lines.keys()
+
+    mult = np.matmul(  # n_line, n_point
+        self.line_matrix,  # [n_line, 3]
+        self.point_matrix)  # [3, n_point]
+    mult = np.abs(mult) < 1e-12
+
+
+    all_points = self.points.keys()
+    for line, are_on_line in zip(self.lines.keys(), mult):
+      line_name = line.name
+      graph_points = [p for p, is_on_line in 
+                      zip(all_points, are_on_line)
+                      if is_on_line]
+
+      p_names = [p.name for p in graph_points]
+      sym_points = [self.points[p] for p in graph_points]
+
+      # import pdb; pdb.set_trace()
+
+      if len(sym_points) > 1:
+        all_x = [p.x for p in sym_points]
+
+        p1 = sym_points[np.argmin(all_x)]
+        p2 = sym_points[np.argmax(all_x)]
+
+        if p1 == p2:  # vertical line
+          all_y = [p.y for p in sym_points]
+          p1 = sym_points[np.argmin(all_y)]
+          p2 = sym_points[np.argmax(all_y)]
+
+        lp1 = p1 + (p1 - p2) * 0.5
+        lp2 = p2
+
+        lx, ly = (lp1.x, lp2.x), (lp1.y, lp2.y)
+      else:
+        p = sym_points[0]
+        x, y = float(p.x), float(p.y)
+        a, b, c = map(float, self.lines[line].coefficients)
+
+        slope = 0 if a == 0. else (b/a)
+        lx = (x - 2.0, x + 2.0)
+        ly = (y + 2.0 * slope, y - 2.0 * slope)
+
+      plt.plot(lx, ly, color='black')
+      plt.annotate(line_name, (lp1.x + 0.1, lp1.y + 0.1))
+
+      for name, p in zip(p_names, sym_points):
+        plt.scatter(p.x, p.y, color='black')
+        plt.annotate(name, (p.x + 0.1, p.y + 0.1))
+
+    file_name = raw_input('Save sketch to file name: ')
+    if file_name:
+      print('Saving to {}.png'.format(file_name))
+      plt.savefig('{}.png'.format(file_name), dpi=1000)
+    plt.clf()
+
   def copy(self):
     new_canvas = Canvas()
 
@@ -220,7 +283,7 @@ class Canvas(object):
 
   def add_triangle(self, p1, p2, p3, l12, l23, l31):
     # A standard normal triangle
-    a, b, c = Point(0., 0.), Point(3., 0.), Point(0.5, 2.5)
+    b, c, a = Point(0., 0.), Point(3., 0.), Point(0.5, 2.5)
 
     self.update_point(p1, a)
     self.update_point(p2, b)

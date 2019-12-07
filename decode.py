@@ -1,5 +1,6 @@
 r"""Decode (parallely and beam search).
 
+Model trained upto 5 averaged
 python decode.py \
 --alsologtostderr \
 --model=graph_transformer \
@@ -9,6 +10,65 @@ python decode.py \
 --hparams=num_encode_layers=12,num_decode_layers=12 \
 --problem=geo_upto5
 
+Model trained upto 7, 250k steps not average
+
+python decode.py \
+--alsologtostderr \
+--model=graph_transformer \
+--hparams_set=graph_transformer_base \
+--data_dir=data \
+--checkpoint_path=/Users/thtrieu/deepgeo/gs_ckpt/modelv1_all7_250k/model.ckpt-250000 \
+--problem=geo_all7
+
+Model trained upto 7, 250k steps averaged
+
+python decode.py \
+--alsologtostderr \
+--model=graph_transformer \
+--hparams_set=graph_transformer_base \
+--data_dir=data \
+--checkpoint_path=/Users/thtrieu/deepgeo/gs_ckpt/modelv1_all7_250k/avg/model.ckpt-250000 \
+--problem=geo_all7
+
+Model trained upto 12, 300k steps, not averaged.
+python decode.py \
+--alsologtostderr \
+--model=graph_transformer \
+--hparams_set=graph_transformer_base \
+--data_dir=data \
+--checkpoint_path=/Users/thtrieu/deepgeo/gs_ckpt/modelv1_all12_300k/model.ckpt-300000 \
+--problem=geo_all12
+
+Model trained upto 12, 300k steps, averaged.
+python decode.py \
+--alsologtostderr \
+--model=graph_transformer \
+--hparams_set=graph_transformer_base \
+--data_dir=data \
+--checkpoint_path=/Users/thtrieu/deepgeo/gs_ckpt/modelv1_all12_300k/avg/model.ckpt-300000 \
+--problem=geo_all12
+
+
+Model trained upto 20, 350k steps, NOT averaged.
+python decode.py \
+--alsologtostderr \
+--model=graph_transformer \
+--hparams_set=graph_transformer_base \
+--data_dir=data \
+--checkpoint_path=/Users/thtrieu/deepgeo/gs_ckpt/modelv1_all20_350k/model.ckpt-350000 \
+--problem=geo_all20
+
+Model trained upto 20, 350k steps, averaged.
+python decode.py \
+--alsologtostderr \
+--model=graph_transformer \
+--hparams_set=graph_transformer_base \
+--data_dir=data \
+--checkpoint_path=/Users/thtrieu/deepgeo/gs_ckpt/modelv1_all20_350k/avg/model.ckpt-350000 \
+--problem=geo_all20
+
+
+Model finetuned from trained upto 5 on depth6. =================================
 python decode.py \
 --alsologtostderr \
 --model=graph_transformer \
@@ -53,6 +113,7 @@ from geometry import SegmentHasLength, AngleHasMeasure, LineHasDirection
 from geometry import PointEndsSegment, HalfplaneCoversAngle, LineBordersHalfplane
 from geometry import PointCentersCircle
 from geometry import LineContainsPoint, CircleContainsPoint, HalfPlaneContainsPoint
+
 
 flags.DEFINE_integer('max_seq_len', 128, '')
 flags.DEFINE_bool('load_checkpoint', True, '')
@@ -402,8 +463,12 @@ class StepLoop(object):
         continue
       while True:
         yield self.make_features_from_state_and_goal()
-        if self.found_goal() or self.pdb_dead:
+        if self.found_goal():
           print('Found goal!')
+          self.canvas.show()
+          break
+
+        if self.pdb_dead:
           self.pdb_dead = False
           break
 
@@ -425,12 +490,23 @@ class StepLoop(object):
       action = action_gen.next()
       print('Applied {}'.format(action.to_str()))
     except StopIteration:
-      match = [(x.name.split('_')[0], y.name) for x, y in mapping.items()]
-      match = ' '.join(['{}={}'.format(x, y) for x, y in sorted(match)])
-      print('{} {}'.format(theorem.name, match))
-      import pdb; pdb.set_trace()
-      self.pdb_dead = True
-      return
+      action = None
+      for x in mapping:
+        mapping_ = dict(mapping)
+        mapping_.pop(x)
+        action_gen = theorem.match_from_input_mapping(self.state, mapping_)
+        try:
+          action = action_gen.next()
+          print(' * Applied {}'.format(action.to_str()))
+        except:
+          continue
+      if action is None:
+        match = [(x.name.split('_')[0], y.name) for x, y in mapping.items()]
+        match = ' '.join(['{}={}'.format(x, y) for x, y in sorted(match)])
+        print('Wrong: {} {}'.format(theorem.name, match))
+        import pdb; pdb.set_trace()
+        self.pdb_dead = True
+        return
 
     self.state.add_relations(action.new_objects)
     self.state.add_spatial_relations(action.draw(self.canvas))
@@ -481,18 +557,25 @@ def interactive_text_inputs():
     # lc=parallel:A=C,l=ab. la=parallel:A=A,l=bc. D=mid:A=B,B=C. E=mirror:A=A,B=B. F=line_line:l1=la,l2=lc. DF=DE
     # lc=parallel:A=C,l=ab. la=parallel:A=A,l=bc. E=mirror:A=A,B=B. F=line_line:l1=la,l2=lc. bf=ec
 
-    # parallel fail
+    # parallel:
     # M=mid:A=A,B=B. lm=parallel:A=M,l=ca. N=mid:A=A,C=C. ln=parallel:A=N,l=ab. P=line_line:l1=lm,l2=ln. pb=mn
+
+    # center of mass:
+    # M=mid:A=A,B=B. N=mid:A=A,B=C. l1=line:A=B,B=N. l2=line:A=C,B=M. D=line_line:l1=l1,l2=l2. l3=line:A=A,B=D. P=seg_line:l=l3,A=B,B=C. PB=PC
 
     # Thales:
     # M=mid:A=A,B=B. l=parallel:A=M,l=bc. N=seg_line:l=l,A=A,B=C. AN=CN
 
     # Thales hint:
+    # M=mid:A=A,B=B. l=parallel:A=M,l=bc. N=seg_line:l=l,A=A,B=C. P=mirror:A=N,B=M. AN=CN
     # M=mid:A=A,B=B. l=parallel:A=M,l=bc. N=seg_line:l=l,A=A,B=C. l1=parallel:A=C,l=ab. AN=CN
     # M=mid:A=A,B=B. l=parallel:A=M,l=bc. N=seg_line:l=l,A=A,B=C. l1=parallel:A=N,l=ab. AN=CN
 
-    # Thales hint fail:
+    # with all12
     # M=mid:A=A,B=B. l=parallel:A=M,l=bc. N=seg_line:l=l,A=A,B=C. l1=line:A=M,B=C. AN=CN
+    # M=mid:A=A,B=B. l=parallel:A=M,l=bc. N=seg_line:l=l,A=A,B=C. l1=line:A=B,B=N. AN=CN
+
+    # Thales hint fail:
     # M=mid:A=A,B=B. l=parallel:A=M,l=bc. N=seg_line:l=l,A=A,B=C. l1=parallel:A=M,l=ca. AN=CN
     # M=mid:A=A,B=B. l=parallel:A=M,l=bc. N=seg_line:l=l,A=A,B=C. l1=line:A=B,B=N. AN=CN
     # M=mid:A=A,B=B. l=parallel:A=M,l=bc. N=seg_line:l=l,A=A,B=C. l1=parallel:A=B,l=ca. AN=CN
