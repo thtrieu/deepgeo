@@ -454,7 +454,7 @@ def attention_layer(from_tensor,
         context_layer,
         [batch_size, from_seq_length, num_attention_heads * size_per_head])
 
-  return context_layer
+  return context_layer, attention_probs
 
 
 def transformer_model(input_tensor,
@@ -536,7 +536,7 @@ def transformer_model(input_tensor,
       with tf.variable_scope('attention'):
         attention_heads = []
         with tf.variable_scope('self'):
-          attention_head = attention_layer(
+          attention_head, attention_weights = attention_layer(
               from_tensor=layer_input,
               to_tensor=layer_input,
               attention_mask=attention_mask,
@@ -585,17 +585,18 @@ def transformer_model(input_tensor,
         layer_output = dropout(layer_output, hidden_dropout_prob)
         layer_output = layer_norm(layer_output + attention_output)
         prev_output = layer_output
-        all_layer_outputs.append(layer_output)
+        all_layer_outputs.append((layer_output, attention_weights))
 
   if do_return_all_layers:
     final_outputs = []
-    for layer_output in all_layer_outputs:
+    for layer_output, attention_weights in all_layer_outputs:
       final_output = reshape_from_matrix(layer_output, input_shape)
-      final_outputs.append(final_output)
+      final_outputs.append((final_output, attention_weights))
     return final_outputs
   else:
+    final_output, attention_weights = all_layer_outputs[-1]
     final_output = reshape_from_matrix(prev_output, input_shape)
-    return final_output
+    return final_output, attention_weights
 
 
 def cached_transformer_model(
@@ -689,7 +690,7 @@ def cached_transformer_model(
         attention_heads = []
         with tf.variable_scope('self'):
           # [batch_size, 1, hid_size = num_attention_heads * size_per_head]
-          attention_head = attention_layer(  # [batch, 1, hid_size]
+          attention_head, _ = attention_layer(  # [batch, 1, hid_size]
               from_tensor=layer_input,  # [batch, 1, hid_size]
               to_tensor=to_tensor,  # [batch, current_len+1, hid_size]
               attention_mask=layer_attention_mask,

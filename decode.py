@@ -10,6 +10,27 @@ python decode.py \
 --hparams=num_encode_layers=12,num_decode_layers=12 \
 --problem=geo_upto5
 
+Model trained upto 6, 300k steps not average
+
+python decode.py \
+--alsologtostderr \
+--model=graph_transformer \
+--hparams_set=graph_transformer_base \
+--data_dir=data \
+--checkpoint_path=/Users/thtrieu/deepgeo/gs_ckpt/modelv1_all6_300k/model.ckpt-300000 \
+--problem=geo_all6
+
+Model trained upto 6, 300k steps averaged
+
+python decode.py \
+--alsologtostderr \
+--model=graph_transformer \
+--hparams_set=graph_transformer_base \
+--data_dir=data \
+--checkpoint_path=/Users/thtrieu/deepgeo/gs_ckpt/modelv1_all6_300k/avg/model.ckpt-300000 \
+--problem=geo_all6
+
+
 Model trained upto 7, 250k steps not average
 
 python decode.py \
@@ -28,6 +49,25 @@ python decode.py \
 --hparams_set=graph_transformer_base \
 --data_dir=data \
 --checkpoint_path=/Users/thtrieu/deepgeo/gs_ckpt/modelv1_all7_250k/avg/model.ckpt-250000 \
+--problem=geo_all7
+
+Model trained upto 7, 350k steps not average
+
+python decode.py \
+--alsologtostderr \
+--model=graph_transformer \
+--hparams_set=graph_transformer_base \
+--data_dir=data \
+--checkpoint_path=/Users/thtrieu/deepgeo/gs_ckpt/modelv1_all7_350k/model.ckpt-350000 \
+--problem=geo_all7
+
+Model trained upto 7, 350k steps averaged
+python decode.py \
+--alsologtostderr \
+--model=graph_transformer \
+--hparams_set=graph_transformer_base \
+--data_dir=data \
+--checkpoint_path=/Users/thtrieu/deepgeo/gs_ckpt/modelv1_all7_350k/avg/model.ckpt-350000 \
 --problem=geo_all7
 
 Model trained upto 12, 300k steps, not averaged.
@@ -114,10 +154,20 @@ from geometry import PointEndsSegment, HalfplaneCoversAngle, LineBordersHalfplan
 from geometry import PointCentersCircle
 from geometry import LineContainsPoint, CircleContainsPoint, HalfPlaneContainsPoint
 
+from matplotlib import pyplot as plt
+from matplotlib import colors as mcolors
+
 
 flags.DEFINE_integer('max_seq_len', 128, '')
 flags.DEFINE_bool('load_checkpoint', True, '')
 FLAGS = flags.FLAGS
+
+
+
+
+colors = dict(mcolors.BASE_COLORS, **mcolors.CSS4_COLORS)
+color_names = ['blue', 'green', 'orange', 'indigo', 'firebrick', 'royalblue', 'lightseagreen', 'darkorchid']
+COLORS = [colors[name] for name in color_names]
 
 
 def get_model_fn(model_name, hparams, init_checkpoint):
@@ -277,7 +327,7 @@ def execute_user_steps(steps, new_obj_names, state, canvas, verbose=False):
     new_obj = action.theorem.for_drawing[0]
     state_obj = action.mapping[new_obj]
     state_obj.name = new_obj_name
-    print(i + 1, action.to_str())
+    # print(i + 1, action.to_str())
 
     if verbose:
       print('\tAdd : {}'.format([obj.name for obj in action.new_objects]))
@@ -299,7 +349,7 @@ def get_or_add_line(state, canvas, line_name, p1_name, p2_name):
     if p1 in points and p2 in points:
       return line
 
-  print('Create new line {}'.format(line_name))
+  # print('Create new line {}'.format(line_name))
   line = Line(line_name)
   state.add_one(LineContainsPoint(line, p1))
   state.add_one(LineContainsPoint(line, p2))
@@ -322,7 +372,7 @@ def get_or_add_segment(state, canvas, segment_name, p1_name, p2_name):
     if p1 in points and p2 in points:
       return line, segment
 
-  print('Create new segment {}'.format(segment_name))
+  # print('Create new segment {}'.format(segment_name))
   segment = Segment(segment_name)
   state.add_one(PointEndsSegment(p1, segment))
   state.add_one(PointEndsSegment(p2, segment))
@@ -353,7 +403,7 @@ def get_or_add_angle(state, canvas, angle_name, head, leg1, leg2):
     if hp1 in hps and hp2 in hps:
       return angle
 
-  print('Create new angle {}'.format(angle_name))
+  # print('Create new angle {}'.format(angle_name))
   angle = Angle(angle_name)
   state.add_one(HalfplaneCoversAngle(hp1, angle))
   state.add_one(HalfplaneCoversAngle(hp2, angle))
@@ -386,22 +436,103 @@ def goal_obj_name_to_obj(state, canvas, name):
     raise ValueError('Cannot infer type of "{}"'.format(name))
 
 
+def plt_show_canvas_chain(canvas_chain, state, size=5):
+  num_canvas = len(canvas_chain)
+  fig, axes = plt.subplots(nrows=num_canvas, ncols=3,
+                           figsize=(3 * size, 
+                                    num_canvas * size))
+
+  for axes_row in axes:
+    canvas, old_state, action, attention_highlights, premise_highlights = canvas_chain.pop(0)
+
+    state_highlights = []
+
+    if old_state is not None:
+      colors = list(COLORS)
+      for val, rels in old_state.val2valrel.items():
+        if isinstance(val, LineDirection):
+          continue
+        color = colors.pop(0)
+        if colors == []:
+          colors = list(COLORS)
+
+        objs = [rel.init_list[0] for rel in rels]
+        state_highlights.extend(
+            [(obj, color, 0.5) for obj in objs])
+
+    highlights = (state_highlights, attention_highlights, premise_highlights)
+    for i, ax in enumerate(axes_row):
+      ax.get_xaxis().set_visible(False)
+      ax.get_yaxis().set_visible(False)
+      highlight = highlights[i]
+      if highlight is None:
+        continue
+
+      if i == 1:
+        canvas.plt_show(ax, state, highlights[0], mark_segment=True)
+      canvas.plt_show(ax, state, highlight, mark_segment=(i==0))
+
+      if i == 1:
+        ax.set_title('Hmmmm', fontweight='bold')
+      if i == 2:
+        ax.set_title(action.theorem.name, fontweight='bold')
+
+  file_name = raw_input('Save sketch to file name: ')
+  if file_name:
+    print('Saving to {}.png'.format(file_name))
+    fig.tight_layout()
+    plt.savefig('{}.png'.format(file_name), dpi=500)
+  plt.clf()
+
+
+
+# def plt_show_canvas_chain(canvas_chain, state, size=5):
+#   num_canvas = len(canvas_chain)
+
+#   for canvas, attention, premise in canvas_chain:
+#     fig, axes = plt.subplots(nrows=1, ncols=3,
+#                              figsize=(3 * size, 
+#                                       num_canvas * size))
+
+#     canvas, attention_highlights, premise_highlights = canvas_chain.pop(0)
+#     highlights = ([], attention_highlights, premise_highlights)
+#     for i, ax in enumerate(axes_row):
+#       ax.get_xaxis().set_visible(False)
+#       ax.get_yaxis().set_visible(False)
+#       highlight = highlights[i]
+
+#       if highlight is None:
+#         continue
+#       canvas.plt_show(ax, state, highlight)
+
+#     file_name = raw_input('Save sketch to file name: ')
+#     if file_name:
+#       print('Saving to {}.png'.format(file_name))
+#       fig.tight_layout()
+#       plt.savefig('{}.png'.format(file_name), dpi=500)
+#     plt.clf()
+
+
 class StepLoop(object):
 
   def __init__(self):
     self.pdb_dead = False
+    self.canvas_chain = []  # for illustration
 
   def init_with_user_action_steps(self, action_steps, new_obj_names, goal_objs):
-    self.state, self.canvas, _ = explore.init_by_normal_triangle()
+    state, canvas, _ = explore.init_by_normal_triangle()
     execute_user_steps(
-        action_steps, new_obj_names, self.state, self.canvas)
+        action_steps, new_obj_names, state, canvas)
 
-    # import pdb; pdb.set_trace()
+    self.canvas_chain = [(canvas, state, None, None, None)]
+    self.state = state.copy()
+
+    canvas = self.canvas_chain[-1]
     obj1_name, obj2_name = goal_objs
     goal_obj1 = goal_obj_name_to_obj(
-        self.state, self.canvas, obj1_name)
+        self.state, canvas, obj1_name)
     goal_obj2 = goal_obj_name_to_obj(
-        self.state, self.canvas, obj2_name)
+        self.state, canvas, obj2_name)
     assert isinstance(goal_obj1, type(goal_obj2))
 
     if isinstance(goal_obj1, Segment):
@@ -456,16 +587,20 @@ class StepLoop(object):
 
   def multi_step_generator(self, user_action_steps_generator):
     for steps, obj_names, goal_objs in user_action_steps_generator:
+
       try:
         self.init_with_user_action_steps(steps, obj_names, goal_objs)
-      except Exception:
-        print(Exception)
+      except Exception as e:
+        print(e)
         continue
+
+      print('\n Working on it ..')
       while True:
         yield self.make_features_from_state_and_goal()
+
         if self.found_goal():
           print('Found goal!')
-          self.canvas.show()
+          plt_show_canvas_chain(self.canvas_chain, self.state)
           break
 
         if self.pdb_dead:
@@ -474,7 +609,8 @@ class StepLoop(object):
 
   def add_prediction_to_state(self,
                               theorem,  # [1]
-                              premises): # [7]
+                              premises,
+                              attention_weights): # [7]
     global ACTION_VOCAB
     theorem = ACTION_VOCAB[theorem[0]]
     premise_names = sorted(theorem.names)
@@ -491,6 +627,7 @@ class StepLoop(object):
       print('Applied {}'.format(action.to_str()))
     except StopIteration:
       action = None
+
       for x in mapping:
         mapping_ = dict(mapping)
         mapping_.pop(x)
@@ -498,8 +635,10 @@ class StepLoop(object):
         try:
           action = action_gen.next()
           print(' * Applied {}'.format(action.to_str()))
+          # break
         except:
           continue
+
       if action is None:
         match = [(x.name.split('_')[0], y.name) for x, y in mapping.items()]
         match = ' '.join(['{}={}'.format(x, y) for x, y in sorted(match)])
@@ -508,8 +647,44 @@ class StepLoop(object):
         self.pdb_dead = True
         return
 
+    attention_weights = summarize_heads(attention_weights)
+
+    attention_highlights = [
+        (obj, 'red', attention_weight)
+        for obj, attention_weight in
+        zip(self.state_object_list, attention_weights)[1:]]
+
+    if isinstance(action.theorem, (theorems.ASA, 
+                                   theorems.SAS, 
+                                   theorems.ParallelBecauseInteriorAngles)):
+      premise_val2objs = ddict(lambda: [])
+      for rel in action.premise_objects:
+        if not isinstance(rel, (LineHasDirection, SegmentHasLength, AngleHasMeasure)):
+          continue
+        obj, val = rel.init_list
+        premise_val2objs[val].append(obj)
+
+      premise_highlights = []
+      colors = list(COLORS)
+      for val, objs in premise_val2objs.items():
+        color = colors.pop(0)
+        for obj in objs:
+          premise_highlights.append((obj, color, 0.5))
+    else:
+      premise_highlights = [
+          (obj, 'green', 0.5)
+          for obj in state_obj
+      ]
+
+    old_canvas, old_state = self.canvas_chain[-1][:2]
+    self.canvas_chain[-1] = (
+        old_canvas, old_state, action, attention_highlights, premise_highlights)
+
+    new_canvas = old_canvas.copy()
     self.state.add_relations(action.new_objects)
-    self.state.add_spatial_relations(action.draw(self.canvas))
+    self.state.add_spatial_relations(action.draw(new_canvas))
+    self.canvas_chain.append((new_canvas, self.state, None, None, None))
+    self.state = self.state.copy()
 
   def predict(self, estimator, user_action_steps_generator):
     """Beam search."""
@@ -522,6 +697,16 @@ class StepLoop(object):
 
     for prediction in predictions:
       self.add_prediction_to_state(**prediction)
+
+
+def summarize_heads(attention_weights):  # [num_head, sequence_length]
+  entropy = - (attention_weights * np.log(attention_weights + 1e-12)).sum(-1)
+  weights = attention_weights[np.argmin(entropy), :]
+  # weights = attention_weights.sum(0)
+  maxw, minw = np.max(weights), np.min(weights)
+  weights = (weights - minw) / (maxw - minw)
+  # import pdb; pdb.set_trace()
+  return weights * 0.5
 
 
 def convert_text_inputs_to_action_steps(text_input):
@@ -570,10 +755,12 @@ def interactive_text_inputs():
     # M=mid:A=A,B=B. l=parallel:A=M,l=bc. N=seg_line:l=l,A=A,B=C. P=mirror:A=N,B=M. AN=CN
     # M=mid:A=A,B=B. l=parallel:A=M,l=bc. N=seg_line:l=l,A=A,B=C. l1=parallel:A=C,l=ab. AN=CN
     # M=mid:A=A,B=B. l=parallel:A=M,l=bc. N=seg_line:l=l,A=A,B=C. l1=parallel:A=N,l=ab. AN=CN
+    # M=mid:A=A,B=B. l=parallel:A=M,l=bc. N=seg_line:l=l,A=A,B=C. l1=parallel:A=B,l=ca. AN=CN
 
     # with all12
     # M=mid:A=A,B=B. l=parallel:A=M,l=bc. N=seg_line:l=l,A=A,B=C. l1=line:A=M,B=C. AN=CN
     # M=mid:A=A,B=B. l=parallel:A=M,l=bc. N=seg_line:l=l,A=A,B=C. l1=line:A=B,B=N. AN=CN
+    # M=mid:A=A,B=B. l=parallel:A=M,l=bc. N=seg_line:l=l,A=A,B=C. P=mid:A=B,B=C. AN=CN
 
     # Thales hint fail:
     # M=mid:A=A,B=B. l=parallel:A=M,l=bc. N=seg_line:l=l,A=A,B=C. l1=parallel:A=M,l=ca. AN=CN
@@ -605,13 +792,12 @@ def main(_):
     for text_input in interactive_text_inputs():
       try:
         yield convert_text_inputs_to_action_steps(text_input)
-      except Exception:
-        print(Exception)
+      except Exception as e:
+        print(e)
         continue
 
   StepLoop().predict(estimator, user_action_steps_generator())
 
 
 if __name__ == '__main__':
-  tf.logging.set_verbosity(tf.logging.INFO)
   tf.app.run()

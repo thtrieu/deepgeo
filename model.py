@@ -247,10 +247,10 @@ class GraphTransformer(BaseModel):
           initializer_range=hparams.initializer_range,
           do_return_all_layers=True)
 
-    sequence_output = all_encoder_layers[-1]  # [batch seq_len hid_size]
+    sequence_output, attention_weights = all_encoder_layers[-1]  # [batch seq_len hid_size]
     cls_vector = sequence_output[:, 0:1, :]  # [batch 1 hid_size]
 
-    return sequence_output, cls_vector
+    return sequence_output, cls_vector, attention_weights
 
   def greedy_decode_8steps(self, 
                            cls_vector,  # batch, 1, hid_size
@@ -402,11 +402,14 @@ class GraphTransformer(BaseModel):
       hparams.dropout_prob = 0.0
 
     with tf.variable_scope('encoder', reuse=tf.AUTO_REUSE):
-      sequence_output, cls_vector = self.build_encoder(features)
+      # attention_weights: [batch, n_head, from_len, to_len]
+      sequence_output, cls_vector, attention_weights = self.build_encoder(features)
 
     if 'targets' not in features:
       assert self.hparams.dropout_prob == 0.0
-      return self.greedy_decode_8steps(cls_vector, sequence_output)
+      logits, losses = self.greedy_decode_8steps(cls_vector, sequence_output)
+      logits.update(attention_weights=attention_weights[:, :, 0, :])
+      return logits, losses
 
     with tf.variable_scope('decoder', reuse=tf.AUTO_REUSE):
       with tf.variable_scope('embeddings', reuse=tf.AUTO_REUSE):
@@ -478,7 +481,7 @@ class GraphTransformer(BaseModel):
             initializer_range=hparams.initializer_range,
             do_return_all_layers=True)
 
-        decoder_output = all_decoder_layers[-1]  # [batch, dec_len, hid_size]
+        decoder_output, _ = all_decoder_layers[-1]  # [batch, dec_len, hid_size]
         theorem_feature = decoder_output[:, 0, :]  # [batch, hid_size]
         premise_feature = decoder_output[:, 1:, :]  # [batch, tar_len, hid_size]
 

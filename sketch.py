@@ -7,6 +7,8 @@ import theorems
 import numpy as np
 import math
 
+import geometry
+
 from collections import OrderedDict as odict
 from sympy import Point, Line, Segment, Circle, Ray
 
@@ -117,6 +119,77 @@ def _copy(structure):
                  for (key, val) in structure.items())
 
 
+def highlight_segment(ax, p1, p2, color, alpha, mark_segment=False):
+  x, y = (p1.x, p2.x), (p1.y, p2.y)
+  if not mark_segment:
+    ax.plot(x, y, color=color, linewidth=10, alpha=alpha)
+  else:
+    x, y = (p1.x + p2.x) / 2, (p1.y + p2.y) / 2
+    ax.scatter(x, y, color=color, alpha=1.0, marker='o', s=150)
+
+
+def highlight_point(ax, p, color, alpha):
+  ax.scatter(
+      p.x, p.y, color=color, edgecolors='none', 
+      s=500, alpha=alpha)
+
+
+def highlight_angle(ax, hps, lines, color, alpha):
+  hp1, hp2 = hps
+  l1, l2 = lines
+  head = line_line_intersection(l1, l2)
+
+  c_head = Circle(head, 0.5)
+
+  p11, p12 = line_circle_intersection(l1, c_head)
+  a, b, c = map(float, l2.coefficients)
+  v = a * float(p11.x) + b * float(p11.y) + c
+  if v > 0:
+    p11, p12 = p12, p11
+  p1 = [p11, p12][hp2]
+  # ax.scatter(p1.x, p1.y)
+
+  p21, p22 = line_circle_intersection(l2, c_head)
+  a, b, c = map(float, l1.coefficients)
+  v = a * float(p21.x) + b * float(p21.y) + c
+  if v > 0:
+    p21, p22 = p22, p21
+  p2 = [p21, p22][hp1]
+  # ax.scatter(p2.x, p2.y)
+
+  d1 = p1 - head
+  d2 = p2 - head
+
+  a1 = np.arctan2(float(d1.y), float(d1.x)) 
+  a2 = np.arctan2(float(d2.y), float(d2.x))
+  a1, a2 = a1 * 180/np.pi, a2 * 180/np.pi
+  a1, a2 = a1 % 360, a2 % 360
+
+  if a1 > a2:
+    a1, a2 = a2, a1
+
+  if a2 - a1 > 180:
+    a1, a2 = a2, a1
+
+  b1, b2 = a1, a2
+  if b1 > b2:
+    b2 += 360
+  d = b2 - b1
+  if d >= 90: 
+    return
+
+  scale = min(1.5, 90 /d)
+  scale = max(scale, 0.4)
+
+  fov = matplotlib.patches.Wedge(
+      (float(head.x), float(head.y)), 
+      0.4 * scale, 
+      a1, a2, 
+      color=color, 
+      alpha=alpha)
+  ax.add_artist(fov)
+
+
 class Canvas(object):
 
   def __init__(self):
@@ -132,17 +205,16 @@ class Canvas(object):
     # point_matrix[:, i] = point[i].x, point[i].y
     self.point_matrix = np.zeros((3, 0))
 
-  def show(self):
-    points = self.points.keys()
+  def plt_show(self, ax, state, obj_hightlights, mark_segment=False):
     lines = self.lines.keys()
+    all_points = self.points.keys()
 
     mult = np.matmul(  # n_line, n_point
         self.line_matrix,  # [n_line, 3]
         self.point_matrix)  # [3, n_point]
     mult = np.abs(mult) < 1e-12
 
-
-    all_points = self.points.keys()
+    line_ends = {}
     for line, are_on_line in zip(self.lines.keys(), mult):
       line_name = line.name
       graph_points = [p for p, is_on_line in 
@@ -153,43 +225,53 @@ class Canvas(object):
       sym_points = [self.points[p] for p in graph_points]
 
       # import pdb; pdb.set_trace()
-
       if len(sym_points) > 1:
         all_x = [p.x for p in sym_points]
-
         p1 = sym_points[np.argmin(all_x)]
         p2 = sym_points[np.argmax(all_x)]
-
-        if p1 == p2:  # vertical line
-          all_y = [p.y for p in sym_points]
-          p1 = sym_points[np.argmin(all_y)]
-          p2 = sym_points[np.argmax(all_y)]
-
-        lp1 = p1 + (p1 - p2) * 0.5
-        lp2 = p2
-
-        lx, ly = (lp1.x, lp2.x), (lp1.y, lp2.y)
       else:
         p = sym_points[0]
-        x, y = float(p.x), float(p.y)
-        a, b, c = map(float, self.lines[line].coefficients)
+        p1, p2 = line_circle_intersection(
+            self.lines[line],
+            Circle(p, 1.0))
 
-        slope = 0 if a == 0. else (b/a)
-        lx = (x - 2.0, x + 2.0)
-        ly = (y + 2.0 * slope, y - 2.0 * slope)
+      if p1 == p2:  # vertical line
+        all_y = [p.y for p in sym_points]
+        p1 = sym_points[np.argmin(all_y)]
+        p2 = sym_points[np.argmax(all_y)]
 
-      plt.plot(lx, ly, color='black')
-      plt.annotate(line_name, (lp1.x + 0.1, lp1.y + 0.1))
+      lp1 = p1 + (p1 - p2) * 0.5
+      lp2 = p2
+      line_ends[line] = lp1, lp2
+
+      lx, ly = (lp1.x, lp2.x), (lp1.y, lp2.y)
+      ax.plot(lx, ly, color='black')
+      ax.annotate(line_name, (lp1.x + 0.1, lp1.y + 0.1))
 
       for name, p in zip(p_names, sym_points):
-        plt.scatter(p.x, p.y, color='black')
-        plt.annotate(name, (p.x + 0.1, p.y + 0.1))
+        ax.scatter(p.x, p.y, color='black')
+        ax.annotate(name, (p.x + 0.1, p.y + 0.1))
 
-    file_name = raw_input('Save sketch to file name: ')
-    if file_name:
-      print('Saving to {}.png'.format(file_name))
-      plt.savefig('{}.png'.format(file_name), dpi=1000)
-    plt.clf()
+    for obj, color, alpha in obj_hightlights:
+      if isinstance(obj, geometry.Point):
+        if obj not in self.points:
+          import pdb; pdb.set_trace()
+        highlight_point(ax, self.points[obj], color, alpha)
+      elif isinstance(obj, geometry.Segment):
+        p1, p2 = state.ends_of_segment(obj)
+        p1, p2 = self.points[p1], self.points[p2]
+        highlight_segment(ax, p1, p2, color, alpha, mark_segment)
+      elif isinstance(obj, geometry.Line):
+        p1, p2 = line_ends[obj]
+        highlight_segment(ax, p1, p2, color, alpha)
+      elif isinstance(obj, geometry.Angle):
+        hps, lines = state.hp_and_line_of_angle(obj)
+        lines = map(self.lines.get, lines)
+        highlight_angle(ax, hps, lines, color, alpha)
+      elif isinstance(obj, geometry.HalfPlane):
+        line = state.line_of_hp(obj)
+        p1, p2 = line_ends[line]
+        highlight_segment(ax, p1, p2, color, alpha)
 
   def copy(self):
     new_canvas = Canvas()

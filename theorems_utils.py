@@ -123,6 +123,29 @@ class State(object):
     self.line2hps = {}
     self.hp2points = {}
 
+  def ends_of_segment(self, segment):
+    points = []
+    for p_seg in self.type2rel[PointEndsSegment]:
+      if segment == p_seg.init_list[1]:
+        points.append(p_seg.init_list[0])
+    return points
+
+  def hp_and_line_of_angle(self, angle):
+    hps = []
+    lines = []
+    for hp_a in self.type2rel[HalfplaneCoversAngle]:
+      if angle == hp_a.init_list[1]:
+        hp = hp_a.init_list[0]
+        l = self.line_of_hp(hp)
+        lines.append(l)
+        hps.append(self.line2hps[l].index(hp))  # 0: neg, 1: pos
+    return hps, lines
+
+  def line_of_hp(self, hp):
+    for l, l_hps in self.line2hps.items():
+      if hp in l_hps:
+        return l
+
   def to_str(self):
     result = []
     for r in self.relations:
@@ -339,6 +362,7 @@ class State(object):
           any(p in points2 for p in points_hp1)):
         points_hp1, points_hp2 = points_hp2, points_hp1
         hp1, hp2 = hp2, hp1
+        self.line2hps[line] = [hp1, hp2]
 
       if points1:
         # if hp1.name not in self.name2obj:
