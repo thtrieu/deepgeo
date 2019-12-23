@@ -160,7 +160,10 @@ class FundamentalTheorem(object):
 
   @property
   def name(self):
-    return type(self).__name__
+    s = ''
+    for char in type(self).__name__:
+      s += char if char == char.lower() else ' ' + char
+    return s.strip()
 
   @property
   def timeout(self):
@@ -372,6 +375,10 @@ class ConstructIntersectSegmentLine(FundamentalTheorem):
     C, l, A, B = map(mapping.get, self.for_drawing)
     return canvas.add_intersect_seg_line(C, l, A, B)
 
+  @property
+  def name(self):
+    return 'Construct Line-Segment Intersection'
+
 
 class ConstructPerpendicularLine1(FundamentalTheorem):
 
@@ -495,6 +502,10 @@ class ConstructThirdLine(FundamentalTheorem):
   def draw(self, mapping, canvas):
     ab, A, B = map(mapping.get, self.for_drawing)
     return canvas.add_line(ab, A, B)
+
+  @property
+  def name(self):
+    return 'Construct Line'
 
 
 class OppositeAngles(FundamentalTheorem):
@@ -744,6 +755,10 @@ class SAS(Congruences):
   def timeout(self):
     return 0.5
 
+  @property
+  def name(self):
+    return 'Equal Triangles: Side-Angle-Side'
+
 
 class SSS(Congruences):
 
@@ -953,6 +968,10 @@ class ASA(Congruences):
   @property
   def timeout(self):
     return 3.0
+
+  @property
+  def name(self):
+    return 'Equal Triangles: Angle-Side-Angle'
   
 
 

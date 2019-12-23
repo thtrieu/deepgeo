@@ -146,6 +146,7 @@ import explore
 import problem
 import model
 import model2
+import time
 
 from geometry import Point, Line, Segment, Angle, HalfPlane, Circle
 from geometry import SegmentLength, AngleMeasure, LineDirection
@@ -441,8 +442,18 @@ def plt_show_canvas_chain(canvas_chain, state, size=5):
   fig, axes = plt.subplots(nrows=num_canvas, ncols=3,
                            figsize=(3 * size, 
                                     num_canvas * size))
+  fig2, ax2 = plt.subplots(nrows=1, ncols=1, figsize=(size, size))
 
-  for axes_row in axes:
+  file_name = raw_input('Save sketch to file name: ')
+  if not file_name:
+    return
+
+  if not os.path.exists(file_name):
+    os.makedirs(file_name)
+  print('Saving to {0}/{0}.png'.format(file_name))
+  fig.tight_layout()
+
+  for step, axes_row in enumerate(axes):
     canvas, old_state, action, attention_highlights, premise_highlights = canvas_chain.pop(0)
 
     state_highlights = []
@@ -464,24 +475,36 @@ def plt_show_canvas_chain(canvas_chain, state, size=5):
     for i, ax in enumerate(axes_row):
       ax.get_xaxis().set_visible(False)
       ax.get_yaxis().set_visible(False)
+
+      ax2.clear()
+      ax2.set_xlim(-2, 4)
+      ax2.set_ylim(-2, 4)
+      ax2.get_xaxis().set_visible(False)
+      ax2.get_yaxis().set_visible(False)
+
       highlight = highlights[i]
       if highlight is None:
         continue
 
       if i == 1:
         canvas.plt_show(ax, state, highlights[0], mark_segment=True)
+        canvas.plt_show(ax2, state, highlights[0], mark_segment=True)
+
       canvas.plt_show(ax, state, highlight, mark_segment=(i==0))
+      canvas.plt_show(ax2, state, highlight, mark_segment=(i==0))
 
-      if i == 1:
-        ax.set_title('Hmmmm', fontweight='bold')
-      if i == 2:
-        ax.set_title(action.theorem.name, fontweight='bold')
+      if i == 0:
+        title = 'Problem Figure:'
+      elif i == 1:
+        title = 'Attending ..'
+      elif i == 2:
+        title = action.theorem.name
 
-  file_name = raw_input('Save sketch to file name: ')
-  if file_name:
-    print('Saving to {}.png'.format(file_name))
-    fig.tight_layout()
-    plt.savefig('{}.png'.format(file_name), dpi=500)
+      ax.set_title(title, fontweight='bold')
+      ax2.set_title(title, fontweight='bold')
+      fig2.savefig('{}/{:02}_{}.png'.format(file_name, step, i), dpi=500)
+
+  fig.savefig('{0}/{0}.png'.format(file_name), dpi=500)
   plt.clf()
 
 
@@ -527,7 +550,6 @@ class StepLoop(object):
     self.canvas_chain = [(canvas, state, None, None, None)]
     self.state = state.copy()
 
-    canvas = self.canvas_chain[-1]
     obj1_name, obj2_name = goal_objs
     goal_obj1 = goal_obj_name_to_obj(
         self.state, canvas, obj1_name)
@@ -744,6 +766,7 @@ def interactive_text_inputs():
 
     # parallel:
     # M=mid:A=A,B=B. lm=parallel:A=M,l=ca. N=mid:A=A,C=C. ln=parallel:A=N,l=ab. P=line_line:l1=lm,l2=ln. pb=mn
+    # M=mid:A=A,B=B. lm=parallel:A=M,l=ca. N=mid:A=A,C=C. ln=parallel:A=N,l=ab. P=line_line:l1=lm,l2=ln. PC=MN
 
     # center of mass:
     # M=mid:A=A,B=B. N=mid:A=A,B=C. l1=line:A=B,B=N. l2=line:A=C,B=M. D=line_line:l1=l1,l2=l2. l3=line:A=A,B=D. P=seg_line:l=l3,A=B,B=C. PB=PC

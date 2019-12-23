@@ -122,16 +122,16 @@ def _copy(structure):
 def highlight_segment(ax, p1, p2, color, alpha, mark_segment=False):
   x, y = (p1.x, p2.x), (p1.y, p2.y)
   if not mark_segment:
-    ax.plot(x, y, color=color, linewidth=10, alpha=alpha)
+    ax.plot(x, y, color=color, linewidth=7, alpha=alpha)
   else:
     x, y = (p1.x + p2.x) / 2, (p1.y + p2.y) / 2
-    ax.scatter(x, y, color=color, alpha=1.0, marker='o', s=150)
+    ax.scatter(x, y, color=color, alpha=1.0, marker='o', s=50)
 
 
 def highlight_point(ax, p, color, alpha):
   ax.scatter(
       p.x, p.y, color=color, edgecolors='none', 
-      s=500, alpha=alpha)
+      s=300, alpha=alpha)
 
 
 def highlight_angle(ax, hps, lines, color, alpha):
@@ -178,12 +178,12 @@ def highlight_angle(ax, hps, lines, color, alpha):
   if d >= 90: 
     return
 
-  scale = min(1.5, 90 /d)
+  scale = min(2.0, 90 /d)
   scale = max(scale, 0.4)
 
   fov = matplotlib.patches.Wedge(
       (float(head.x), float(head.y)), 
-      0.4 * scale, 
+      0.3 * scale, 
       a1, a2, 
       color=color, 
       alpha=alpha)
