@@ -7,5 +7,5 @@ We present the first deep neural networks that learn to prove simple Geometry th
 
 Project write-up: [Overleaf](https://www.overleaf.com/read/jjcgbdqkmzcz) (**Please do not share with anyone who does not have access to this Github repository.**)
 
-[!img](https://i.imgur.com/inGaXqM.gif)
+![img](https://i.imgur.com/inGaXqM.gif)
 
