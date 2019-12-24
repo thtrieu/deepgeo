@@ -99,7 +99,7 @@ res.<worker_id>.depth.<depth>.part.<part>
 
 For example, `res.002.depth.07.part.00031` contains training examples number 31000 to 31999 (read `part.00031`) that are collected by worker number 2 (read `res.002`), because each file contains exactly 1000 training examples. Each training example in this file is the correct action to take starting from a state that is 7 steps away from the goal (read `depth.07`). 
 
-**Possible room to improve:** Our current perception is that this random sketch generation is the bottleneck of the whole pipeline. The most time consuming component is implemented here: the subgraph isomorphism matching algorithm implemented in `trieu_graph_match.py`. Improving the speed of this algorithm might be crucial to scaling up. For example, with the default `max_construction=7` and `max_depth=45` above, it takes 4 processes ran in nearly a day to collect a few millions examples. One can argue that using the same amount of resource and targeting for the same amount of training examples, exploration at, say, `max_construction=50` and `max_depth=100` will give drastically higher quality training examples. The improvement in speed can be coming from a better algorithm, better parallelization or lower level language implementation.
+**Possible room to improve:** Our current perception is that this random sketch generation is the bottleneck of the whole pipeline. The most time consuming component is implemented here: the subgraph isomorphism matching algorithm implemented in function **`trieu_graph_match.recursively_match(..)`**. Improving the speed of this algorithm might be crucial to scaling up. For example, with the default `max_construction=7` and `max_depth=45` above, it takes 4 processes ran in nearly a day to collect a few millions examples. One can argue that using the same amount of resource and targeting for the same amount of training examples, exploration at, say, `max_construction=50` and `max_depth=100` will give drastically higher quality training examples. The improvement in speed can be coming from a better algorithm, better parallelization or lower level language implementation.
 
 To have a better look into this random generation process, try `interactive` mode:
 
@@ -115,7 +115,7 @@ To train the model using `tensor2tensor`, we have to convert the `numpy` arrays 
 
 
 ```bash
-t2t_datagen.py \
+python t2t_datagen.py \
 --problem=geo_all20 \
 --tmp_dir=output_numpy \
 --data_dir=data_all20 \
@@ -126,10 +126,10 @@ We have already generated tfrecords for several different problems, stored in `*
 
 ## Training
 
-To train a model (specified in `model.py`), we use the `t2t_trainer` utility as follow:
+Tensorflow code to build model and default hparams is in `model.py`. To train a model, we use the `t2t_trainer` utility as follow:
 
 ```bash
-!python t2t_trainer.py \
+python t2t_trainer.py \
 --problem=geo_all20 \
 --data_dir=path/to/geo_all20_tfrecords \
 --model=graph_transformer \
@@ -141,7 +141,7 @@ To train a model (specified in `model.py`), we use the `t2t_trainer` utility as 
 --schedule=train
 ```
 
-To make use of Cloud TPUs, please refer to [this Colab](https://colab.research.google.com/drive/1kJ3nI6-EYy38mDbbQWBEg8rEpbOuL0MX). One can also run this [second Colab](https://colab.research.google.com/drive/1N55bMyX_p_NTskhRdRN8M0bsTLmFvCmK) in parallel to continously pick up checkpoints for validation set evaluation as well as monitoring training through Tensorboard.
+To make use of Cloud TPUs and Google Cloud Storage, please refer to [this Colab](https://colab.research.google.com/drive/1kJ3nI6-EYy38mDbbQWBEg8rEpbOuL0MX) for an example. One can also run this [second Colab](https://colab.research.google.com/drive/1N55bMyX_p_NTskhRdRN8M0bsTLmFvCmK) in parallel to continously pick up checkpoints for validation set evaluation as well as monitoring training through Tensorboard.
 
 
 ## What's next?

@@ -380,11 +380,12 @@ class State(object):
 
 
 class Conclusion(object):
+  """The action's conclusion.
+  """
 
   def __init__(self, *initial_list):
-    # A list of lists, each one need a full match
-    # for the next to be eligible.
     if list(initial_list):
+      # A list of lists
       self.topological_list = [list(initial_list)]
       self.critical = [True]
     else:

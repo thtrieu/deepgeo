@@ -227,7 +227,20 @@ def match_relations(premise_relations,
                     distinct=None,
                     mapping=None,
                     timeout=None):
-  """Return list of matched list of relations in state_relation."""
+  """Yield list of matched list of relations in state_relation.
+  
+  Args:
+    premise_relations: A list of objects of type geometry.Relation, each
+      represents an edge in the action's premise graph.
+    state_relations: A list of objects of type geometry.Relation, each
+      represents an edge in the state graph
+    augmented_relations: A list of objects of type geometry.Relation, each
+      represents an edge to be added in to the state graph. This is needed
+      for example, when adding the self-equality relation AD = AD into the
+      graph, so that the premise for triangle ADB = ADC is completely 
+      presented in the premise.
+    conclusion: An object of type Conclusion
+  """
 
   if conclusion:
     conclusion_relations = sum(conclusion.topological_list, [])
