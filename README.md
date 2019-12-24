@@ -81,7 +81,14 @@ The script will save all the proof steps in `*.png` format to the `thales/` sub-
 To generate random sketches and collect training examples, run:
 
 ```bash
-python explore.py --mode=datagen --out_dir=output_numpy --max_construction=7 --max_depth=45 --max_line=6 --max_point=8 --explore_worker_id=1234
+python explore.py \
+--mode=datagen \
+--out_dir=output_numpy \
+--max_construction=7 \
+--max_depth=45 \
+--max_line=6 \
+--max_point=8 \
+--explore_worker_id=1234
 ```
 
 With the above (default) flags, we wish to start the exploration with 7 random constructions, followed by a series of deductions up to max depth 45 (another 38 steps). We also limit the total number of lines and points to 6 and 8 during construction. Notice during deduction, new lines and points can still be created. `explore_worker_id` will be used to random seed the current worker if several processes are running in parallel. The output of this process will be saved to directory `output_numpy/`. Here the state, goal and action will be converted into `numpy` matrices and serialized into binary files with name:
@@ -104,10 +111,10 @@ An example can be seen [here](https://github.com/thtrieu/deepgeo/blob/master/int
 
 ## Generate TFrecords
 
-To train the model using `tensor2tensor`, we have to convert the `numpy` arrays generated above into tfrecords. We do this using the `t2t_datagen` util in `tensor2tensor` with customized Problem classes defined in `problem.py`. For example, the below script will generate tfrecords for training examples of depth 1 upto depth 20 into director `data_all20`, using problem `geo_all20`.
+To train the model using `tensor2tensor`, we have to convert the `numpy` arrays generated above into tfrecords. We do this using the `t2t_datagen` utility in `tensor2tensor` with customized Problem classes defined in `problem.py`. For example, the below script will generate tfrecords for training examples of depth 1 upto depth 20 into director `data_all20`, using problem `geo_all20`:
 
 
-```bashpython 
+```bash
 t2t_datagen.py \
 --problem=geo_all20 \
 --tmp_dir=output_numpy \
@@ -115,19 +122,34 @@ t2t_datagen.py \
 --alsologtostderr
 ```
 
-We have generated tfrecords for several different problems, stored in `*_tfrecords/` directories in this project's [Google Cloud Storate](https://console.cloud.google.com/storage/browser/geo_reasoning/?project=optimal-buffer-256200).
+We have already generated tfrecords for several different problems, stored in `*_tfrecords/` directories in this project's [Google Cloud Storage](https://console.cloud.google.com/storage/browser/geo_reasoning/?project=optimal-buffer-256200).
 
 ## Training
 
-To train the model
+To train a model (specified in `model.py`), we use the `t2t_trainer` utility as follow:
+
+```bash
+!python t2t_trainer.py \
+--problem=geo_all20 \
+--data_dir=path/to/geo_all20_tfrecords \
+--model=graph_transformer \
+--hparams_set=graph_transformer_base \
+--hparams="batch_size=32,learning_rate=0.05" \
+--output_dir=path/to/ckpt_dir \
+--train_steps=350000 \
+--alsologtostderr \
+--schedule=train
+```
+
+To make use of Cloud TPUs, please refer to [this Colab](https://colab.research.google.com/drive/1kJ3nI6-EYy38mDbbQWBEg8rEpbOuL0MX). One can also run this [second Colab](https://colab.research.google.com/drive/1N55bMyX_p_NTskhRdRN8M0bsTLmFvCmK) in parallel to continously pick up checkpoints for validation set evaluation as well as monitoring training through Tensorboard.
 
 
-## What next?
+## What's next?
 
-We look forward to doing the following:
+We look forward to the following:
 
 * Faster subgraph isomorphism matching for deeper exploration.
 * Add more eligible actions for wider exploration.
-* Solving the two technical issues detailed in the project report, Section 5.
+* Solving the two technical issues in modelling detailed in the project report, Section 5.
 
 
