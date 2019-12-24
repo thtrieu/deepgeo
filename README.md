@@ -39,13 +39,13 @@ python decode.py \
 --problem=geo_all20
 ```
 
-After loading the model the script will display a prompt for you to enter the problem, everything starts with a random triangle ABC:
+After loading the model the script will display a prompt for you to enter the problem in text with a particular syntax, everything starts with a random triangle ABC:
 
 ```bash
 >>> Given triangle ABC. 
 ```
 
-Try the following problem and parallelogram or the Thales theorem. Currently the syntax to enter the theorem is a bit weird but we hope it is not too hard to understand.
+Try the following problem (about parallelogram or the Thales theorem). Currently the syntax to enter the question is a bit weird but we hope it is not too hard to understand.
 
 ```bash
 # Let l1 go through A parallel to BC, let l2 go through C parallel to ab, D is the intersection of l1 and l2. Prove that DA=BC:
@@ -74,4 +74,26 @@ Save sketch to file name: thales
 Saving to thales/thales.png
 ```
 
-The script will save all the proof steps in `*.png` format to the `thales/` sub-folder. This usually takes a while but good for visualizing the proof since the description printed in text format is hard to read due to its weird syntax. To skip this time consuming step leave the file name empty. 
+The script will save all the proof steps in `*.png` format to the `thales/` sub-folder. This usually takes a while since there is a lot to render. However visualizing the proof is better than reading the description with a weird syntax in text format. To skip this time consuming step leave the file name empty.
+
+## Play with generating random sketches
+
+To generate random sketches and collect training examples, run:
+
+```bash
+python explore.py --mode=datagen --out_dir=output_numpy --max_construction=7 --max_depth=45 --max_line=6 --max_point=8 --explore_worker_id=1234
+```
+
+With the above (default) flags, we wish to start the exploration with 7 random constructions, followed by a series of deductions up to max depth 45 (another 38 steps). We also limit the total number of lines and points to 6 and 8 during construction. Notice during deduction, new lines and points can still be created. `explore_worker_id` will be used to random seed the current worker if several processes are run in parallel. The output of this process will be saved to directory `output_numpy/`.
+
+The output to `output_numpy` will be several binary files dumped by `numpy` with name:
+```bash
+res.<worker_id>.depth.<depth>.part.<part>
+```
+
+Where, for example, `res.002.depth.07.part.00031` contains training examples number 31000 to 31999 (read `part.00031`) that are collected by worker number 2 (read `res.002`), because each file contain exactly 1000 training examples. Each training example in this file is the correct action to take starting from a state that is 7 steps away from the goal (read `depth.07`).
+
+Our current perception is that this random sketch generation is the bottleneck of the whole pipeline. The most time consuming component is the subgraph isomorphism matching algorithm implemented in `trieu_graph_match.py`, improving the speed of this 
+
+
+

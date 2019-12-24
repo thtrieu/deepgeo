@@ -34,8 +34,12 @@ import tensorflow as tf
 
 tf.compat.v1.flags.DEFINE_boolean('pdb', False, '')
 tf.compat.v1.flags.DEFINE_boolean('verbose', False, '')
+tf.compat.v1.flags.DEFINE_string('mode', 'datagen', '')
 tf.compat.v1.flags.DEFINE_string('out_dir', '/Users/thtrieu/deepgeo/data_small/', '')
-
+tf.compat.v1.flags.DEFINE_integer('max_construction', 7, '')
+tf.compat.v1.flags.DEFINE_integer('max_depth', 45, '')
+tf.compat.v1.flags.DEFINE_integer('max_line', 6, '')
+tf.compat.v1.flags.DEFINE_integer('max_point', 8, '')
 tf.compat.v1.flags.DEFINE_integer('explore_worker_id', 0, '')
 
 FLAGS = tf.compat.v1.flags.FLAGS
@@ -325,7 +329,7 @@ class ExplorationBackoffDFS(object):
       x = np.arange(depth0, self.max_construction)
       backoff = np.random.choice(x, p=x[::-1]*1.0/np.sum(x))
       print('Reach max depth ', depth, ' backoff = ', backoff)
-      print(self.proof_extractor.sizes())
+      self.proof_extractor.print_sizes()
       return backoff
 
     if steps is None:
@@ -399,14 +403,14 @@ class ExplorationBackoffDFS(object):
     if depth == 1:
       # Out of option at depth = 1, do it again.
       print('Out of option at depth 1, start a new Backoff DFS.')
-      print(self.proof_extractor.sizes())
+      self.proof_extractor.print_sizes()
       self.explore()
     else:
       depth0 = len(self.init_action_chain) + 1
       x = np.arange(depth0, self.max_construction)
       backoff = np.random.choice(x, p=x[::-1]*1.0/np.sum(x))
       print('Out of option at depth ', depth, ' backoff = ', backoff)
-      print(self.proof_extractor.sizes())
+      self.proof_extractor.print_sizes()
       # import pdb; pdb.set_trace()
       return backoff
 
@@ -485,11 +489,14 @@ class ProofExtractor(object):
     # self.checks = [theorems.ThalesCheck(), 
     #                theorems.OppositeAnglesCheck()]
 
-  def sizes(self):
-    return(' '.join(['{}: {}'.format(key, reservoir.size)
-                     for key, reservoir in sorted(
-                     self.reservoirs.items()
-                    ) if reservoir.size > 0]))
+  def print_sizes(self):
+    size_str = ' '.join(['{}: {}'.format(key, reservoir.size)
+                         for key, reservoir in sorted(
+                         self.reservoirs.items()
+                       ) if reservoir.size > 0])
+    if size_str:
+      print('\nProof Reservoirs Sizes:')
+      print(size_str)
 
   def collect_proof(self, action_chain, init_state, init_canvas, 
                     full_state, full_canvas, do_pdb=False):
@@ -524,23 +531,23 @@ class ProofExtractor(object):
 
       # if length >= 5:
       # if FLAGS.verbose:
-      if length <= 5:
-        print()
-        print(action_chain[-1].theorem.name, length)
-        for i, (action, s) in enumerate(zip(action_chain, problem_constructions)):
-          duration = action.duration
-          if s == True:
-            print(i + 1, action.to_str(), duration)
-          elif s:
-            print(i + 1, action.theorem.name, [r.name for r in sum(s, [])], duration)
-        print('----------', [r.name for r in proof_queue[0]])
-        for i, (action, s) in enumerate(zip(action_chain, proof_steps)):
-          duration = action.duration
-          if s == True:
-            print(i + 1, action.to_str(), duration)
-          elif s:
-            print(i + 1, action.theorem.name, [r.name for r in sum(s, [])], duration)
-        import pdb; pdb.set_trace()
+      # if length <= 5:
+      #   print()
+      #   print(action_chain[-1].theorem.name, length)
+      #   for i, (action, s) in enumerate(zip(action_chain, problem_constructions)):
+      #     duration = action.duration
+      #     if s == True:
+      #       print(i + 1, action.to_str(), duration)
+      #     elif s:
+      #       print(i + 1, action.theorem.name, [r.name for r in sum(s, [])], duration)
+      #   print('----------', [r.name for r in proof_queue[0]])
+      #   for i, (action, s) in enumerate(zip(action_chain, proof_steps)):
+      #     duration = action.duration
+      #     if s == True:
+      #       print(i + 1, action.to_str(), duration)
+      #     elif s:
+      #       print(i + 1, action.theorem.name, [r.name for r in sum(s, [])], duration)
+        # import pdb; pdb.set_trace()
         # if length >
 
       self.create_training_examples(
@@ -1037,6 +1044,9 @@ if __name__ == '__main__':
   state, canvas, action_chain = init_by_normal_triangle()
   # state, canvas, action_chain = init_by_thales()
   explorer = ExplorationBackoffDFS(state, canvas, FLAGS.out_dir, action_chain)
-  explorer.explore(FLAGS.pdb)
-  # explorer.explore_interactive([], state, canvas, mode='theorem_input')
+
+  if FLAGS.mode == 'datagen':
+    explorer.explore(FLAGS.pdb)
+  if FLAGS.mode == 'interactive':
+    explorer.explore_interactive([], state, canvas, mode='theorem_input')
 
