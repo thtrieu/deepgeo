@@ -1,6 +1,6 @@
 Below is an example playing with interactive sketch exploration that builds the Thales theorem premise. Please ignore all the `# comment`.
 
-```python
+```bash
 Depth = 0
 bc ab ca
 0. ConstructMidPoint

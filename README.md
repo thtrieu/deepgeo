@@ -100,10 +100,7 @@ To have a better look into this random generation process, try `interactive` mod
 python explore.py --mode=interactive
 ```
 
-An example is as follow
-
-```bash
-```
+An example can be seen [here](https://github.com/thtrieu/deepgeo/blob/master/interactive_example.md)
 
 
 ## Generate TFrecords
