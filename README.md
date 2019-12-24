@@ -84,16 +84,27 @@ To generate random sketches and collect training examples, run:
 python explore.py --mode=datagen --out_dir=output_numpy --max_construction=7 --max_depth=45 --max_line=6 --max_point=8 --explore_worker_id=1234
 ```
 
-With the above (default) flags, we wish to start the exploration with 7 random constructions, followed by a series of deductions up to max depth 45 (another 38 steps). We also limit the total number of lines and points to 6 and 8 during construction. Notice during deduction, new lines and points can still be created. `explore_worker_id` will be used to random seed the current worker if several processes are run in parallel. The output of this process will be saved to directory `output_numpy/`.
+With the above (default) flags, we wish to start the exploration with 7 random constructions, followed by a series of deductions up to max depth 45 (another 38 steps). We also limit the total number of lines and points to 6 and 8 during construction. Notice during deduction, new lines and points can still be created. `explore_worker_id` will be used to random seed the current worker if several processes are run in parallel. The output of this process will be saved to directory `output_numpy/`. Here the state, goal and action will be converted into `numpy` arrays and serialized into binary files with name:
 
-The output to `output_numpy` will be several binary files dumped by `numpy` with name:
 ```bash
 res.<worker_id>.depth.<depth>.part.<part>
 ```
 
 Where, for example, `res.002.depth.07.part.00031` contains training examples number 31000 to 31999 (read `part.00031`) that are collected by worker number 2 (read `res.002`), because each file contain exactly 1000 training examples. Each training example in this file is the correct action to take starting from a state that is 7 steps away from the goal (read `depth.07`).
 
-Our current perception is that this random sketch generation is the bottleneck of the whole pipeline. The most time consuming component is the subgraph isomorphism matching algorithm implemented in `trieu_graph_match.py`, improving the speed of this 
+**Possible room to improve:** Our current perception is that this random sketch generation is the bottleneck of the whole pipeline. The most time consuming component is implemented here: the subgraph isomorphism matching algorithm implemented in `trieu_graph_match.py`, improving the speed of this algorithm might be crucial to scaling up. For example, with `max_construction=7` and `max_depth=45` above, it takes 4 processes ran in nearly a day to collect a few millions examples. One can argue that using the same amount of resource and targeting for the same amount of training examples, exploration at, say, `max_construction=50` and `max_depth=100` will give drastically higher quality training examples. The improvement in speed can be coming from a better algorithm, better parallelization or lower level language implementation.
+
+To have a better look into this random generation process, try `interactive` mode:
+
+```bash
+python explore.py --mode=interactive
+```
+
+
+## Generate TFrecords
+
+To train the model using `tensor2tensor`, we have to convert the `numpy` array
+
 
 
 

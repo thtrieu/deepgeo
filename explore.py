@@ -134,7 +134,7 @@ class ExplorationBackoffDFS(object):
       action_generator = theorem.match_all(state)
       if mode == 'input':
         names = theorem.names
-        prompt = ','.join(names)
+        prompt = ' '.join(names)
         mapping = {}
         my_input = raw_input('{} = '.format(prompt)).split()
 
