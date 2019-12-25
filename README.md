@@ -5,7 +5,7 @@
 We present the first deep neural networks that learn to prove simple Geometry theorems, producing proof steps of both deductive reasoning and creative construction. This contrasts with prior work where reasoning or construction follows hand-designed rules and heuristics. Our models learn from simply observing random sketches of points and lines on a blank canvas, i.e. no example proof designed by human is used. We control the random sketches to verify that the neural nets can indeed solve an unseen problem, as well as problems that require more reasoning steps than the ones they are trained on.
 
 
-First please read [the write-up](https://www.overleaf.com/read/jjcgbdqkmzcz) for an introduction of some concepts used this project. **Please do not share with anyone who does not have access to this Github repository.**
+First please read [the project write-up](https://www.overleaf.com/read/jjcgbdqkmzcz) for a description of some concepts used throughout this README and the codebase. **Please do not share the report with anyone who does not have access to this Github repository.**
 
 ![img](https://imgur.com/yJVCotO.png)
 
