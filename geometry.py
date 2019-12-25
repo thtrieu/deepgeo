@@ -344,15 +344,6 @@ class LineHasDirection(TransitiveRelation):
     self._init_list = line, direction
 
 
-class LineDirectionPerpendicular(Relation):
-
-  def __init__(self, dir1, dir2):
-
-    assert isinstance(dir1, LineDirection) and isinstance(dir2, LineDirection)
-    self.name = '{}T{}'.format(dir1.name, dir2.name)
-    self._init_list = dir1, dir2
-
-
 class LineContainsPoint(Relation):
 
   def __init__(self, line, point):
