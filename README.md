@@ -148,8 +148,8 @@ To make use of Cloud TPUs and Google Cloud Storage, please refer to [this Colab]
 
 We look forward to the following:
 
-* Faster subgraph isomorphism matching for deeper exploration.
+* Faster subgraph isomorphism matching for deeper exploration, i.e. improving the speed of **`trieu_graph_match.recursively_match(..)`**.
 * Add more eligible actions for wider exploration.
-* Solving the two technical issues in modelling detailed in the project report, Section 5.
+* Solving the two technical issues in modelling detailed in the project report, Section 5. A possible solution might be found in [Deep Set Prediction Network](https://arxiv.org/abs/1906.06565)
 
 
