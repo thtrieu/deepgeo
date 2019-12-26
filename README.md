@@ -143,6 +143,13 @@ python t2t_trainer.py \
 
 To make use of Cloud TPUs and Google Cloud Storage, please refer to [this Colab](https://colab.research.google.com/drive/1kJ3nI6-EYy38mDbbQWBEg8rEpbOuL0MX) for an example. One can also run this [second Colab](https://colab.research.google.com/drive/1N55bMyX_p_NTskhRdRN8M0bsTLmFvCmK) in parallel to continously pick up checkpoints for validation set evaluation as well as monitoring training through Tensorboard.
 
+## `TODO(thtrieu)`
+
+* Add the following actions: construct perpendicular line, construct angle bisector.
+* Think about how to handle causal dependencies in pi/2 angle measures.
+* Add the circle and relation: point centers circle. This will make the graph heterogeneous, is there a way to avoid this?
+* Think about how to handle coincidence of points and lines.
+
 
 ## What's next?
 
@@ -150,6 +157,7 @@ We look forward to the following:
 
 * Faster subgraph isomorphism matching for deeper exploration, i.e. improving the speed of **`trieu_graph_match.recursively_match(..)`**.
 * Add more eligible actions for wider exploration.
+* It is natural for human to learn about points, lines, triangles and then circles. Is there a way to design a curriculum for our models? This is not necessarily for the purpose of a better learning algorithm, but more of a need for transfer learning between models that is trained along a long-term project.
 * Solving the two technical issues in modelling detailed in the project report, Section 5. A possible solution might be found in [Deep Set Prediction Network](https://arxiv.org/abs/1906.06565)
 
 
