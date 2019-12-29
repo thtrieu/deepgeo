@@ -9,3 +9,4 @@ bert_code*
 gs_ckpt*
 *.png
 *.gif
+*_ignore.*
