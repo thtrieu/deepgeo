@@ -81,7 +81,7 @@ def recursively_match(query_relations,
   this edge is connecting two nodes corresponding to obj1 and obj2. Some
   examples of edge types include PointEndsSegment, HalfplaneCoversAngle, 
   SegmentHasLength, etc. See all classes that inherit from class Relation
-  in `geometry.py` to for a full list.
+  in `geometry.py` to for a full list of edge types.
 
   Args:
     query_relations: A list of geometry.Relation objects, each represent
@@ -90,7 +90,7 @@ def recursively_match(query_relations,
       examples of type t include PointEndsSegment, HalfplaneCoversAngle, 
       SegmentHasLength, etc. See `all classes that inherit from class 
       Relation in `geometry.py` to for a full list. This dictionary stores 
-      all relations in the state's graph representation.
+      all edges in the state's graph representation.
     object_mappings: A dictionary {premise_object: state_object} mapping
       the nodes in premise graph and their matched counterpart in the state 
       graph that we already know. This means the remaining job is to add to 
@@ -139,6 +139,12 @@ def recursively_match(query_relations,
     # Suppose edge query0 connects nodes a, b in premise graph
     # and edge candidate connects nodes c, d in state graph:
     (a, b), (c, d) = query0.init_list, candidate.init_list
+
+    # Special treatment for half pi:
+    if a == geometry.halfpi and c != a:
+      continue
+    if b == geometry.halfpi and d != b:
+      continue
 
     # Now we want to match a->c, b->d without any conflict,
     # if there is conflict then candidate cannot be matched to query0.

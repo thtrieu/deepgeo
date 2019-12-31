@@ -27,7 +27,6 @@ from geometry import Point, Line, Segment, Angle, HalfPlane, Circle
 from geometry import SegmentLength, AngleMeasure, LineDirection
 from geometry import SegmentHasLength, AngleHasMeasure, LineHasDirection
 from geometry import PointEndsSegment, HalfplaneCoversAngle, LineBordersHalfplane
-from geometry import LineDirectionPerpendicular, PointCentersCircle
 from geometry import LineContainsPoint, CircleContainsPoint, HalfPlaneContainsPoint
 
 import tensorflow as tf
@@ -92,6 +91,9 @@ class ExplorationBackoffDFS(object):
         theorems.all_theorems['mirror'],
         theorems.all_theorems['seg_line'],
         theorems.all_theorems['parallel'],
+        theorems.all_theorems['perp_on'],
+        theorems.all_theorems['perp_out'],
+        theorems.all_theorems['bisect'],
         theorems.all_theorems['line'],
     ]
     self.deduct_theorems = [
@@ -218,13 +220,11 @@ class ExplorationBackoffDFS(object):
         return all_actions[choice]
 
   def explore_interactive(self, action_chain, state, canvas, 
-                          depth=0, mode='theorem'):
+                          depth=0, mode='theorem_input'):
     """DFS."""
     if depth > self.max_depth:
       return
 
-    if mode == 'theorem':
-      action = self.interactive_choose_theorem(state, depth, canvas,)
     elif mode == 'theorem_input':
       action = self.interactive_choose_theorem(state, depth, canvas, mode='input')
     elif mode == 'action':
@@ -255,7 +255,12 @@ class ExplorationBackoffDFS(object):
     print(' * draw ' + str(time.time()-s))
     s = time.time()
     new_state.add_spatial_relations(line2pointgroups)
+    new_canvas.update_hps(new_state.line2hps)
     print(' * add spatial rel ' + str(time.time()-s))
+
+    # self.proof_extractor.collect_proof(
+    #     action_chain, self.init_state, self.init_canvas, 
+    #     new_state, new_canvas, do_pdb)
 
     self.explore_interactive(
         action_chain, new_state, new_canvas, depth+1, mode)
@@ -308,14 +313,6 @@ class ExplorationBackoffDFS(object):
         list(self.init_action_chain), 
         self.init_state, 
         self.init_canvas,
-        do_pdb=do_pdb)
-
-  def explore_steps(self, steps, do_pdb=False):
-    self._recursive_explore(
-        list(self.init_action_chain), 
-        self.init_state, 
-        self.init_canvas,
-        steps=steps,
         do_pdb=do_pdb)
 
   def _recursive_explore(self, action_chain, state, canvas, 
@@ -385,6 +382,7 @@ class ExplorationBackoffDFS(object):
 
       # s = time.time()
       new_state.add_spatial_relations(line2pointgroups)
+      new_canvas.update_hps(new_state.line2hps)
       # print(' * spatial ', time.time() - s)
 
       s = time.time()
@@ -570,6 +568,8 @@ class ProofExtractor(object):
     # Copy the init state
     problem_state = init_state.copy()
 
+    # Get the actions so far that is not contributing to this extracted
+    # proof, so that we can add them later as augmentations
     redundant_actions = []  # for data aug
     for action, construction, step in zip(action_chain,
                                           problem_constructions,
@@ -577,18 +577,19 @@ class ProofExtractor(object):
       if construction == [] and step == []:
         redundant_actions.append(action)
 
-    # Add relation to state
+    # Add relevant relations to our problem_state
     for construction, action in zip(problem_constructions, action_chain):
       if construction == []:
         continue
-      if construction == True:
+      if construction == True:  # Full action
         problem_state.add_relations(action.conclusion_objects)
-      else:
+      else:  # Only the relevant part of action is added
         all_constructions = sum(construction, [])
         all_constructions = list(set(all_constructions))
         problem_state.add_relations(all_constructions)
 
-    # Add spatial relations
+    # Next, we add spatial relations
+    # First we copy the line-hp relations over
     for name, obj in problem_state.name2obj.items():
       if isinstance(obj, Line):
         hp1, hp2 = full_state.line2hps[obj]
@@ -597,14 +598,19 @@ class ProofExtractor(object):
         problem_state.add_one(LineBordersHalfplane(obj, hp1))
         problem_state.add_one(LineBordersHalfplane(obj, hp2))
 
+    # Second we copy the hp-point relations over:
     for hp in problem_state.all_hps:
+      if hp not in full_state.hp2points:
+        # It is possible that some hp exists without 
+        # containing any points, but only for specifying angles.
+        continue
       for p in full_state.hp2points[hp]:
         if p in problem_state.all_points:
           problem_state.add_one(HalfPlaneContainsPoint(hp, p))
 
+    # Detect if the extracted proof is the one we care about:
     if self.opposite_angle_check.found(problem_state, goal_objects):
       return  # Nothing to look at here.
-
     found_thales = self.thales_check.found(problem_state, goal_objects)
 
     # Now we loop through actions in the proof steps
@@ -612,6 +618,9 @@ class ProofExtractor(object):
                      zip(action_chain, proof_steps)
                      if step != []]
 
+    # Here we loop through each action in the proof steps
+    # for each of them, generate one training example (and augmented ones)
+    # and then add the action to the state and move on to the next action.
     for i, action in enumerate(proof_actions):
       # print('Try {}'.format(action.to_str()))
       # The current graph is too big (size = # nodes)
@@ -684,12 +693,6 @@ class ProofExtractor(object):
       if FLAGS.verbose:
         print(match)
         print('Failed matching {} {}'.format(action.theorem.name, match))
-      # [r.name for r in action.premise_objects if r not in state.relations]
-      # {l.name: (h1.name, h2.name) for l, (h1, h2) in state.line2hps.items()}
-      # {hp.name: [p.name for p in ps] for hp, ps in state.hp2points.items()}
-      # {l.name: ([p.name for p in p1], [p.name for p in p2]) for l, (p1, p2) in canvas.line2hps.items()}
-      # import pdb; pdb.set_trace()
-      # raise ValueError()
       return None
 
     seq, _, obj2idx, attention_mask = serialize_state(state)
@@ -724,7 +727,11 @@ def serialize_state(state):
     for obj in relation.init_list:
       if obj not in obj2idx:
         obj2idx[obj] = len(seq)
-        seq.append(vocab[type(obj)])
+        # Halfpi got a separate embedding to other Angles:
+        if obj == geometry.halfpi:
+          seq.append(vocab[obj])
+        else:
+          seq.append(vocab[type(obj)])
         obj_list.append(obj)
 
     obj1, obj2 = relation.init_list
@@ -761,8 +768,12 @@ action_vocab = {
     theorems.EqualAnglesBecauseParallel: 5,  # 1.73088312149
     theorems.SAS: 6,  # 0.251692056656
     theorems.ASA: 7,  # 2.26002907753 3.96637487411
+    
     theorems.ParallelBecauseCorrespondingAngles: 8,
     theorems.ParallelBecauseInteriorAngles: 9,
+    theorems.ConstructPerpendicularLineFromPointOn: 10,
+    theorems.ConstructPerpendicularLineFromPointOut: 11,
+    theorems.ConstructAngleBisector: 12
 }
 
 vocab = {
@@ -776,23 +787,21 @@ vocab = {
     Circle: 7,
     SegmentLength: 8,
     AngleMeasure: 9,
-    LineDirection: 10
+    LineDirection: 10,
+    geometry.halfpi: 11
 }
 
 def add_action(state, action, full_state):
   for obj in action.conclusion_objects:
-    # if obj.name in state.name2obj:
-    #   continue
     state.add_one(obj)
     if isinstance(obj, Line):
-      # canvas.update_line(obj, full_canvas.lines[obj])
       hp1, hp2 = full_state.line2hps[obj]
-      # state.add_one(hp1)
-      # state.add_one(hp2)
       state.add_one(LineBordersHalfplane(obj, hp1))
       state.add_one(LineBordersHalfplane(obj, hp2))
 
   for hp in state.all_hps:
+    if hp not in full_state.hp2points:
+      continue
     for p in full_state.hp2points[hp]:
       if p in state.all_points:
         state.add_one(HalfPlaneContainsPoint(hp, p))
@@ -831,7 +840,7 @@ def whittle_from(queue, action_chain,
   # Keep track of the head of the queue 
   # (we don't pop things from queue)
   i = 0
-  non_critical_count = 0  # count when the whole action is not needed.
+  non_critical_count = 0  # count when the whole premise is not needed.
 
   while i < len(queue):
     query = queue[i]
@@ -847,8 +856,6 @@ def whittle_from(queue, action_chain,
             obj1.name, obj2.name,
             {x.name: {a.name: b for a, b in y.items()} for x, y in val.edges.items()}))
       # dependents = [pos for pos in positions if pos is not None]
-      # if obj1.name == '^23' and obj2.name == '^17':
-      #   import pdb; pdb.set_trace()
       dependents += [obj1, obj2]
       queue.extend(dependents)
       # {x.name: {a.name: b for a, b in y.items()} for x, y in val.edges.items()}
@@ -994,6 +1001,7 @@ def execute_steps(steps, state, canvas, verbose=False):
     state.add_relations(action.new_objects)
     line2pointgroups = action.draw(canvas)
     state.add_spatial_relations(line2pointgroups)
+    canvas.update_hps(state.line2hps)
 
   return state, canvas, action_chain
 
@@ -1018,6 +1026,7 @@ def init_by_normal_triangle():
   )
 
   state.add_spatial_relations(canvas.add_triangle(A, B, C, ab, bc, ca))
+  canvas.update_hps(state.line2hps)
   return state, canvas, []
 
 

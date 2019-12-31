@@ -20,7 +20,6 @@ from geometry import Point, Line, Segment, Angle, HalfPlane, Circle
 from geometry import SegmentLength, AngleMeasure, LineDirection
 from geometry import SegmentHasLength, AngleHasMeasure, LineHasDirection
 from geometry import PointEndsSegment, HalfplaneCoversAngle, LineBordersHalfplane
-from geometry import LineDirectionPerpendicular, PointCentersCircle
 from geometry import LineContainsPoint, CircleContainsPoint, HalfPlaneContainsPoint
 
 
@@ -1083,7 +1082,7 @@ def whittle(state_queue, proof_queue, action_chain,
       new_canvas.update_line(obj, canvas.lines[obj])
     elif isinstance(obj, Circle):
       new_canvas.circles[obj] = canvas.circles[obj]
-  new_state.add_spatial_relations(new_canvas.line2hps)
+  new_state.add_spatial_relations(new_canvas.line2points)
 
   proof_steps = []
   for i, (step, action) in enumerate(zip(proof_whittled, action_chain)):

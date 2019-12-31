@@ -267,6 +267,7 @@ class State(object):
     if old_value == new_value:
       return
 
+    # merge causal dependencies
     new_value.merge(old_value)
 
     # When we say "x has chain pos p" we meant 
@@ -327,7 +328,7 @@ class State(object):
 
   def add_spatial_relations(self, line2pointgroups):
     for line in line2pointgroups:
-      points1, points2 = line2pointgroups[line]
+      points_neg, points_pos = line2pointgroups[line]
 
       hps = self.line2hps.get(line, [])
       if not hps:  # no halfplane in state, create them:
@@ -358,25 +359,27 @@ class State(object):
       points_hp1 = self.hp2points.get(hp1, [])
       points_hp2 = self.hp2points.get(hp2, [])
 
-      if (any(p in points1 for p in points_hp2) or
-          any(p in points2 for p in points_hp1)):
+      if (any(p in points_neg for p in points_hp2) or
+          any(p in points_pos for p in points_hp1)):
         points_hp1, points_hp2 = points_hp2, points_hp1
         hp1, hp2 = hp2, hp1
-        self.line2hps[line] = [hp1, hp2]
 
-      if points1:
+      # Make sure that self.line2hps is also in order (neg, pos)
+      self.line2hps[line] = [hp1, hp2]
+
+      # if points_neg:
         # if hp1.name not in self.name2obj:
           # self.add_one(hp1)
-        for p in points1:
-          if p not in points_hp1:
-            self.add_one(HalfPlaneContainsPoint(hp1, p))
+      for p in points_neg:
+        if p not in points_hp1:
+          self.add_one(HalfPlaneContainsPoint(hp1, p))
 
-      if points2:
-        # if hp2.name not in self.name2obj:
-          # self.add_one(hp2)
-        for p in points2:
-          if p not in points_hp2:
-            self.add_one(HalfPlaneContainsPoint(hp2, p))
+      # if points_pos:
+        # if hp2 not in self.hp2points:
+        #   self.add_one(hp2)
+      for p in points_pos:
+        if p not in points_hp2:
+          self.add_one(HalfPlaneContainsPoint(hp2, p))
 
 
 class Conclusion(object):

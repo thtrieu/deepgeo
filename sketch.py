@@ -107,6 +107,44 @@ def line_line_intersection(l1, l2):
   return Point(x, y)
 
 
+def bisector(l1, l2, point, same_sign):
+  # if same_sign, the bisector bisects (+, +) and (-, -)
+  # else the bisector bisects (+, -) and (-, +)
+  a1, b1, c1 = map(float, l1.coefficients)
+  a2, b2, c2 = map(float, l2.coefficients)
+
+  d1 = math.sqrt(a1*a1 + b1*b1)
+  d2 = math.sqrt(a2*a2 + b2*b2)
+  a = b1*d2 + b2*d1
+  b = a1*d2 + a2*d1
+
+  # Now the two bisectors are:
+  # 1. ax - by = 0 => normal vector: (a, -b)
+  n1 = (a, -b)
+  # 2. ay + bx = 0 => normal vector: (b, a)
+  n2 = (b, a)
+
+  # Now we identify which bisector bisects which angle
+  # by checking to see the relative positions of
+  # the normal vectors n1 and n2 with normal vectors of l1 and l2
+  # (recall that the normal vector always points to the positive side)
+  cos11 = a * a1 - b * b1  # n1 dot (a1, b1) 
+  cos12 = a * a2 - b * b2  # n1 dot (a2, b2)
+  if cos11 * cos12 > 0:
+    # normal vec of bisector 1 lies in (+, +) or (-, -)
+    # => bisector 1 lies in (+, -) halfplane intersection
+    # => bisector 2 lies in (+, +) or (-, -) halfplane intersection
+    n = n2 if same_sign else n1
+  else:
+    # normal vec of bisector 1 lies in (+, -)
+    # => bisector 1 lies in (+, +) or (-, -) halfplane intersection
+    # => bisector 2 lies in (+, -) halfplane intersection
+    n = n1 if same_sign else n2
+
+  a, b = n  # bisector: ax + by + c = 0
+  return Line(point, point + Point(-b, a))
+
+
 def _copy(structure):
   if not isinstance(structure, (list, tuple, dict, odict)):
     return structure
@@ -196,8 +234,9 @@ class Canvas(object):
     self.points = odict()  # graph Point -> sym Point *and* vice versa
     # self.points_inverse = odict()
     self.lines = odict()  # graph Line -> sym Line
-    self.line2hps = odict()  # graph Line -> ([sym p for p in hp1], 
+    self.line2points = odict()  # graph Line -> ([sym p for p in hp1], 
                                 #                [sym p for p in hp2])
+    self.line2hps = odict()
     self.circles = odict()  # graph Circle -> sym Circle
 
     # The following matrices help with fast calculating betweenness.
@@ -279,12 +318,16 @@ class Canvas(object):
     new_canvas.points = _copy(self.points)
     # new_canvas.points_inverse = _copy(self.points_inverse)
     new_canvas.lines = _copy(self.lines)
+    new_canvas.line2points = _copy(self.line2points)
     new_canvas.line2hps = _copy(self.line2hps)
     new_canvas.circles = _copy(self.circles)
 
     new_canvas.line_matrix = np.array(self.line_matrix)
     new_canvas.point_matrix = np.array(self.point_matrix)
     return new_canvas
+
+  def update_hps(self, state_line2hps):
+    self.line2hps = state_line2hps
 
   def update_line(self, line, sym_line):
     if line in self.lines:
@@ -307,7 +350,7 @@ class Canvas(object):
       elif v < -1e-12:
         halfplane_neg.append(point)
 
-    self.line2hps[line] = (halfplane_neg, halfplane_pos)
+    self.line2points[line] = (halfplane_neg, halfplane_pos)
 
   def update_point(self, node_point, sym_point):
     if node_point in self.points:
@@ -325,11 +368,53 @@ class Canvas(object):
 
     mult = np.matmul(self.line_matrix, point_vector)[:, 0]
 
-    for line, v in zip(self.line2hps, mult):
+    for line, v in zip(self.line2points, mult):
       if v > 1e-12:
-        self.line2hps[line][1].append(node_point)
+        self.line2points[line][1].append(node_point)
       elif v < -1e-12:
-        self.line2hps[line][0].append(node_point)
+        self.line2points[line][0].append(node_point)
+
+  def add_angle_bisector(self, new_line, point, l1, hp1, l2, hp2):
+    # Here we try to figure out the Line that bisects angle
+    # created by intersection of hp1 and hp2
+    # where hp1 is bordered by l1 and hp2 is bordered by l2
+
+    # Given any two lines l1 and l2, there are two bisectors
+    # of the 4 angles created by them. Why?
+    # Recall that any line divides the plane into 1 positive & 1 negative side
+    # i.e. two halfplanes, one negative (-) and one positive (+).
+    # So there are 4 angles created by the intersection of l1 and l2
+
+    # Denote the 4 angles by the pair of halfplanes that define each, 
+    # using the sign of the halfplane: (+, +), (+, -), (-, +), (-, -)
+    # then one of the bisector bisects (+, +) and (-, -) simultaneously
+    # the other bisects (+, -) and (-, +) simultaneously.
+
+    # First we see if hp1 and hp2 is positive or negative
+    hp1 = self.line2hps[l1].index(hp1)  # 0 if neg, 1 if pos
+    hp2 = self.line2hps[l2].index(hp2)  # 0 if neg, 1 if pos
+
+    # This bool uniquely define the bisector we are looking for:
+    same_sign = hp1 == hp2
+    # if same_sign, the bisector bisects (+, +) and (-, -)
+    # else the bisector bisects (+, -) and (-, +)
+    
+    l1, l2 = self.lines[l1], self.lines[l2]
+    point = self.points[point]
+    self.update_line(new_line, bisector(l1, l2, point, same_sign))
+    return {new_line: self.line2points[new_line]}
+
+  def add_perp_line_from_point_on(self, new_line, point, line):
+    point, line = self.points[point], self.lines[line]
+    self.update_line(new_line, line.perpendicular_line(point))
+    return {new_line: self.line2points[new_line]}
+
+  def add_perp_line_from_point_out(self, new_line, new_point, point, line):
+    point, line = self.points[point], self.lines[line]
+    perp_line = line.perpendicular_line(point)
+    self.update_line(new_line, perp_line)
+    self.update_point(new_point, line_line_intersection(line, perp_line))
+    return self.line2points
 
   def add_intersect_line_line(self, new_point, line1, line2):
     line1, line2 = self.lines[line1], self.lines[line2]
@@ -338,30 +423,30 @@ class Canvas(object):
       return None
 
     self.update_point(new_point, sym_point)
-    return self.line2hps
+    return self.line2points
 
   def add_intersect_seg_line(self, new_point, line, p1, p2):
     p1, p2 = self.points[p1], self.points[p2]
     line = self.lines[line]
     self.update_point(new_point, 
                       line_segment_intersection(line, p1, p2))
-    return self.line2hps
+    return self.line2points
 
   def add_midpoint(self, mid, p1, p2):
     p1, p2 = self.points[p1], self.points[p2]
     self.update_point(mid, p1.midpoint(p2))
-    return self.line2hps
+    return self.line2points
 
   def add_mirrorpoint(self, mirror, p1, p2):
     p1, p2 = self.points[p1], self.points[p2]
     self.update_point(mirror, p1 + (p2 - p1) * 2.0)
-    return self.line2hps
+    return self.line2points
 
   def add_parallel_line(self, new_line, p, line):
     p = self.points[p]
     line = self.lines[line]
     self.update_line(new_line, line.parallel_line(p))
-    return {new_line: self.line2hps[new_line]}
+    return {new_line: self.line2points[new_line]}
 
   def add_triangle(self, p1, p2, p3, l12, l23, l31):
     # A standard normal triangle
@@ -373,19 +458,19 @@ class Canvas(object):
     self.update_line(l12, Line(a, b))
     self.update_line(l23, Line(b, c))
     self.update_line(l31, Line(c, a))
-    return self.line2hps
+    return self.line2points
 
   def add_perp_bisector_line(self, new_line, mid, p1, p2):
     p1, p2 = self.points[p1], self.points[p2]
     s = Segment(p1, p2)
     self.update_line(new_line, s.perpendicular_bisector())
     self.update_point(mid, s.midpoint)
-    return self.line2hps
+    return self.line2points
 
   def add_line(self, new_line, p1, p2):
     p1, p2 = self.points[p1], self.points[p2]
     self.update_line(new_line, Line(p1, p2))
-    return {new_line: self.line2hps[new_line]}
+    return {new_line: self.line2points[new_line]}
 
   def add_circumscribe_circle(self, new_circle, p1, p2, p3):
     p1, p2, p3 = map(self.points.get, [p1, p2, p3])
@@ -407,7 +492,7 @@ class Canvas(object):
     # s = time.time()
     self.update_point(new_point, sym_new_point)
     # print(' >>> ', time.time() - s)
-    return self.line2hps
+    return self.line2points
 
   def add_intersecting_point_line_circle(
       self, new_point, line1, line2, circle, other_side_point):
@@ -423,7 +508,7 @@ class Canvas(object):
       self.update_point(new_point, p1)
     else:
       self.update_point(new_point, p2)
-    return self.line2hps
+    return self.line2points
 
   def add_intersecting_point_circle_circle(
       self, new_point, line, circle1, circle2, other_side_point):
@@ -438,7 +523,7 @@ class Canvas(object):
       self.update_point(new_point, p1)
     else:
       self.update_point(new_point, p2)
-    return self.line2hps
+    return self.line2points
 
   def add_twice_intersecting_circle(
       self, new_c, new_p1, new_p2, new_line, center, p1, p2):
@@ -460,7 +545,7 @@ class Canvas(object):
     self.update_point(new_p1, sym_newp1)
     self.update_point(new_p2, sym_newp2)
     self.update_line(new_line, Line(sym_newp1, sym_newp2))
-    return self.line2hps
+    return self.line2points
 
 
 def _is_different_side(line, point1, point2):

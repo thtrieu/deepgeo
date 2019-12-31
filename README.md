@@ -145,8 +145,7 @@ To make use of Cloud TPUs and Google Cloud Storage, please refer to [this Colab]
 
 ## `TODO(thtrieu)`
 
-* Add the following actions: construct perpendicular line, construct angle bisector.
-* Think about how to handle causal dependencies in pi/2 angle measures.
+* Think about how to recursively apply discoveries.
 * Add the circle and relation: point centers circle. This will make the graph heterogeneous, is there a way to avoid this?
 * Think about how to handle coincidence of points and lines.
 

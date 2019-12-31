@@ -176,6 +176,7 @@ class CausalValue(GeometryEntity):
       self.edges[node].update(neighbors)
 
   def dependency_path(self, obj1, obj2):
+    # perform a BFS
     visited = {obj: False for obj in self.edges}
     parent = {obj: None for obj in self.edges}
 
@@ -184,8 +185,8 @@ class CausalValue(GeometryEntity):
 
     found = False
     while queue:
-      s = queue.pop(0) 
-      for i in self.edges[s]: 
+      s = queue.pop(0)
+      for i in self.edges[s]:
         if i not in visited:
           continue
         if not visited[i]: 
@@ -230,9 +231,6 @@ class AngleMeasure(CausalValue):
   pass
 
 
-halfpi = AngleMeasure('pi/2')
-
-
 class Point(GeometryEntity):
   pass
 
@@ -243,6 +241,9 @@ class Segment(GeometryEntity):
 
 class Angle(GeometryEntity):
   pass
+
+
+halfpi = Angle('halfpi')
 
 
 class HalfPlane(GeometryEntity):
@@ -268,8 +269,9 @@ _name_bank = {
     Circle: 0,
     LineDirection: 0,
     AngleMeasure: 0,
-    SegmentLength: 0
+    SegmentLength: 0,
 }
+
 
 def reset():
   global name_to_obj
