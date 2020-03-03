@@ -77,6 +77,8 @@ class Action(object):
 class FundamentalTheorem(object):
 
   def __init__(self):
+    if not hasattr(self, 'additional_premise'):
+      self.additional_premise = []
     self.gather_objects()
     self.conclusion.gather_val2objs()
 
@@ -101,7 +103,7 @@ class FundamentalTheorem(object):
   def match_one_random(self, state):
     try:
       constructions, mapping = trieu_graph_match.match_relations(
-          premise_relations=self.premise, 
+          premise_relations=self.premise + self.additional_premise, 
           state_relations=state.relations,
           augmented_relations=self.get_augmented_relations(state),
           conclusion=self.conclusion,
@@ -116,7 +118,7 @@ class FundamentalTheorem(object):
   def match_all(self, state, randomize=True):
     timeout = []
     matches = trieu_graph_match.match_relations(
-        premise_relations=self.premise, 
+        premise_relations=self.premise + self.additional_premise, 
         state_relations=state.relations,
         augmented_relations=self.get_augmented_relations(state),
         conclusion=self.conclusion,
@@ -137,7 +139,7 @@ class FundamentalTheorem(object):
     # Check if there is a unique match that does not conflict with mapping.
     timeout = []
     matches = trieu_graph_match.match_relations(
-        premise_relations=self.premise, 
+        premise_relations=self.premise + self.additional_premise, 
         state_relations=state.relations,
         augmented_relations=self.get_augmented_relations(state),
         conclusion=self.conclusion,
@@ -617,9 +619,49 @@ class OppositeAngles(FundamentalTheorem):
     self.conclusion.add_critical(*have_measure('1"', amc, bmd))
     self.conclusion.add_critical(*have_measure('2"', amd, bmc))
 
-    self.names = dict(A=a, M=m, C=c) 
+    self.names = dict(A=a, M=m, C=c)
 
     super(OppositeAngles, self).__init__()
+
+
+class SameLineBecauseParallel(FundamentalTheorem):
+
+  def __init__(self):
+    l1, l1_hp1, l1_hp2 = line_and_halfplanes('l1')
+    l2, l2_hp1, l2_hp2 = line_and_halfplanes('l2')
+    A = Point('A')
+
+    self.premise = (
+        # both l1 and l2 go through a point A
+        collinear(A, l1) +
+        collinear(A, l2) +
+        # both l1 and l2 has the same direction
+        have_direction('d1', l1, l2)
+    )
+
+    # Match this as well, but we don't need this part
+    # of the premise during proof whittling.
+    # The reason is that the condition to merge l1 and l2
+    # should not include creating point B.
+    B = Point('B')
+    self.additional_premise = (
+        divides_halfplanes(l1, l1_hp1, l2_hp2, B) +
+        divides_halfplanes(l2, l2_hp1, l2_hp2, B)
+    )
+
+    self.conclusion = Conclusion()
+    self.conclusion.add_critical(Merge(l1, l2))
+    self.conclusion.add_critical(Merge(l1_hp1, l2_hp1))
+    self.conclusion.add_critical(Merge(l1_hp2, l2_hp2))
+
+    self.for_drawing = [l1, l2, l1_hp1, l2_hp2]
+    self.names = dict(l1=l1, l2=l2)
+
+    super(SameLineBecauseParallel, self).__init__()
+
+  def draw(self, mapping, canvas):
+    l1, l2, l1_hp1, l2_hp2 = map(mapping.get, self.for_drawing)
+    return canvas.remove_line(l2)
 
 
 class ParallelBecauseCorrespondingAngles(FundamentalTheorem):
@@ -897,9 +939,16 @@ class SSS(Congruences):
     conclusion.add(*angle_def(EFD, ef_hp1, fd_hp1))
     conclusion.add(*angle_def(FDE, fd_hp1, de_hp1))
 
-    conclusion.add_critical(*have_measure('\'1', ABC, DEF))
-    conclusion.add_critical(*have_measure('\'2', BCA, EFD))
-    conclusion.add_critical(*have_measure('\'2', CAB, FDE))
+    m1, m2, m3 = AngleMeasure('m1'), AngleMeasure('m2'), AngleMeasure('m3')
+
+    conclusion.add(AngleHasMeasure(ABC, m1))
+    conclusion.add_critical(AngleHasMeasure(DEF, m1))
+
+    conclusion.add(AngleHasMeasure(BCA, m2))
+    conclusion.add_critical(AngleHasMeasure(EFD, m2))
+
+    conclusion.add(AngleHasMeasure(CAB, m3))
+    conclusion.add_critical(AngleHasMeasure(FDE, m3))
 
     self.conclusion = conclusion
     self._distinct = [(AB, DE),
@@ -1056,86 +1105,6 @@ class ASA(Congruences):
   @property
   def name(self):
     return 'Equal Triangles: Angle-Side-Angle'
-  
-
-
-class ASA_(Congruences):
-
-  def __init__(self):
-    A, B, C, D, E, F = map(Point, 'ABCDEF')
-    ab, ab_hp1, _ = line_and_halfplanes('ab')
-    bc, bc_hp1, _ = line_and_halfplanes('bc')
-    ca, ca_hp1, _ = line_and_halfplanes('ca')
-    de, de_hp1, _ = line_and_halfplanes('de')
-    ef, ef_hp1, _ = line_and_halfplanes('ef')
-    fd, fd_hp1, _ = line_and_halfplanes('fd')
-    BAC, BCA, EDF, EFD = map(
-        Angle, 'BAC BCA EDF EFD'.split())
-    AB, BC, DE, EF = map(Segment, ['AB', 'BC', 'DE', 'EF'])
-    CA, FD = map(Segment, ['CA', 'FD'])
-
-    self.premise = (
-        collinear(ab, A, B) +
-        collinear(bc, B, C) +
-        collinear(ca, C, A) +
-
-        collinear(de, D, E) +
-        collinear(ef, E, F) +
-        collinear(fd, F, D) +
-
-        divides_halfplanes(ab, ab_hp1, p1=C) +
-        divides_halfplanes(bc, bc_hp1, p1=A) +
-        divides_halfplanes(ca, ca_hp1, p1=B) +
-
-        divides_halfplanes(de, de_hp1, p1=F) +
-        divides_halfplanes(ef, ef_hp1, p1=D) +
-        divides_halfplanes(fd, fd_hp1, p1=E) +
-
-        # segment_def(AB, A, B) +
-        segment_def(CA, C, A) +
-        # segment_def(DE, D, E) +
-        segment_def(FD, F, D) +
-
-        angle_def(BAC, ab_hp1, ca_hp1) +
-        angle_def(BCA, bc_hp1, ca_hp1) +
-        angle_def(EDF, de_hp1, fd_hp1) +
-        angle_def(EFD, ef_hp1, fd_hp1) +
-
-        have_length('l1', CA, FD) +
-        have_measure('0"', BAC, EDF) +
-        have_measure('1"', BCA, EFD)
-    )
-
-    self.conclusion = Conclusion()
-
-    ABC, DEF = Angle('ABC'), Angle('DEF')
-    self.conclusion.add(*angle_def(ABC, ab_hp1, bc_hp1))
-    self.conclusion.add(*angle_def(DEF, de_hp1, ef_hp1))
-
-    self.conclusion.add(*segment_def(AB, A, B))
-    self.conclusion.add(*segment_def(BC, B, C))
-    self.conclusion.add(*segment_def(DE, D, E))
-    self.conclusion.add(*segment_def(EF, E, F))
-
-    self.conclusion.add_critical(*have_length('l1', AB, DE))
-    self.conclusion.add_critical(*have_length('l2', BC, EF))
-    self.conclusion.add_critical(*have_measure('0"', ABC, DEF))
-
-    self._distinct = [(A, D),
-                      (AB, CA), (AB, BC), (CA, BC),
-                      (DE, FD), (DE, EF), (FD, EF),
-                      (BAC, BCA), (BAC, ABC), (BCA, ABC),
-                      (EDF, EFD), (EDF, DEF), (EFD, DEF),
-                      (ab, bc), (bc, ca), (ca, ab),
-                      (de, ef), (ef, fd), (fd, de),
-                      (A, B), (B, C), (C, A), 
-                      (D, E), (E, F), (F, D),
-                      (ab_hp1, bc_hp1), (ab_hp1, ca_hp1), (bc_hp1, ca_hp1),
-                      (de_hp1, ef_hp1), (de_hp1, fd_hp1), (ef_hp1, fd_hp1)
-                      ]
-
-    self.names = dict(A=A, B=B, C=C, D=D, E=E, F=F)
-    super(ASA, self).__init__()
 
 
 all_theorems = {

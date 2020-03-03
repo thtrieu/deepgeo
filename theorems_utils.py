@@ -12,7 +12,7 @@ from geometry import Point, Line, Segment, Angle, HalfPlane, Circle
 from geometry import SegmentLength, AngleMeasure, LineDirection
 from geometry import SegmentHasLength, AngleHasMeasure, LineHasDirection
 from geometry import PointEndsSegment, HalfplaneCoversAngle, LineBordersHalfplane
-from geometry import PointCentersCircle
+from geometry import PointCentersCircle, Merge
 from geometry import LineContainsPoint, CircleContainsPoint, HalfPlaneContainsPoint
 
 
@@ -123,6 +123,23 @@ class State(object):
     self.line2hps = {}
     self.hp2points = {}
 
+  def copy(self):
+    copied = State()
+    copied.relations = _copy(self.relations)
+    copied.type2rel = _copy(self.type2rel)
+    copied.obj2valrel = _copy(self.obj2valrel)
+    copied.val2valrel = _copy(self.val2valrel)
+    copied.valrel2pos = _copy(self.valrel2pos)
+    copied.name2obj = _copy(self.name2obj)
+
+    copied.all_points = _copy(self.all_points)
+    copied.all_hps = _copy(self.all_hps)
+
+    # For identifying halfplanes
+    copied.line2hps = _copy(self.line2hps)
+    copied.hp2points = _copy(self.hp2points)
+    return copied
+
   def ends_of_segment(self, segment):
     points = []
     for p_seg in self.type2rel[PointEndsSegment]:
@@ -159,22 +176,39 @@ class State(object):
     result = ', '.join(result)
     return '[{}]'.format(result)
 
-  def copy(self):
-    copied = State()
-    copied.relations = _copy(self.relations)
-    copied.type2rel = _copy(self.type2rel)
-    copied.obj2valrel = _copy(self.obj2valrel)
-    copied.val2valrel = _copy(self.val2valrel)
-    copied.valrel2pos = _copy(self.valrel2pos)
-    copied.name2obj = _copy(self.name2obj)
+  def new_relations_from_merge(self, obj1, obj2):
+    """When obj1 and obj2 are recognized to be the same object.
 
-    copied.all_points = _copy(self.all_points)
-    copied.all_hps = _copy(self.all_hps)
+    theorems allow merging:
+      * point
+      * line -> automatic -> hps
+      * 
 
-    # For identifying halfplanes
-    copied.line2hps = _copy(self.line2hps)
-    copied.hp2points = _copy(self.hp2points)
-    return copied
+    Automatic merge:
+      line -> hps
+      segment -> points
+      angle -> 
+
+    All relations involving obj1 also applies to obj2 and vice versa.
+    """
+    if not isinstance(obj1, type(obj2)):
+      raise ValueError('Cannot merge {} ({}) and {} ({})'.format(
+          obj1, type(obj1), obj2, type(obj2)))
+
+    if not isinstance(obj1, (Point, Segment, Line, Angle, Circle)):
+      raise ValueError('Cannot merge {} and {} of type {}'.format(
+          obj1, obj2, type(obj1)))
+
+    new_rel1, new_rel2 = [], []
+    for rel in self.relations:
+      if obj1 in rel.init_list:
+        new_rel2.append(rel.replace(obj1, obj2))
+      elif obj2 in rel.init_list:
+        new_rel1.append(rel.replace(obj2, obj1))
+
+    return new_rel1, new_rel2
+
+
 
   def add_one(self, entity):
     if isinstance(entity, tuple(non_relations)):
@@ -184,6 +218,9 @@ class State(object):
       #   self.all_hps.append(entity)
       # self.name2obj[entity.name] = entity
       return
+
+    if isinstance(entity, Merge):
+      self.merge(*entity.init_list)
         
     relation = entity
     for obj in relation.init_list:

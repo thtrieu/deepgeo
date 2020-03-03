@@ -3,10 +3,10 @@ from __future__ import division
 from __future__ import print_function
 
 import time
-import networkx as nx
 import theorems_utils
 import trieu_graph_match
 import geometry
+import numpy as np
 
 from theorems_utils import *
 
@@ -93,6 +93,50 @@ def state_merge_and_copy():
   assert not all_vals[1:] == all_vals[:-1]
 
 
+def time_sas():
+  state = State()
+
+  A, B, C = map(Point, 'ABC')
+  AB, BC, CA = map(Segment, 'AC BC CA'.split())
+  ab, bc, ca = map(Line, 'ab bc ca'.split())
+  ab_hp, bc_hp, ca_hp = map(HalfPlane, 'ab_hp bc_hp ca_hp'.split())
+  ABC, BCA, CAB = map(Angle, 'ABC BCA CAB'.split())
+
+  state.add_relations(
+      collinear(ab, A, B) +
+      collinear(bc, B, C) +
+      collinear(ca, C, A) +
+      segment_def(AB, A, B) +
+      segment_def(BC, B, C) +
+      segment_def(CA, C, A) +
+      have_length('1m', AB, CA) +
+      have_length('2m', BC) +
+      divides_halfplanes(ab, ab_hp, p1=C) +
+      divides_halfplanes(bc, bc_hp, p1=A) +
+      divides_halfplanes(ca, ca_hp, p1=B) +
+      angle_def(ABC, ab_hp, bc_hp) +
+      angle_def(BCA, bc_hp, ca_hp) +
+      angle_def(CAB, ca_hp, ab_hp) +
+      # have_measure('1"', ABC, BCA) +
+      have_measure('2"', CAB)
+  )
+  
+  theorem = theorems.SAS()
+  premise = theorem.premise
+  conclusion = theorem.conclusion
+
+  matches = trieu_graph_match.match_relations(
+      premise, state.relations,
+      conclusion=theorem.conclusion, 
+      randomize=False, distinct=theorem.distinct)
+  start = time.time()
+  matches = list(matches)
+  print(time.time() - start)
+  for _, m in matches:
+    print_match(m, [Point])
+  assert len(matches) == 2, len(matches)
+
+
 def sas():
   state = State()
   A, B, C, D = map(Point, 'ABCD')
@@ -120,11 +164,12 @@ def sas():
   premise = theorem.premise
   conclusion = theorem.conclusion
 
+  start = time.time()
   matches = trieu_graph_match.match_relations(
       premise, state.relations,
       conclusion=theorem.conclusion, 
-      randomize=False, distinct=theorem.distinct)
-  start = time.time()
+      randomize=False, 
+      distinct=theorem.distinct)
   matches = list(matches)
   print(time.time() - start)
   for _, m in matches:
@@ -136,11 +181,11 @@ def sas():
       sum(state_conclusion.topological_list, [])
   )
 
+  start = time.time()
   matches = trieu_graph_match.match_relations(
       premise, state.relations,
       conclusion=theorem.conclusion, 
       randomize=False, distinct=theorem.distinct)
-  start = time.time()
   matches = list(matches)
   print(time.time() - start)
   assert len(matches) == 0
@@ -159,6 +204,8 @@ def conclusion_match():
                           LineContainsPoint(l, B)]
   }
 
+  state_relations = sum([y for x, y in state_candidates.items()], [])
+
   X, Y, Z, T = map(Point, 'XYZT')
   XY = Segment('XY')
   ZT = Segment('ZT')
@@ -174,7 +221,8 @@ def conclusion_match():
   state_conclusion, match = trieu_graph_match.match_conclusions(
       conclusion, 
       dict(state_candidates), 
-      dict(premise_match), 
+      dict(premise_match),
+      state_relations, 
       distinct=[(X, Y)])
 
   constructions = state_conclusion.topological_list
@@ -191,6 +239,7 @@ def conclusion_match():
       conclusion, 
       dict(state_candidates), 
       dict(premise_match), 
+      state_relations,
       distinct=[(X, Y)])
   assert conclusion.topological_list == []
   print_construction(conclusion.topological_list)
@@ -1103,8 +1152,14 @@ def whittle(state_queue, proof_queue, action_chain,
   print()
   return new_state, new_canvas, proof_steps
 
+def hey():
+  a = [(PointEndsSegment, Point, 'A', Segment, 'AB'), (PointEndsSegment, Point, 'B', Segment, 'AB'), (PointEndsSegment, Point, 'B', Segment, 'BC'), (PointEndsSegment, Point, 'C', Segment, 'BC'), (PointEndsSegment, Point, 'C', Segment, 'CA'), (PointEndsSegment, Point, 'A', Segment, 'CA'), (LineContainsPoint, Line, 'ab', Point, 'A'), (LineContainsPoint, Line, 'ab', Point, 'B'), (LineContainsPoint, Line, 'bc', Point, 'B'), (LineContainsPoint, Line, 'bc', Point, 'C'), (LineContainsPoint, Line, 'ca', Point, 'C'), (LineContainsPoint, Line, 'ca', Point, 'A'), (LineBordersHalfplane, Line, 'ab', HalfPlane, 'ab_hp1'), (LineBordersHalfplane, Line, 'ab', HalfPlane, 'ab_hp2'), (HalfPlaneContainsPoint, HalfPlane, 'ab_hp2', Point, 'C'), (LineBordersHalfplane, Line, 'bc', HalfPlane, 'bc_hp1'), (LineBordersHalfplane, Line, 'bc', HalfPlane, 'bc_hp2'), (HalfPlaneContainsPoint, HalfPlane, 'bc_hp2', Point, 'A'), (LineBordersHalfplane, Line, 'ca', HalfPlane, 'ca_hp1'), (LineBordersHalfplane, Line, 'ca', HalfPlane, 'ca_hp2'), (HalfPlaneContainsPoint, HalfPlane, 'ca_hp2', Point, 'B'), (SegmentHasLength, Segment, 'CA', SegmentLength, '740m'), (LineContainsPoint, Line, 'ca', Point, 'P150'), (PointEndsSegment, Point, 'C', Segment, 's276'), (PointEndsSegment, Point, 'P150', Segment, 's276'), (SegmentHasLength, Segment, 's276', SegmentLength, '740m'), (HalfPlaneContainsPoint, HalfPlane, 'ab_hp2', Point, 'P150'), (HalfPlaneContainsPoint, HalfPlane, 'bc_hp1', Point, 'P150'), (LineHasDirection, Line, 'bc', LineDirection, 'd25'), (LineContainsPoint, Line, 'l94', Point, 'A'), (LineHasDirection, Line, 'l94', LineDirection, 'd25'), (LineBordersHalfplane, Line, 'l94', HalfPlane, 'l94_hp1'), (LineBordersHalfplane, Line, 'l94', HalfPlane, 'l94_hp2'), (HalfPlaneContainsPoint, HalfPlane, 'l94_hp1', Point, 'B'), (HalfPlaneContainsPoint, HalfPlane, 'l94_hp1', Point, 'C'), (HalfPlaneContainsPoint, HalfPlane, 'l94_hp1', Point, 'P150'), (LineContainsPoint, Line, 'l97', Point, 'P150'), (LineHasDirection, Line, 'l97', LineDirection, 'd25'), (LineBordersHalfplane, Line, 'l97', HalfPlane, 'l97_hp1'), (LineBordersHalfplane, Line, 'l97', HalfPlane, 'l97_hp2'), (HalfPlaneContainsPoint, HalfPlane, 'l97_hp2', Point, 'A'), (HalfPlaneContainsPoint, HalfPlane, 'l97_hp2', Point, 'B'), (HalfPlaneContainsPoint, HalfPlane, 'l97_hp2', Point, 'C'), (LineHasDirection, Line, 'ab', LineDirection, 'd26'), (LineContainsPoint, Line, 'l98', Point, 'C'), (LineHasDirection, Line, 'l98', LineDirection, 'd26'), (LineBordersHalfplane, Line, 'l98', HalfPlane, 'l98_hp1'), (LineBordersHalfplane, Line, 'l98', HalfPlane, 'l98_hp2'), (HalfPlaneContainsPoint, HalfPlane, 'l98_hp1', Point, 'A'), (HalfPlaneContainsPoint, HalfPlane, 'l98_hp1', Point, 'B'), (HalfPlaneContainsPoint, HalfPlane, 'l98_hp2', Point, 'P150'), (LineContainsPoint, Line, 'l99', Point, 'B'), (LineBordersHalfplane, Line, 'l99', HalfPlane, '.77'), (LineBordersHalfplane, Line, 'l99', HalfPlane, '.78'), (HalfplaneCoversAngle, HalfPlane, '.77', Angle, '^968'), (HalfplaneCoversAngle, HalfPlane, 'ab_hp1', Angle, '^968'), (HalfplaneCoversAngle, HalfPlane, '.77', Angle, '^969'), (HalfplaneCoversAngle, HalfPlane, 'bc_hp1', Angle, '^969'), (HalfplaneCoversAngle, HalfPlane, '.78', Angle, '^970'), (HalfplaneCoversAngle, HalfPlane, 'ab_hp1', Angle, '^970'), (HalfplaneCoversAngle, HalfPlane, '.78', Angle, '^971'), (HalfplaneCoversAngle, HalfPlane, 'bc_hp1', Angle, '^971'), (AngleHasMeasure, Angle, '^968', AngleMeasure, '531"'), (AngleHasMeasure, Angle, '^971', AngleMeasure, '531"'), (AngleHasMeasure, Angle, '^969', AngleMeasure, '532"'), (AngleHasMeasure, Angle, '^970', AngleMeasure, '532"'), (HalfPlaneContainsPoint, HalfPlane, '.77', Point, 'C'), (HalfPlaneContainsPoint, HalfPlane, '.77', Point, 'P150'), (HalfPlaneContainsPoint, HalfPlane, '.78', Point, 'A'), (LineContainsPoint, Line, 'l100', Point, 'A'), (LineBordersHalfplane, Line, 'l100', HalfPlane, '.79'), (LineBordersHalfplane, Line, 'l100', HalfPlane, '.80'), (HalfplaneCoversAngle, HalfPlane, '.79', Angle, '^972'), (HalfplaneCoversAngle, HalfPlane, 'ca_hp2', Angle, '^972'), (HalfplaneCoversAngle, HalfPlane, '.79', Angle, '^973'), (HalfplaneCoversAngle, HalfPlane, 'l94_hp1', Angle, '^973'), (HalfplaneCoversAngle, HalfPlane, '.80', Angle, '^974'), (HalfplaneCoversAngle, HalfPlane, 'ca_hp2', Angle, '^974'), (HalfplaneCoversAngle, HalfPlane, '.80', Angle, '^975'), (HalfplaneCoversAngle, HalfPlane, 'l94_hp1', Angle, '^975'), (AngleHasMeasure, Angle, '^972', AngleMeasure, '533"'), (AngleHasMeasure, Angle, '^975', AngleMeasure, '533"'), (AngleHasMeasure, Angle, '^973', AngleMeasure, '534"'), (AngleHasMeasure, Angle, '^974', AngleMeasure, '534"'), (HalfPlaneContainsPoint, HalfPlane, '.80', Point, 'B'), (HalfPlaneContainsPoint, HalfPlane, '.80', Point, 'C'), (HalfPlaneContainsPoint, HalfPlane, '.80', Point, 'P150'), (LineContainsPoint, Line, 'l101', Point, 'A'), (LineBordersHalfplane, Line, 'l101', HalfPlane, '.81'), (LineBordersHalfplane, Line, 'l101', HalfPlane, '.82'), (HalfplaneCoversAngle, HalfPlane, '.81', Angle, '^976'), (HalfplaneCoversAngle, HalfPlane, 'ab_hp2', Angle, '^976'), (HalfplaneCoversAngle, HalfPlane, '.81', Angle, '^977'), (HalfplaneCoversAngle, HalfPlane, 'ca_hp1', Angle, '^977'), (HalfplaneCoversAngle, HalfPlane, '.82', Angle, '^978'), (HalfplaneCoversAngle, HalfPlane, 'ab_hp2', Angle, '^978'), (HalfplaneCoversAngle, HalfPlane, '.82', Angle, '^979'), (HalfplaneCoversAngle, HalfPlane, 'ca_hp1', Angle, '^979'), (AngleHasMeasure, Angle, '^976', AngleMeasure, '535"'), (AngleHasMeasure, Angle, '^979', AngleMeasure, '535"'), (AngleHasMeasure, Angle, '^977', AngleMeasure, '536"'), (AngleHasMeasure, Angle, '^978', AngleMeasure, '536"'), (HalfPlaneContainsPoint, HalfPlane, '.81', Point, 'B'), (HalfPlaneContainsPoint, HalfPlane, '.81', Point, 'C'), (HalfPlaneContainsPoint, HalfPlane, '.81', Point, 'P150'), (HalfplaneCoversAngle, HalfPlane, 'ca_hp1', Angle, '^980'), (HalfplaneCoversAngle, HalfPlane, 'l98_hp1', Angle, '^980'), (HalfplaneCoversAngle, HalfPlane, 'ca_hp1', Angle, '^981'), (HalfplaneCoversAngle, HalfPlane, 'ab_hp2', Angle, '^981'), (HalfplaneCoversAngle, HalfPlane, 'ca_hp2', Angle, '^982'), (HalfplaneCoversAngle, HalfPlane, 'l98_hp1', Angle, '^982'), (HalfplaneCoversAngle, HalfPlane, 'ca_hp2', Angle, '^983'), (HalfplaneCoversAngle, HalfPlane, 'ab_hp2', Angle, '^983'), (AngleHasMeasure, Angle, '^980', AngleMeasure, '537"'), (AngleHasMeasure, Angle, '^983', AngleMeasure, '537"'), (AngleHasMeasure, Angle, '^981', AngleMeasure, '538"'), (AngleHasMeasure, Angle, '^982', AngleMeasure, '538"'), (HalfplaneCoversAngle, HalfPlane, 'ca_hp1', Angle, '^984'), (HalfplaneCoversAngle, HalfPlane, 'l94_hp1', Angle, '^984'), (HalfplaneCoversAngle, HalfPlane, 'ca_hp1', Angle, '^985'), (HalfplaneCoversAngle, HalfPlane, 'l97_hp2', Angle, '^985'), (HalfplaneCoversAngle, HalfPlane, 'ca_hp2', Angle, '^986'), (HalfplaneCoversAngle, HalfPlane, 'l94_hp1', Angle, '^986'), (HalfplaneCoversAngle, HalfPlane, 'ca_hp2', Angle, '^987'), (HalfplaneCoversAngle, HalfPlane, 'l97_hp2', Angle, '^987'), (AngleHasMeasure, Angle, '^984', AngleMeasure, '546"'), (AngleHasMeasure, Angle, '^987', AngleMeasure, '546"'), (AngleHasMeasure, Angle, '^985', AngleMeasure, '540"'), (AngleHasMeasure, Angle, '^986', AngleMeasure, '540"'), (HalfplaneCoversAngle, HalfPlane, 'ca_hp1', Angle, '^988'), (HalfplaneCoversAngle, HalfPlane, 'bc_hp1', Angle, '^988'), (HalfplaneCoversAngle, HalfPlane, 'ca_hp2', Angle, '^989'), (HalfplaneCoversAngle, HalfPlane, 'bc_hp1', Angle, '^989'), (AngleHasMeasure, Angle, '^988', AngleMeasure, '546"'), (AngleHasMeasure, Angle, '^989', AngleMeasure, '540"'), (HalfplaneCoversAngle, HalfPlane, 'ab_hp2', Angle, '^990'), (HalfplaneCoversAngle, HalfPlane, 'l94_hp1', Angle, '^990'), (HalfplaneCoversAngle, HalfPlane, 'ab_hp2', Angle, '^991'), (HalfplaneCoversAngle, HalfPlane, 'bc_hp2', Angle, '^991'), (HalfplaneCoversAngle, HalfPlane, 'ab_hp1', Angle, '^992'), (HalfplaneCoversAngle, HalfPlane, 'l94_hp1', Angle, '^992'), (HalfplaneCoversAngle, HalfPlane, 'ab_hp1', Angle, '^993'), (HalfplaneCoversAngle, HalfPlane, 'bc_hp2', Angle, '^993'), (AngleHasMeasure, Angle, '^990', AngleMeasure, '542"'), (AngleHasMeasure, Angle, '^993', AngleMeasure, '542"'), (AngleHasMeasure, Angle, '^991', AngleMeasure, '544"'), (AngleHasMeasure, Angle, '^992', AngleMeasure, '544"'), (HalfplaneCoversAngle, HalfPlane, 'bc_hp1', Angle, '^994'), (HalfplaneCoversAngle, HalfPlane, 'l98_hp1', Angle, '^994'), (HalfplaneCoversAngle, HalfPlane, 'bc_hp1', Angle, '^995'), (HalfplaneCoversAngle, HalfPlane, 'ab_hp2', Angle, '^995'), (HalfplaneCoversAngle, HalfPlane, 'bc_hp2', Angle, '^996'), (HalfplaneCoversAngle, HalfPlane, 'l98_hp1', Angle, '^996'), (AngleHasMeasure, Angle, '^994', AngleMeasure, '544"'), (AngleHasMeasure, Angle, '^995', AngleMeasure, '545"'), (AngleHasMeasure, Angle, '^996', AngleMeasure, '545"'), (HalfplaneCoversAngle, HalfPlane, 'ca_hp2', Angle, '^997'), (HalfplaneCoversAngle, HalfPlane, 'bc_hp2', Angle, '^997'), (HalfplaneCoversAngle, HalfPlane, 'ca_hp1', Angle, '^998'), (HalfplaneCoversAngle, HalfPlane, 'bc_hp2', Angle, '^998'), (AngleHasMeasure, Angle, '^997', AngleMeasure, '546"'), (AngleHasMeasure, Angle, '^998', AngleMeasure, '540"')]
+
+
 
 if __name__ == '__main__':
+  np.random.seed(1234)
+  t = time.time()
   test_intersect_line_line()
   test_intersect_line_line2()
   test_thales()
@@ -1120,5 +1175,7 @@ if __name__ == '__main__':
   sas_hp()
   conclusion_match()
   sas()
+  time_sas()
   state_merge_and_copy()
   print('OK')
+  print('Total time = {}'.format(time.time()-t))

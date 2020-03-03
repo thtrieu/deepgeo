@@ -69,7 +69,7 @@ class ExplorationBackoffDFS(object):
                init_canvas,
                out_dir,
                init_action_chain,
-               max_construction=7,
+               max_construction=10,
                max_depth=45,
                max_line=6,
                max_point=8,
@@ -91,8 +91,8 @@ class ExplorationBackoffDFS(object):
         theorems.all_theorems['mirror'],
         theorems.all_theorems['seg_line'],
         theorems.all_theorems['parallel'],
-        theorems.all_theorems['perp_on'],
-        theorems.all_theorems['perp_out'],
+        # theorems.all_theorems['perp_on'],
+        # theorems.all_theorems['perp_out'],
         theorems.all_theorems['bisect'],
         theorems.all_theorems['line'],
     ]
@@ -334,6 +334,7 @@ class ExplorationBackoffDFS(object):
     elif steps == []:
       return 0
     else:
+      # For testing the exploration process
       def action_gen(steps):
         while True:
           step = steps.pop(0)
@@ -353,6 +354,8 @@ class ExplorationBackoffDFS(object):
     for action in actions:
       if FLAGS.verbose:
         print(' ' * depth, depth, type(action.theorem).__name__, action.duration)
+        # if action.duration > 1.0:
+        #   import pdb; pdb.set_trace()
       # This is needed for whittling proof.
       action.set_chain_position(depth - 1)
       action_chain.append(action)
@@ -807,11 +810,11 @@ def add_action(state, action, full_state):
         state.add_one(HalfPlaneContainsPoint(hp, p))
 
 
-value_entity = (
+VALUE_ENTITIES = (
     AngleMeasure, SegmentLength, LineDirection
 )
 
-value_rels = (
+VALUE_RELATIONS = (
     AngleHasMeasure, SegmentHasLength, LineHasDirection
 )
 
@@ -848,6 +851,7 @@ def whittle_from(queue, action_chain,
 
     if isinstance(query, tuple):
       val, rel1, rel2 = query
+      
       obj1, obj2 = rel1.init_list[0], rel2.init_list[0]
       dependents = val.dependency_path(obj1, obj2)
       if not all([d is not None for d in dependents]):
@@ -855,13 +859,9 @@ def whittle_from(queue, action_chain,
         raise ValueError('Path not found between {} and {} in {}'.format(
             obj1.name, obj2.name,
             {x.name: {a.name: b for a, b in y.items()} for x, y in val.edges.items()}))
-      # dependents = [pos for pos in positions if pos is not None]
+
       dependents += [obj1, obj2]
       queue.extend(dependents)
-      # {x.name: {a.name: b for a, b in y.items()} for x, y in val.edges.items()}
-      # import pdb; pdb.set_trace()
-      # print('{} {} <= {}'.format(rel1.name, rel2.name, print_name(dependents)))
-      # import pdb; pdb.set_trace()
       continue
 
     if isinstance(query, int):
@@ -876,10 +876,6 @@ def whittle_from(queue, action_chain,
     # the whole action and its premise is visited.
     if (whittled_state and whittled_state[pos] == True 
         or whittled[pos] == True): 
-      # if isinstance(query, int):
-      #   print(' X Skip {}'.format(query))
-      # else:
-      #   print(' X Skip {} because {} fulfilled'.format(query.name, pos))
       continue
 
     action = action_chain[pos]
@@ -894,26 +890,31 @@ def whittle_from(queue, action_chain,
     elif critical:
       # The whole action is needed.
       whittled[pos] = True
-      # Unless it is the goal, state doesnt have to create
-      # the objs if proof already covers them
-      # if whittled_state:
-      #   whittled_state[pos] = [construct 
-      #                          for construct in whittled_state[pos]
-      #                          if construct[0] in goal_objects]
+
+      # Now we add the whole premise to the dependents:
       dependents = []
+      # premise of type VALUE_RELATIONS is post-processed here:
       valrels = {}
-      for obj in action.premise_objects:
-        if not isinstance(obj, value_entity + value_rels):
-          dependents.append(obj)
-        elif isinstance(obj, value_rels):
+
+      for obj in action.theorem.premise_objects:
+        if not isinstance(obj, VALUE_ENTITIES + VALUE_RELATIONS):
+          dependents.append(action.mapping[obj])
+        elif isinstance(obj, VALUE_RELATIONS):
           val = obj.init_list[1]
           if val not in valrels:
             valrels[val] = []
           valrels[val].append(obj)
-      dependents += [(val, rel1, rel2) if rel1 != rel2 else rel1
-                      for val, (rel1, rel2) in valrels.items()]
-      # print('*', pos, action.theorem.name, '<=', print_name(dependents))
-    else:
+
+      # This format (val, rel1, rel2) is for a later call
+      # val.dependency_path(rel1, rel2)
+      for val, (rel1, rel2) in valrels.items():
+        val, rel1, rel2 = map(action.mapping.get, (val, rel1, rel2))
+        if rel1 != rel2:
+          dependents.append((val, rel1, rel2))
+        else:
+          dependents.append(rel1)
+
+    else:  # Non critical
       found = action.matched_conclusion.topological_list[
           query.conclusion_position]
       whittled[pos].append(found)
@@ -923,7 +924,6 @@ def whittle_from(queue, action_chain,
       dependents = sum([c.init_list for c in found
                         if hasattr(c, 'init_list')], tuple())
       non_critical_count -= 1
-      # print(query.name, '<=', print_name(dependents))
 
     # Push dependents into queue.
     for dep in dependents:
@@ -982,7 +982,8 @@ def execute_steps(steps, state, canvas, verbose=False):
         if a in theorem.names
         else (_find_premise(theorem.premise_objects, a), _find(state, b))
         for a, b in name_maps)
-    action_gen = theorem.match_from_input_mapping(state, mapping, randomize=False)
+    action_gen = theorem.match_from_input_mapping(
+        state, mapping, randomize=False)
 
     try:
       action = action_gen.next()

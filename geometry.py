@@ -201,7 +201,10 @@ class CausalValue(GeometryEntity):
 
     path = [obj2]
     while path[-1] != obj1:
-      p = parent[path[-1]]
+      try:
+        p = parent[path[-1]]
+      except:
+        import pdb; pdb.set_trace()
       path.append(p)
 
     # return path
@@ -293,6 +296,25 @@ class Relation(GeometryEntity):
   @property
   def init_list(self):
     return self._init_list
+
+  def replace(self, a, b):
+    init_list = (x, y) = self._init_list
+    if x == a:
+      init_list = (b, y)
+    elif y == a:
+      init_list = (x, b)
+    else:
+      return self
+
+    return type(self)(*init_list)
+
+
+class Merge(Relation):
+
+  def __init__(self, obj1, obj2):
+    assert isinstance(obj1, GeometryEntity) and isinstance(obj2, GeometryEntity)
+    self.name = '{}=={}'.format(obj1.name, obj2.name)
+    self._init_list = obj1, obj2
 
 
 class PointEndsSegment(Relation):

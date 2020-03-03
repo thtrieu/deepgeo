@@ -10,3 +10,4 @@ gs_ckpt*
 *.png
 *.gif
 *_ignore.*
+*.html

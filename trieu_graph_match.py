@@ -1,4 +1,3 @@
-
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -8,17 +7,18 @@ import random
 import geometry
 import time
 
-import pyximport; pyximport.install()
-
 import theorems_utils
 from theorems_utils import Conclusion
 from collections import defaultdict as ddict
+
+import cython_graph_match
 
 from geometry import Point, Line, Segment, Angle, HalfPlane, Circle 
 from geometry import SegmentLength, AngleMeasure, LineDirection
 from geometry import SegmentHasLength, AngleHasMeasure, LineHasDirection
 from geometry import PointEndsSegment, HalfplaneCoversAngle, LineBordersHalfplane
 from geometry import PointCentersCircle
+from geometry import Merge
 from geometry import LineContainsPoint, CircleContainsPoint, HalfPlaneContainsPoint
 
 
@@ -63,12 +63,36 @@ class Timeout(Exception):
   pass
 
 
+def recursively_match(
+    query_relations,
+    state_candidates,
+    object_mappings,
+    distinct=None,
+    timeout=None):
+  
+  # t = time.time()
+  # Cython cannot make 
+  # recursion_state
+  matches = cython_graph_match.recursively_match(
+      query_relations,
+      state_candidates,
+      object_mappings,
+      distinct=distinct or [],
+      return_all=0)
+  # print(time.time() - t)
+  # matches = list(matches)
+  # print(len(matches))
+  # exit()
+  return matches
+
+
 # Then match recursively
-def recursively_match(query_relations,
-                      state_candidates,
-                      object_mappings,
-                      distinct=None,
-                      timeout=None):
+def recursively_match_slow(
+    query_relations,
+    state_candidates,
+    object_mappings,
+    distinct=None,
+    timeout=None):
   """Python generator that yields dict({premise_object: state_object}).
 
   Here we are trying to perform the edge-induced subgraph isomorphism
@@ -196,7 +220,7 @@ def recursively_match(query_relations,
     appended_mappings = dict(object_mappings, **new_mappings)
 
     # Move on to the next recursion depth:
-    next_matches = recursively_match(
+    next_matches = recursively_match_slow(
         query_relations=query_relations[1:], 
         state_candidates=state_candidates,
         object_mappings=appended_mappings,
@@ -207,88 +231,207 @@ def recursively_match(query_relations,
       yield match
 
 
+def create_new_obj_and_rels_for_conclusion(
+      conclusion,
+      relations,
+      premise_match,
+      state_candidates,
+      critical,
+      conclusion_position,
+      val2objs):
+  """Given a list of relations in conclusion, create corresponding ones.
+
+  To add to the State.
+  """
+
+  new_objs_and_rels = []  # return this
+  # Loop through the relation and create new objects on demand:
+  for rel in relations:
+    new_init_list = []
+
+    for obj in rel.init_list:
+      if obj not in premise_match:
+        # A new object is needed to be created.
+        # For example in EqualAnglesBecauseIntersectingCords,
+        # 2 new lines are created, although they are not critical.
+        # (i.e. their creation doesnt need the full premise.)
+        if obj != geometry.halfpi:
+          new_obj = type(obj)()  # automatic naming
+          new_objs_and_rels.append(new_obj)
+          # Critical for example, the new AngleMeasure created
+          # for the two equal angles in EqualAnglesBecauseIntersectingCords
+          new_obj.set_critical(critical)
+          new_obj.set_conclusion_position(conclusion_position)
+        else:
+          new_obj = geometry.halfpi
+
+        # Update this new object into the premise_match
+        premise_match[obj] = new_obj
+
+      new_init_list.append(premise_match[obj])
+
+    # Now we are ready to create a new init list.
+    new_rel = type(rel)(*new_init_list)
+
+    # We also want to add these to state_candidate, so that
+    # the next construction iteration will not build the same
+    # thing again because of a failed match (happens e.g. ASA, SAS)
+    if type(rel) not in state_candidates:
+      state_candidates[type(rel)] = []
+    state_candidates[type(rel)].append(new_rel)
+
+    new_objs_and_rels.append(new_rel)
+    new_rel.set_critical(critical)
+    new_rel.set_conclusion_position(conclusion_position)
+
+    premise_match[rel] = new_rel
+    # premise_match[new_rel] = rsel
+
+    # Finally we note that if rel is measurement relation, then the value
+    # will need to update its dependency graph by adding the clique of 
+    # equal nodes presented in the *current* conclusion.
+    if isinstance(rel, (SegmentHasLength, AngleHasMeasure, LineHasDirection)):
+      _, val = rel.init_list
+      # This list is conclusion objects, 
+      # will need to be mapped to state objects.
+      val2objs[val] = conclusion.val2objs[val]
+
+  return new_objs_and_rels
+
+
+def create_new_rels_from_merge(obj1, obj2, 
+                               state_relations,
+                               critical,
+                               conclusion_position):
+  if not isinstance(obj1, type(obj2)):
+    raise ValueError('Cannot merge {} ({}) and {} ({})'.format(
+        obj1, type(obj1), obj2, type(obj2)))
+
+  if not isinstance(obj1, (Point, Segment, Line, Angle, Circle)):
+    raise ValueError('Cannot merge {} and {} of type {}'.format(
+        obj1, obj2, type(obj1)))
+
+  new_rels = []  # return this
+  # Now we add new relations to new_rels
+  # by looping through state_relations and 
+  # copy any relation involving obj1 for obj2 & vice versa.
+
+  obj_type = type(obj1)
+
+  for rel in state_relations:
+    if obj_type is Line and isinstance(rel, LineBordersHalfplane):
+      pass
+      
+
+    if obj1 in rel.init_list:
+      new_rel = rel.replace(obj1, obj2)
+    elif obj2 in rel.init_list:
+      new_rel = rel.replace(obj2, obj1)
+    else:
+      continue
+
+    new_rels.append(new_rel)
+    new_rel.set_critical(critical)
+    new_rel.set_conclusion_position(conclusion_position)
+
+    if isinstance(new_rel, (SegmentHasLength, AngleHasMeasure, LineHasDirection)):
+      val = new_rel.init_list[1]
+      val.add_new_clique([obj1, obj2])
+
+  return new_rels
+
+
 def match_conclusions(conclusion, state_candidates, 
-                      premise_match, distinct=None):
+                      premise_match, state_relations, 
+                      distinct=None):
+  """Given that premise is matched, see if the conclusion is already there.
+
+  Args:
+    conclusion: Conclusion() object
+    state_candidates: A dictionary {t: [list of relations with type t]}.
+      examples of type t include PointEndsSegment, HalfplaneCoversAngle, 
+      SegmentHasLength, etc. See `all classes that inherit from class 
+      Relation in `geometry.py` to for a full list. This dictionary stores 
+      all edges in the state's graph representation.
+    premise_match: A dictionary {premise_object: state_object} that maps 
+      from nodes in premise graph to nodes in state graph. This describes
+      the successful match between premise and our current graph
+    state_relations: A list of all relations currently in graph.
+    distinct: A list of pairs (premise_obj1, premise_obj2). Each pair is 
+      two nodes in the premise graph. This is to indicate that if premise_obj1
+      is matched to state_obj1 and premise_obj2 is matched to state_obj2,
+      then state_obj1 must be different to state_obj2, otherwise they can
+      be the same. For example, in the case of two equal triangles ABC=DEF
+      in the premise that got matched to ADB=ADC in the state, then AB and
+      DE can be the same, while the rest must be distinct (and therefore
+      presented in this `distinct` list).
+
+  Returns:
+    matched_conclusion: A Conclusion() object, the same as the argument
+      `conclusion`, except all nodes and edges are replaced with ones
+      in the graph, instead of one in the theorem.
+    premise_match: updated argument `premise_match` as new edges and nodes
+      mapping are added.
+  """
   matched_conclusion = Conclusion()
   conclusion_position = 0
 
-  # new value to objects, new ones created in this conclusion,
-  # will be used to create dependency path.
-  val2objs = ddict(lambda: [])
+  # new value to objects, new ones created in this conclusion
+  # will be used to create a clique & add to dependency graph.
+  concl_val2objs = ddict(lambda: [])  # val -> conclusion nodes
+
+  # Loop through relation
   for relations, critical in conclusion:
     # For each of the construction step in the conclusion
-    # we check if it is already in the premise
+    # we check if it is already in the state
     total_match = True
     try:
       match = recursively_match(query_relations=relations,
                                 state_candidates=state_candidates,
                                 object_mappings=premise_match,
-                                distinct=distinct).next()
-    except StopIteration:
+                                distinct=distinct)
+      if isinstance(match, list):
+        match = match[0]
+      else:
+        match = match.next()
+    except:
       total_match = False
 
-    if total_match:  # if yes, move on.
+    if total_match:  # if yes, move on, nothing to do here.
       premise_match = match
-      # Collect objects into value buckets
       continue
 
     # Otherwise, we need to add new objects into the state.
-    new_constructions = []
-    # Loop through the relation and create new objects on demand:
-    for rel in relations:
-      new_init_list = []
-
-      for obj in rel.init_list:
-        if obj not in premise_match:
-          # A new object is needed to be created.
-          # For example in EqualAnglesBecauseIntersectingCords,
-          # 2 new lines are created, although they are not critical.
-          # (i.e. their creation doesnt need the full premise.)
-          if obj != geometry.halfpi:
-            new_obj = type(obj)()  # automatic naming
-            new_constructions.append(new_obj)
-            # Critical for example, the new AngleMeasure created
-            # for the two equal angles in EqualAnglesBecauseIntersectingCords
-            new_obj.set_critical(critical)
-            new_obj.set_conclusion_position(conclusion_position)
-          else:
-            new_obj = geometry.halfpi
-
-          # Update this new object into the premise_match
-          premise_match[obj] = new_obj
-
-        new_init_list.append(premise_match[obj])
-
-      # Now we are ready to create a new init list.
-      new_rel = type(rel)(*new_init_list)
-
-      # We also want to add these to state_candidate, so that
-      # the next construction iteration will not build the same
-      # thing again because of a failed match (happens e.g. ASA, SAS)
-      if type(rel) not in state_candidates:
-        state_candidates[type(rel)] = []
-      state_candidates[type(rel)].append(new_rel)
-
-      new_constructions.append(new_rel)
-      new_rel.set_critical(critical)
-      new_rel.set_conclusion_position(conclusion_position)
-
-      premise_match[rel] = new_rel
-      # premise_match[new_rel] = rsel
-
-      if isinstance(rel, (SegmentHasLength, AngleHasMeasure, LineHasDirection)):
-        _, val = rel.init_list
-        # Mark that val is involved in a new relation
-        val2objs[val] = conclusion.val2objs[val]
+    if isinstance(relations[0], Merge):
+      # Case 1: Merging two objects
+      assert len(relations) == 1
+      obj1, obj2 = relations[0].init_list
+      new_objs_and_rels = create_new_rels_from_merge(
+          obj1, obj2, 
+          state_relations=state_relations,
+          critical=critical,
+          conclusion_position=conclusion_position)
+    else:
+      # Case 2: Create new objects and relations
+      new_objs_and_rels = create_new_obj_and_rels_for_conclusion(
+          conclusion=conclusion,
+          relations=relations,
+          premise_match=premise_match,
+          state_candidates=state_candidates,
+          critical=critical,
+          conclusion_position=conclusion_position,
+          val2objs=concl_val2objs
+      )
 
     if critical:
-      matched_conclusion.add_critical(*new_constructions)
+      matched_conclusion.add_critical(*new_objs_and_rels)
     else:
-      matched_conclusion.add(*new_constructions)
+      matched_conclusion.add(*new_objs_and_rels)
     conclusion_position += 1
 
-  # Finally we map val2objs into state space.
-  for val, objs in val2objs.items():
+  # Finally we add dependency cliques:
+  for val, objs in concl_val2objs.items():
+    # Map both val & objs into state space.
     premise_match[val].add_new_clique(map(premise_match.get, objs))
 
   return matched_conclusion, premise_match
@@ -322,7 +465,7 @@ def match_relations(premise_relations,
     conclusion_relations = sum(conclusion.topological_list, [])
   else:
     conclusion_relations = []
-  
+
   augmented_relations = augmented_relations or []
   # Rearrage relations to optimize recursion branching
   sorted_premise_relations, state_candidates = strip_match_relations(
@@ -363,6 +506,7 @@ def match_relations(premise_relations,
         conclusion=conclusion, 
         state_candidates=state_candidates_, 
         premise_match=premise_match, 
+        state_relations=state_relations,
         # Distinct is needed to avoid rematching the same premise
         # by rotating the match.
         distinct=distinct,

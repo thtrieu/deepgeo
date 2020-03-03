@@ -138,7 +138,7 @@ def bisector(l1, l2, point, same_sign):
   else:
     # normal vec of bisector 1 lies in (+, -)
     # => bisector 1 lies in (+, +) or (-, -) halfplane intersection
-    # => bisector 2 lies in (+, -) halfplane intersection
+    # => bisector 2 lies in (+, -) or (-, +) halfplane intersection
     n = n1 if same_sign else n2
 
   a, b = n  # bisector: ax + by + c = 0
@@ -404,6 +404,13 @@ class Canvas(object):
     self.update_line(new_line, bisector(l1, l2, point, same_sign))
     return {new_line: self.line2points[new_line]}
 
+  def remove_line(self, line):
+    line_idx = self.lines.keys().index(line)
+    self.lines.pop(line)
+    self.line2points.pop(line)
+    self.line2hps.pop(line)
+    self.line_matrix = np.delete(self.line_matrix, line_idx, 0)
+
   def add_perp_line_from_point_on(self, new_line, point, line):
     point, line = self.points[point], self.lines[line]
     self.update_line(new_line, line.perpendicular_line(point))
@@ -553,10 +560,7 @@ def _is_different_side(line, point1, point2):
   p1, p2 = point1.evalf(), point2.evalf()
   d1 = p1.x * a + p1.y * b + c
   d2 = p2.x * a + p2.y * b + c
-
-  if d1 * d2 < 0:
-    return True
-  return False
+  return d1 * d2 < 0
 
 
 
