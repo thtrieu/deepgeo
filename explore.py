@@ -91,8 +91,8 @@ class ExplorationBackoffDFS(object):
         theorems.all_theorems['mirror'],
         theorems.all_theorems['seg_line'],
         theorems.all_theorems['parallel'],
-        # theorems.all_theorems['perp_on'],
-        # theorems.all_theorems['perp_out'],
+        theorems.all_theorems['perp_on'],
+        theorems.all_theorems['perp_out'],
         theorems.all_theorems['bisect'],
         theorems.all_theorems['line'],
     ]
@@ -683,11 +683,13 @@ class ProofExtractor(object):
         yield example
 
   def serialize(self, state, goal_objects, action):
+    """Turn state, goal, action into np arrays."""
     assert len(state.name2obj) + 1 <= self.max_state_size
     match = {y: action.mapping[y]
              for x, y in action.theorem.names.items()}
     action_gen = action.theorem.match_from_input_mapping(
       state, match)
+
     try:
       new_action = action_gen.next()
     except StopIteration:
