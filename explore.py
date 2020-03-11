@@ -13,6 +13,7 @@ import os
 import trieu_graph_match
 import glob
 import pickle as pkl
+import traceback
 
 from collections import defaultdict as ddict
 
@@ -62,7 +63,7 @@ def print_construction(constructions):
       print('\t * {}'.format(rel.name))
 
 
-class ExplorationBackoffDFS(object):
+class ExplorationBackoffDFSBase(object):
 
   def __init__(self, 
                init_state,
@@ -104,6 +105,178 @@ class ExplorationBackoffDFS(object):
         theorems.all_theorems['asa'],
     ]
     self.all_theorems = self.construct_theorems + self.deduct_theorems
+
+  def random_action(self, state, depth, canvas):
+    if depth <= self.max_construction:
+      all_theorems = list(self.construct_theorems)
+      theorem_actions = [theorem.match_all(state)
+                         for theorem in all_theorems]
+    else:
+      all_theorems = list(self.deduct_theorems)
+      theorem_actions = [theorem.match_all(state)
+                         for theorem in all_theorems]
+
+    while all_theorems:
+      i = np.random.randint(len(all_theorems))
+      theorem = all_theorems[i]
+      action_generator = theorem_actions[i]
+
+      if (isinstance(theorem, 
+                     (theorems.ConstructThirdLine,
+                      theorems.ConstructParallelLine)) 
+          and len(canvas.lines) >= self.max_line):
+        theorem_actions.pop(i)
+        all_theorems.pop(i)
+        continue
+
+      if isinstance(theorem, 
+                    (theorems.ConstructMidPoint,
+                     theorems.ConstructIntersectSegmentLine)
+                    ) and len(canvas.lines) >= self.max_point:
+        theorem_actions.pop(i)
+        all_theorems.pop(i)
+        continue
+
+      try:
+        s = time.time()
+        action = action_generator.next()
+        action.duration = time.time() - s
+        yield action
+      except StopIteration:
+        # print('give up in ', time.time() - s, ', left ', len(all_theorems))
+        theorem_actions.pop(i)
+        all_theorems.pop(i)
+        continue
+
+  def explore(self, do_pdb=False):
+    self._recursive_explore(
+        list(self.init_action_chain), 
+        self.init_state, 
+        self.init_canvas,
+        do_pdb=do_pdb)
+
+  def get_actions(self, state, depth, canvas,
+                  predefined_steps):
+    if predefined_steps is None:
+      # Just do the normal random action sampling
+      return self.random_action(state, depth, canvas)
+    
+    if predefined_steps == []:
+      return 0
+
+    # For testing with the exploration process using predefined steps.
+    def action_gen(predefined_steps):
+      while True:
+        step = steps.pop(0)
+        theorem, command_str = step
+        name_maps = [c.split('=') for c in command_str.split()]
+        mapping = {theorem.names[a]: _find(state, b) for a, b in name_maps}
+        action_gen = theorem.match_from_input_mapping(state, mapping)
+        try:
+          action = action_gen.next()
+        except StopIteration:
+          raise ValueError('Matching not found {} {} {}'.format(
+              depth, theorem.name, command_str))
+        yield action
+
+    return action_gen(predefined_steps)
+
+  def _recursive_explore(self, action_chain, state, canvas, 
+                         steps=None, do_pdb=False, depth=None):
+    """Random Back-off DFS.
+
+    Recursively call itself to explore the space in DFS manner.
+    If run out of eligible action or reach max_depth, randomly
+    sample a backoff point in the current chain and go back there.
+    """
+    if depth is None:
+      depth = len(action_chain) + 1
+
+    if depth > self.max_depth:
+      # Now we randomly sample a backoff point
+      # with probability biased towards the beginning of the chain.
+      depth0 = len(self.init_action_chain) + 1
+      x = np.arange(depth0, self.max_construction)
+      backoff = np.random.choice(x, p=x[::-1]*1.0/np.sum(x))
+      print('Reach max depth ', depth, ' backoff = ', backoff)
+      self.proof_extractor.print_sizes()
+      return backoff
+
+    actions = self.get_actions(state, depth, canvas, steps)
+    for action in actions:
+      if FLAGS.verbose:
+        print(' ' * depth, depth, type(action.theorem).__name__, action.duration)
+      # This is needed for whittling proof.
+      action.set_chain_position(depth - 1)
+      action_chain.append(action)
+
+      # Branch the tree by copying state & canvas.
+      # s = time.time()
+      new_state = state.copy()
+      new_canvas = canvas.copy()
+      # print(' * copy ', time.time() - s)
+
+      # s = time.time()
+      try:
+        new_state.add_relations(action.new_objects)
+      except ValueError:
+        # Not happening, but if it does, back to 1.
+        # import pdb; pdb.set_trace()
+        traceback.print_exc()
+        return 1
+      # print(' * add ', time.time() - s)
+
+      # By drawing we add spatial relations (point in halfplanes)
+      # to the state through inspection.
+      # spatial_relations is dict(line: [a1, a2, ..], [b1, b2, ..])
+      # where a1, a2 are points on the same halfplane and so are b1, b2..
+      # s = time.time()
+      line2pointgroups = action.draw(new_canvas)
+      # print(' * draw ', time.time() - s)
+
+      # s = time.time()
+      new_state.add_spatial_relations(line2pointgroups)
+      new_canvas.update_hps(new_state.line2hps)
+      # print(' * spatial ', time.time() - s)
+
+      try:
+        self.proof_extractor.collect_proof(
+            action_chain, self.init_state, self.init_canvas, 
+            new_state, new_canvas, do_pdb)
+      except:
+        traceback.print_exc()
+        exit()
+
+      if len(action_chain) == 100:
+        import pdb; pdb.set_trace()
+
+      backoff = self._recursive_explore(
+          action_chain, new_state, new_canvas,
+          steps=steps, do_pdb=do_pdb, depth=depth+1)
+      action_chain.pop(-1)
+
+      if backoff < depth:
+        return backoff
+
+    # At this point, we are out of eligible action to pick:
+    if depth > 1:
+      # Random backoff
+      depth0 = len(self.init_action_chain) + 1
+      x = np.arange(depth0, self.max_construction)
+      backoff = np.random.choice(x, p=x[::-1]*1.0/np.sum(x))
+      print('Out of option at depth ', depth, ' backoff = ', backoff)
+      self.proof_extractor.print_sizes()
+      # import pdb; pdb.set_trace()
+      return backoff
+
+    # Out of option at depth = 1, do it again.
+    print('Out of option at depth 1, start a new Backoff DFS.')
+    self.proof_extractor.print_sizes()
+    self.explore()
+
+
+class ExplorationBackoffDFS(ExplorationBackoffDFSBase):
+  """With debugging support: interactive explore & predefined explore chains."""
 
   def interactive_choose_theorem(self, state, depth, canvas, mode='auto'):
     while True:
@@ -266,157 +439,24 @@ class ExplorationBackoffDFS(object):
         action_chain, new_state, new_canvas, depth+1, mode)
     action_chain.pop(-1)
 
-  def random_action(self, state, depth, canvas):
-    if depth <= self.max_construction:
-      all_theorems = list(self.construct_theorems)
-      theorem_actions = [theorem.match_all(state)
-                         for theorem in all_theorems]
-    else:
-      all_theorems = list(self.deduct_theorems)
-      theorem_actions = [theorem.match_all(state)
-                         for theorem in all_theorems]
-
-    while all_theorems:
-      i = np.random.randint(len(all_theorems))
-      theorem = all_theorems[i]
-      action_generator = theorem_actions[i]
-
-      if (isinstance(theorem, 
-                     (theorems.ConstructThirdLine,
-                      theorems.ConstructParallelLine)) 
-          and len(canvas.lines) >= self.max_line):
-        theorem_actions.pop(i)
-        all_theorems.pop(i)
-        continue
-
-      if isinstance(theorem, 
-                    (theorems.ConstructMidPoint,
-                     theorems.ConstructIntersectSegmentLine)
-                    ) and len(canvas.lines) >= self.max_point:
-        theorem_actions.pop(i)
-        all_theorems.pop(i)
-        continue
-
-      try:
-        s = time.time()
-        action = action_generator.next()
-        action.duration = time.time() - s
-        yield action
-      except StopIteration:
-        # print('give up in ', time.time() - s, ', left ', len(all_theorems))
-        theorem_actions.pop(i)
-        all_theorems.pop(i)
-        continue
-
-  def explore(self, do_pdb=False):
-    self._recursive_explore(
-        list(self.init_action_chain), 
-        self.init_state, 
-        self.init_canvas,
-        do_pdb=do_pdb)
-
-  def _recursive_explore(self, action_chain, state, canvas, 
-                         steps=None, do_pdb=False, depth=None):
-    """DFS."""
-    if depth is None:
-      depth = len(action_chain) + 1
-
-    if depth > self.max_depth:
-      depth0 = len(self.init_action_chain) + 1
-      x = np.arange(depth0, self.max_construction)
-      backoff = np.random.choice(x, p=x[::-1]*1.0/np.sum(x))
-      print('Reach max depth ', depth, ' backoff = ', backoff)
-      self.proof_extractor.print_sizes()
-      return backoff
-
-    if steps is None:
-      actions = self.random_action(state, depth, canvas)
-    elif steps == []:
-      return 0
-    else:
-      # For testing the exploration process
-      def action_gen(steps):
-        while True:
-          step = steps.pop(0)
-          theorem, command_str = step
-          name_maps = [c.split('=') for c in command_str.split()]
-          mapping = {theorem.names[a]: _find(state, b) for a, b in name_maps}
-          action_gen = theorem.match_from_input_mapping(state, mapping)
-          try:
-            action = action_gen.next()
-          except StopIteration:
-            raise ValueError('Matching not found {} {} {}'.format(
-                depth, theorem.name, command_str))
-          yield action
-
-      actions = action_gen(steps)
-
-    for action in actions:
-      if FLAGS.verbose:
-        print(' ' * depth, depth, type(action.theorem).__name__, action.duration)
-        # if action.duration > 1.0:
-        #   import pdb; pdb.set_trace()
-      # This is needed for whittling proof.
-      action.set_chain_position(depth - 1)
-      action_chain.append(action)
-
-      # Branch the tree by copying state & canvas.
-      # s = time.time()
-      new_state = state.copy()
-      new_canvas = canvas.copy()
-      # print(' * copy ', time.time() - s)
-
-      # s = time.time()
-      try:
-        new_state.add_relations(action.new_objects)
-      except ValueError:
-        # Not happening, but if it does, back to 1.
-        # import pdb; pdb.set_trace()
-        return 1
-      # print(' * add ', time.time() - s)
-
-      # By drawing we add spatial relations (point in halfplanes)
-      # to the state through inspection.
-      # spatial_relations is dict(line: [a1, a2, ..], [b1, b2, ..])
-      # where a1, a2 are points on the same halfplane and so are b1, b2..
-      # s = time.time()
-      line2pointgroups = action.draw(new_canvas)
-      # print(' * draw ', time.time() - s)
-
-      # s = time.time()
-      new_state.add_spatial_relations(line2pointgroups)
-      new_canvas.update_hps(new_state.line2hps)
-      # print(' * spatial ', time.time() - s)
-
-      s = time.time()
-      self.proof_extractor.collect_proof(
-          action_chain, self.init_state, self.init_canvas, 
-          new_state, new_canvas, do_pdb)
-
-      backoff = self._recursive_explore(
-          action_chain, new_state, new_canvas,
-          steps=steps, do_pdb=do_pdb, depth=depth+1)
-      action_chain.pop(-1)
-
-      if backoff < depth:
-        return backoff
-
-    if depth == 1:
-      # Out of option at depth = 1, do it again.
-      print('Out of option at depth 1, start a new Backoff DFS.')
-      self.proof_extractor.print_sizes()
-      self.explore()
-    else:
-      depth0 = len(self.init_action_chain) + 1
-      x = np.arange(depth0, self.max_construction)
-      backoff = np.random.choice(x, p=x[::-1]*1.0/np.sum(x))
-      print('Out of option at depth ', depth, ' backoff = ', backoff)
-      self.proof_extractor.print_sizes()
-      # import pdb; pdb.set_trace()
-      return backoff
-
 
 def get_state_and_proof_objects(last_action, state):
+  """Yields pairs (problem_queue, proof_queue).
+
+  Last action essentially add new equalities into state.
+  Suppose they are a=b=v1, c=d=v2
+
+  So if the state has (a=e, c=f), we have just observe
+  the following 4 proofs:
+    * a = b
+      => yield (a, b), (v1, a=v1, b=v1)
+    * e = b
+      => yield (e, b), (v1, e=v1, b=v1)
+    * c = d
+      => ..
+    * f = d
+      => ..
+  """
   # Collect new value to rel in conclusion:
   new_objs, val2objs = [], {}
   for rel in last_action.new_objects:
@@ -501,120 +541,71 @@ class ProofExtractor(object):
 
   def collect_proof(self, action_chain, init_state, init_canvas, 
                     full_state, full_canvas, do_pdb=False):
-    new_action = action_chain[-1]
-    if not isinstance(new_action.theorem, 
+    last_action = action_chain[-1]
+    if not isinstance(last_action.theorem, 
                       (theorems.ASA, theorems.SAS, theorems.SSS, 
                        theorems.ParallelBecauseCorrespondingAngles,
                        theorems.ParallelBecauseInteriorAngles)):
       return []
 
-    all_lengths = []
-    last_action = action_chain[-1]
+    # With this new last_action, what are the new discoveries?
     all_discoveries = get_state_and_proof_objects(last_action, full_state)
 
-    for problem_queue, proof_queue in all_discoveries:    
-      problem_constructions = whittle_from(
+    for problem_queue, proof_queue in all_discoveries:
+      # problem_queue = (obj1, obj2)
+      # proof_queue = [(val, rel1, rel2)]
+      theorem_premise_constructions = whittle_from(
           list(problem_queue), action_chain)
       proof_steps = whittle_from(
           list(proof_queue), action_chain, 
-          problem_queue, problem_constructions)
+          problem_queue, theorem_premise_constructions)
 
       # Transfer all partial steps into problem formulation
       for i, step in enumerate(proof_steps):
         if not (step == [] or step == True):
-          if problem_constructions[i] != True:
-            problem_constructions[i] += step
+          if theorem_premise_constructions[i] != True:
+            theorem_premise_constructions[i] += step
           proof_steps[i] = []
-      # So now all proof steps are True or []
-
-      length = sum([1 for x in proof_steps if x != []])
-      all_lengths.append(length)
-
-      # if length >= 5:
-      # if FLAGS.verbose:
-      # if length <= 5:
-      #   print()
-      #   print(action_chain[-1].theorem.name, length)
-      #   for i, (action, s) in enumerate(zip(action_chain, problem_constructions)):
-      #     duration = action.duration
-      #     if s == True:
-      #       print(i + 1, action.to_str(), duration)
-      #     elif s:
-      #       print(i + 1, action.theorem.name, [r.name for r in sum(s, [])], duration)
-      #   print('----------', [r.name for r in proof_queue[0]])
-      #   for i, (action, s) in enumerate(zip(action_chain, proof_steps)):
-      #     duration = action.duration
-      #     if s == True:
-      #       print(i + 1, action.to_str(), duration)
-      #     elif s:
-      #       print(i + 1, action.theorem.name, [r.name for r in sum(s, [])], duration)
-        # import pdb; pdb.set_trace()
-        # if length >
 
       self.create_training_examples(
           init_state,
           full_state,
           action_chain,
-          problem_constructions,
-          proof_queue[0],
-          proof_steps)
+          theorem_premise_constructions,
+          goal_objects=proof_queue[0],
+          proof_steps=proof_steps)
 
   def create_training_examples(
       self, 
       init_state, 
       full_state,
       action_chain,
-      problem_constructions,
+      theorem_premise_constructions,
       goal_objects,
       proof_steps):
 
     # Copy the init state
-    problem_state = init_state.copy()
+    theorem_premise = init_state.copy()
 
     # Get the actions so far that is not contributing to this extracted
     # proof, so that we can add them later as augmentations
     redundant_actions = []  # for data aug
     for action, construction, step in zip(action_chain,
-                                          problem_constructions,
+                                          theorem_premise_constructions,
                                           proof_steps):
       if construction == [] and step == []:
         redundant_actions.append(action)
 
-    # Add relevant relations to our problem_state
-    for construction, action in zip(problem_constructions, action_chain):
-      if construction == []:
-        continue
-      if construction == True:  # Full action
-        problem_state.add_relations(action.conclusion_objects)
-      else:  # Only the relevant part of action is added
-        all_constructions = sum(construction, [])
-        all_constructions = list(set(all_constructions))
-        problem_state.add_relations(all_constructions)
-
-    # Next, we add spatial relations
-    # First we copy the line-hp relations over
-    for name, obj in problem_state.name2obj.items():
-      if isinstance(obj, Line):
-        hp1, hp2 = full_state.line2hps[obj]
-        # problem_state.add_one(hp1)
-        # problem_state.add_one(hp2)
-        problem_state.add_one(LineBordersHalfplane(obj, hp1))
-        problem_state.add_one(LineBordersHalfplane(obj, hp2))
-
-    # Second we copy the hp-point relations over:
-    for hp in problem_state.all_hps:
-      if hp not in full_state.hp2points:
-        # It is possible that some hp exists without 
-        # containing any points, but only for specifying angles.
-        continue
-      for p in full_state.hp2points[hp]:
-        if p in problem_state.all_points:
-          problem_state.add_one(HalfPlaneContainsPoint(hp, p))
+    # Add theorem_premise_constructions into theorem_premise
+    build_theorem_premise(theorem_premise,
+                          theorem_premise_constructions, 
+                          action_chain,
+                          full_state)
 
     # Detect if the extracted proof is the one we care about:
-    if self.opposite_angle_check.found(problem_state, goal_objects):
+    if self.opposite_angle_check.found(theorem_premise, goal_objects):
       return  # Nothing to look at here.
-    found_thales = self.thales_check.found(problem_state, goal_objects)
+    found_thales = self.thales_check.found(theorem_premise, goal_objects)
 
     # Now we loop through actions in the proof steps
     proof_actions = [action for action, step in 
@@ -627,7 +618,7 @@ class ProofExtractor(object):
     for i, action in enumerate(proof_actions):
       # print('Try {}'.format(action.to_str()))
       # The current graph is too big (size = # nodes)
-      graph_size = len(problem_state.name2obj) + 1
+      graph_size = len(theorem_premise.name2obj) + 1
       if graph_size > self.max_state_size:
         break
 
@@ -635,7 +626,7 @@ class ProofExtractor(object):
       # into the problem state to augment the training examples
       size_maxed = True
       for example in self.augment_and_serialize(
-          problem_state, goal_objects, action, full_state, redundant_actions):
+          theorem_premise, goal_objects, action, full_state, redundant_actions):
         size_maxed = False
 
         # We isolate the first step of thales proof into reservoir 0
@@ -649,7 +640,7 @@ class ProofExtractor(object):
         break
 
       # Now we add the action into the problem state
-      add_action(problem_state, action, full_state)
+      add_action(theorem_premise, action, full_state)
 
   def augment_and_serialize(
       self, state, goal_objects, action, full_state, redundant_actions):
@@ -659,6 +650,8 @@ class ProofExtractor(object):
     if len(state.name2obj) + 1 > self.max_state_size:
       return  # No example for this one.
     example = self.serialize(state, goal_objects, action)
+
+
     if example is None:
       # [r.name for r in action.premise_objects if r not in state.relations and r.name not in state.name2obj]
       # {l.name: (h1.name, h2.name) for l, (h1, h2) in state.line2hps.items()}
@@ -695,6 +688,8 @@ class ProofExtractor(object):
     except StopIteration:
       match = {x: action.mapping[y].name
                for x, y in action.theorem.names.items()}
+      # It is possible that adding redundant actions breaks the
+      # applicability of the proof.
       if FLAGS.verbose:
         print(match)
         print('Failed matching {} {}'.format(action.theorem.name, match))
@@ -702,9 +697,11 @@ class ProofExtractor(object):
 
     seq, _, obj2idx, attention_mask = serialize_state(state)
 
+    # Get the goal object triplet (val, obj1, obj2)
     val, rel1, rel2 = goal_objects
     obj1, obj2 = rel1.init_list[0], rel2.init_list[0]
 
+    # Get their idx and appropriately add masks to them.
     val_idx = len(seq)
     seq.append(vocab[type(val)])
 
@@ -720,6 +717,43 @@ class ProofExtractor(object):
     return Example(np.array(seq, np.int8), 
                    attention_mask,
                    np.array(target, np.int8))
+
+
+def build_theorem_premise(theorem_premise,
+                          theorem_premise_constructions, 
+                          action_chain,
+                          full_state):
+  # Add relevant relations to our theorem_premise
+  for construction, action in zip(theorem_premise_constructions, 
+                                  action_chain):
+    if construction == []:
+      continue
+    if construction == True:  # Full action
+      theorem_premise.add_relations(action.conclusion_objects)
+    else:  # Only the relevant part of action is added
+      all_constructions = sum(construction, [])
+      all_constructions = list(set(all_constructions))
+      theorem_premise.add_relations(all_constructions)
+
+  # Next, we add spatial relations
+  # First we copy the line-hp relations over
+  for name, obj in theorem_premise.name2obj.items():
+    if isinstance(obj, Line):
+      hp1, hp2 = full_state.line2hps[obj]
+      # problem_state.add_one(hp1)
+      # problem_state.add_one(hp2)
+      theorem_premise.add_one(LineBordersHalfplane(obj, hp1))
+      theorem_premise.add_one(LineBordersHalfplane(obj, hp2))
+
+  # Second we copy the hp-point relations over:
+  for hp in theorem_premise.all_hps:
+    if hp not in full_state.hp2points:
+      # It is possible that some hp exists without 
+      # containing any points, but only for specifying angles.
+      continue
+    for p in full_state.hp2points[hp]:
+      if p in theorem_premise.all_points:
+        theorem_premise.add_one(HalfPlaneContainsPoint(hp, p))
 
 
 def serialize_state(state):
@@ -795,6 +829,7 @@ vocab = {
     LineDirection: 10,
     geometry.halfpi: 11
 }
+
 
 def add_action(state, action, full_state):
   for obj in action.conclusion_objects:
