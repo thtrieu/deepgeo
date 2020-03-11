@@ -13,3 +13,4 @@ gs_ckpt*
 *.html
 cython_graph_match.c
 *.so
+build/*
