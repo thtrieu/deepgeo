@@ -11,3 +11,5 @@ gs_ckpt*
 *.gif
 *_ignore.*
 *.html
+cython_graph_match.c
+*.so
