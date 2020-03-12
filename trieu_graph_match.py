@@ -6,10 +6,12 @@ import numpy as np
 import random
 import geometry
 import time
-
+import profiling
 import theorems_utils
+
 from theorems_utils import Conclusion
 from collections import defaultdict as ddict
+from profiling import Timer
 
 import cython_graph_match
 
@@ -462,21 +464,23 @@ def match_relations(premise_relations,
 
   augmented_relations = augmented_relations or []
   # Rearrage relations to optimize recursion branching
-  sorted_premise_relations, state_candidates = strip_match_relations(
-      premise_relations, conclusion_relations, 
-      state_relations + augmented_relations)
+  with Timer('preprocess'):
+    sorted_premise_relations, state_candidates = strip_match_relations(
+        premise_relations, conclusion_relations, 
+        state_relations + augmented_relations)
 
-  if randomize:
-    for rel_type in state_candidates:
-      np.random.shuffle(state_candidates[rel_type])
+    if randomize:
+      for rel_type in state_candidates:
+        np.random.shuffle(state_candidates[rel_type])
 
-  premise_matches = recursively_match(
-      query_relations=sorted_premise_relations,
-      state_candidates=state_candidates,
-      object_mappings=mapping or {},
-      distinct=distinct,
-      timeout=timeout,
-      match_all=match_all)
+  with Timer('premise_match'):
+    premise_matches = recursively_match(
+        query_relations=sorted_premise_relations,
+        state_candidates=state_candidates,
+        object_mappings=mapping or {},
+        distinct=distinct,
+        timeout=timeout,
+        match_all=match_all)
 
   if augmented_relations:
     # We build state candidates without the augmented relations.
@@ -496,15 +500,17 @@ def match_relations(premise_relations,
     # Copy state_candidates over
     # So that different conclusion matches won't tamper with each other.
     # Because each of them will put in new objects into state_candidates.
-    state_candidates_ = {x: list(y) for x, y in state_candidates.items()}
-    matched_conclusion, all_match = match_conclusions(
-        conclusion=conclusion, 
-        state_candidates=state_candidates_, 
-        premise_match=premise_match, 
-        state_relations=state_relations,
-        # Distinct is needed to avoid rematching the same premise
-        # by rotating the match.
-        distinct=distinct,
-    )
+
+    with Timer('conclusion_match'):
+      state_candidates_ = {x: list(y) for x, y in state_candidates.items()}
+      matched_conclusion, all_match = match_conclusions(
+          conclusion=conclusion, 
+          state_candidates=state_candidates_, 
+          premise_match=premise_match, 
+          state_relations=state_relations,
+          # Distinct is needed to avoid rematching the same premise
+          # by rotating the match.
+          distinct=distinct,
+      )
     if matched_conclusion.topological_list:
       yield matched_conclusion, all_match

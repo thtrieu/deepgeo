@@ -9,6 +9,7 @@ import os
 import glob
 import pickle as pkl
 import traceback
+import profiling
 
 import theorems_utils
 import geometry
@@ -19,14 +20,18 @@ import whittling
 import data_gen_lib
 import action_chain_lib
 
+from profiling import Timer
 from geometry import Point, Line, Segment, Angle, HalfPlane, Circle
 from geometry import SegmentLength, AngleMeasure, LineDirection
 
 import tensorflow as tf
 tf.compat.v1.flags.DEFINE_boolean('pdb', False, '')
 tf.compat.v1.flags.DEFINE_boolean('verbose', False, '')
+tf.compat.v1.flags.DEFINE_boolean('enable_profiling', False, '')
+
 tf.compat.v1.flags.DEFINE_string('mode', 'datagen', '')
 tf.compat.v1.flags.DEFINE_string('out_dir', '/Users/thtrieu/deepgeo/data_small/', '')
+
 tf.compat.v1.flags.DEFINE_integer('max_construction', 7, '')
 tf.compat.v1.flags.DEFINE_integer('max_depth', 45, '')
 tf.compat.v1.flags.DEFINE_integer('max_line', 6, '')
@@ -177,19 +182,16 @@ class ExplorationBackoffDFSBase(object):
     return action_gen(predefined_steps)
 
   def print_stats(self):
-    # How much proof collected?
+    # How many proof collected?
     self.proof_extractor.print_sizes()
-    times = '   '.join(['{}: {:.4f}'.format(name, t)
-                        for name, t in sorted(self.timed.items())
-                        ])
     # Profiling different part of pipeline
-    print(times)
+    profiling.print_records()
 
   def _recursive_explore(self, action_chain, state, canvas, 
                          steps=None, do_pdb=False, depth=None):
     """Random Back-off DFS.
 
-    Recursively call itself to explore the space in DFS manner.
+    Recursively call itself to explore the space in backoff DFS manner.
     If run out of eligible action or reach max_depth, randomly
     sample a backoff point in the current chain and go back there.
     """
@@ -208,54 +210,53 @@ class ExplorationBackoffDFSBase(object):
 
     tab = ' ' * depth
 
-    t = time.time()
+    # Timing how long does it take to find 01 eligible action.
+    timer = Timer('action', start=True)
     actions = self.get_actions(state, depth, canvas, steps)
+
     for action in actions:
-      self.timed['action'] += time.time()-t
+      timer.stop()
+
       if FLAGS.verbose:
         print(tab, depth, type(action.theorem).__name__, action.duration)
+
       # This is needed for whittling proof.
       action.set_chain_position(depth - 1)
       action_chain.append(action)
 
       # Branch the tree by copying state & canvas.
-      t = time.time()
-      new_state = state.copy()
-      new_canvas = canvas.copy()
-      self.timed['copy'] += time.time()-t
+      with Timer('copy'):
+        new_state = state.copy()
+        new_canvas = canvas.copy()
 
-      t = time.time()
-      try:
-        new_state.add_relations(action.new_objects)
-      except ValueError:
-        # Not happening, but if it does, back to 1.
-        # import pdb; pdb.set_trace()
-        traceback.print_exc()
-        return 1
-      self.timed['add'] += time.time()-t
+      with Timer('add'):
+        try:
+          new_state.add_relations(action.new_objects)
+        except ValueError:
+          # Not happening, but if it does, back to 1.
+          # import pdb; pdb.set_trace()
+          traceback.print_exc()
+          return 1
 
       # By drawing we add spatial relations (point in halfplanes)
       # to the state through inspection.
       # spatial_relations is dict(line: [a1, a2, ..], [b1, b2, ..])
       # where a1, a2 are points on the same halfplane and so are b1, b2..
-      t = time.time()
-      line2pointgroups = action.draw(new_canvas)
-      self.timed['draw'] += time.time()-t
+      with Timer('draw'):
+        line2pointgroups = action.draw(new_canvas)
 
-      t = time.time()
-      new_state.add_spatial_relations(line2pointgroups)
-      new_canvas.update_hps(new_state.line2hps)
-      self.timed['spatial'] += time.time()-t
+      with Timer('spatial'):
+        new_state.add_spatial_relations(line2pointgroups)
+        new_canvas.update_hps(new_state.line2hps)
 
-      t = time.time()
-      try:
-        self.proof_extractor.collect_proof(
-            action_chain, self.init_state, self.init_canvas, 
-            new_state, new_canvas, do_pdb)
-      except:
-        traceback.print_exc()
-        exit()
-      self.timed['proof'] += time.time()-t
+      with Timer('proof'):
+        try:
+          self.proof_extractor.collect_proof(
+              action_chain, self.init_state, self.init_canvas, 
+              new_state, new_canvas, do_pdb)
+        except:
+          traceback.print_exc()
+          exit()
 
       if len(action_chain) == 100:
         import pdb; pdb.set_trace()
@@ -269,7 +270,7 @@ class ExplorationBackoffDFSBase(object):
         return backoff
 
       # Timing next action.
-      t = time.time()
+      timer = Timer('action', start=True)
 
     # At this point, we are out of eligible action to pick:
     if depth > 1:
@@ -643,6 +644,11 @@ if __name__ == '__main__':
   state, canvas, action_chain = action_chain_lib.init_by_normal_triangle()
   # state, canvas, action_chain = action_chain_lib.init_by_thales()
   explorer = ExplorationBackoffDFS(state, canvas, FLAGS.out_dir, action_chain)
+
+  if FLAGS.enable_profiling:
+    profiling.enable_profiling()
+  else:
+    profiling.disable_profiling()
 
   if FLAGS.mode == 'datagen':
     explorer.explore(FLAGS.pdb)
