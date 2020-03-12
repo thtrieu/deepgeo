@@ -11,6 +11,8 @@ import time
 from collections import OrderedDict as odict
 from collections import defaultdict as ddict
 
+from profiling import Timer
+
 from theorems_utils import collinear, concyclic, in_halfplane
 from theorems_utils import divides_halfplanes, line_and_halfplanes
 from theorems_utils import have_length, have_measure, have_direction

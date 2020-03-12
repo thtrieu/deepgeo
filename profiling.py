@@ -1,4 +1,6 @@
 import time
+from collections import defaultdict as ddict
+
 
 
 _ENABLE_PROFILING = False
@@ -30,11 +32,46 @@ class Recorder(object):
 
 
 def print_records():
-  global __ALL_RECORDERS
+  global _ALL_RECORDERS
   print('Profiling averages * hit times:')
+
+  max_name_len = max(len(name) for name in _ALL_RECORDERS.keys())
+  name_format = '{' + ':<{}'.format(max_name_len) + '}'
+
+  def default_dict():
+    return dict(sum=0.0,
+                time=0.0, 
+                children={})
+
+  d = default_dict()
+
+  for name, rec in _ALL_RECORDERS.items():
+    x = d
+    for scope in name.split('/'):
+      if scope not in x['children']:
+        x['children'][scope] = default_dict()
+      x = x['children'][scope]
+    x['time'] += rec.sum
+
+  def siblings_sum(d):
+    for children in d['children'].values():
+      d['sum'] += children['time']
+      siblings_sum(children)
+
+  siblings_sum(d)
+
   for name, rec in sorted(_ALL_RECORDERS.items()):
-    print('{:>20}: {:>9}e-8 * {}'.format(
-        name, int(rec.avg()*10e8), rec.count))
+    # remove scoping
+    scopes = name.split('/')
+    x = d
+    for scope in scopes[:-1]:
+      x = x['children'][scope]
+
+    scopes, name = scopes[:-1], scopes[-1]
+    name = '  ' * len(scopes) + name
+
+    print((name_format + ': {:>8}e-5 * {:<10} ({:2.0%})').format(
+        name, int(rec.avg()*10e5), rec.count, rec.sum/x['sum']))
 
 
 class _Timer(object):

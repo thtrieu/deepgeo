@@ -18,7 +18,6 @@ This project is at its very early stage where we identify all the key challenges
 
 * python 2.x
 * tensor2tensor
-* sympy
 * numpy
 
 

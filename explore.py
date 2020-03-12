@@ -6,6 +6,7 @@ from __future__ import print_function
 import numpy as np
 import time
 import os
+import sys
 import glob
 import pickle as pkl
 import traceback
@@ -19,6 +20,8 @@ import trieu_graph_match
 import whittling
 import data_gen_lib
 import action_chain_lib
+
+from IPython.display import clear_output
 
 from profiling import Timer
 from geometry import Point, Line, Segment, Angle, HalfPlane, Circle
@@ -89,8 +92,8 @@ class ExplorationBackoffDFSBase(object):
         theorems.all_theorems['mirror'],
         theorems.all_theorems['seg_line'],
         theorems.all_theorems['parallel'],
-        # theorems.all_theorems['perp_on'],
-        # theorems.all_theorems['perp_out'],
+        theorems.all_theorems['perp_on'],
+        theorems.all_theorems['perp_out'],
         theorems.all_theorems['bisect'],
         theorems.all_theorems['line'],
     ]
@@ -182,10 +185,12 @@ class ExplorationBackoffDFSBase(object):
     return action_gen(predefined_steps)
 
   def print_stats(self):
-    # How many proof collected?
-    self.proof_extractor.print_sizes()
+    if not FLAGS.verbose:
+      os.system('clear')
     # Profiling different part of pipeline
     profiling.print_records()
+    # How many proof collected?
+    self.proof_extractor.print_sizes()
 
   def _recursive_explore(self, action_chain, state, canvas, 
                          steps=None, do_pdb=False, depth=None):
@@ -204,7 +209,8 @@ class ExplorationBackoffDFSBase(object):
       depth0 = len(self.init_action_chain) + 1
       x = np.arange(depth0, self.max_construction)
       backoff = np.random.choice(x, p=x[::-1]*1.0/np.sum(x))
-      print('Reach max depth ', depth, ' backoff = ', backoff)
+      if FLAGS.verbose:
+        print('Reach max depth ', depth, ' backoff = ', backoff)
       self.print_stats()
       return backoff
 
@@ -278,13 +284,15 @@ class ExplorationBackoffDFSBase(object):
       depth0 = len(self.init_action_chain) + 1
       x = np.arange(depth0, self.max_construction)
       backoff = np.random.choice(x, p=x[::-1]*1.0/np.sum(x))
-      print('Out of option at depth ', depth, ' backoff = ', backoff)
+      if FLAGS.verbose:
+        print('Out of option at depth ', depth, ' backoff = ', backoff)
       self.print_stats()
       # import pdb; pdb.set_trace()
       return backoff
 
     # Out of option at depth = 1, do it again.
-    print('Out of option at depth 1, start a new Backoff DFS.')
+    if FLAGS.verbose:
+      print('Out of option at depth 1, start a new Backoff DFS.')
     self.print_stats()
     self.explore()
 
@@ -468,10 +476,10 @@ class ProofExtractor(object):
     #                theorems.OppositeAnglesCheck()]
 
   def print_sizes(self):
-    size_str = ' '.join(['{}: {}'.format(key, reservoir.size)
+    size_str = '\n'.join(['Size {:>3}: {}'.format(key, reservoir.size)
                          for key, reservoir in sorted(
                          self.reservoirs.items()
-                       ) if reservoir.size > 0])
+                        ) if reservoir.size > 0])
     if size_str:
       print('\nProof Reservoirs Sizes:')
       print(size_str)

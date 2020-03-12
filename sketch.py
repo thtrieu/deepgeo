@@ -8,13 +8,67 @@ import numpy as np
 import math
 
 import geometry
+# from sympy import Point, Line, Segment, Circle, Ray
 
 from collections import OrderedDict as odict
-from sympy import Point, Line, Segment, Circle, Ray
 
 import matplotlib
-# matplotlib.use('MacOSX')
 from matplotlib import pyplot as plt
+
+
+class Point(object):
+
+  def __init__(self, x, y):
+    self.x = x
+    self.y = y  
+
+  def __add__(self, p): 
+    return Point(self.x + p.x, self.y + p.y)
+
+  def __sub__(self, p): 
+    return Point(self.x - p.x, self.y - p.y)
+
+  def __mul__(self, f): 
+    return Point(self.x * f, self.y * f)
+
+  def __rmul__(self, f):
+    return self * f
+
+  def __truediv__(self, f):
+    return Point(self.x / f, self.y / f)
+
+  def __floordiv__(self, f):
+    div = self / f  # true div
+    return Point(int(div.x), int(div.y))
+
+  def midpoint(self, p):
+    return Point(0.5*(self.x + p.x), 0.5*(self.y + p.y))
+
+
+class Line(object):
+
+  def __init__(self, p1=None, p2=None, coefficients=None):
+    if coefficients:
+      self.coefficients = coefficients
+    else:
+      self.coefficients = (p1.y - p2.y,
+                           p2.x - p1.x,
+                           p1.x * p2.y - p2.x * p1.y)
+
+  def parallel_line(self, p):
+    a, b, _ = self.coefficients
+    return Line(coefficients=(a, b, -a*p.x-b*p.y))
+
+  def perpendicular_line(self, p):
+    a, b, _ = self.coefficients
+    return Line(p, p + Point(a, b))
+
+
+class Segment(object):
+
+  def __init__(self, p1=None, p2=None):
+    self.p1 = p1
+    self.p2 = p2
 
 
 def circle_intersection(o1, o2):
@@ -44,10 +98,10 @@ def solve_quad(a, b, c):
 
 
 def line_circle_intersection(line, circle):
-  a, b, c = map(float, line.coefficients)
+  a, b, c = line.coefficients
   r = float(circle.radius)
   center = circle.center
-  p, q = map(float, (center.x, center.y))
+  p, q = center.x, center.y
 
   if b == 0:
     x = -c / a
@@ -83,8 +137,8 @@ def circle_segment_intersect(circle, p):
 
 
 def line_segment_intersection(l, A, B):
-  a, b, c = map(float, l.coefficients)
-  x1, y1, x2, y2 = map(float, (A.x, A.y, B.x, B.y))
+  a, b, c = l.coefficients
+  x1, y1, x2, y2 = A.x, A.y, B.x, B.y
   dx, dy = x2-x1, y2-y1
   alpha = (-c - a * x1 - b * y1) / (a * dx + b * dy)
   return Point(x1 + alpha * dx, y1 + alpha * dy)
@@ -95,23 +149,22 @@ class InvalidLineIntersect(BaseException):
 
 
 def line_line_intersection(l1, l2):
-  a1, b1, c1 = map(float, l1.coefficients)
-  a2, b2, c2 = map(float, l2.coefficients)
+  a1, b1, c1 = l1.coefficients
+  a2, b2, c2 = l2.coefficients
   # a1x + b1y + c1 = 0
   # a2x + b2y + c2 = 0
   d = a1 * b2 - a2 * b1
   if d == 0:
     raise InvalidLineIntersect
-  x = (c2 * b1 - c1 * b2) / d
-  y = (c1 * a2 - c2 * a1) / d
-  return Point(x, y)
+  return Point((c2 * b1 - c1 * b2) / d, 
+               (c1 * a2 - c2 * a1) / d)
 
 
 def bisector(l1, l2, point, same_sign):
   # if same_sign, the bisector bisects (+, +) and (-, -)
   # else the bisector bisects (+, -) and (-, +)
-  a1, b1, c1 = map(float, l1.coefficients)
-  a2, b2, c2 = map(float, l2.coefficients)
+  a1, b1, c1 = l1.coefficients
+  a2, b2, c2 = l2.coefficients
 
   d1 = math.sqrt(a1*a1 + b1*b1)
   d2 = math.sqrt(a2*a2 + b2*b2)
@@ -180,7 +233,7 @@ def highlight_angle(ax, hps, lines, color, alpha):
   c_head = Circle(head, 0.5)
 
   p11, p12 = line_circle_intersection(l1, c_head)
-  a, b, c = map(float, l2.coefficients)
+  a, b, c = l2.coefficients
   v = a * float(p11.x) + b * float(p11.y) + c
   if v > 0:
     p11, p12 = p12, p11
@@ -188,7 +241,7 @@ def highlight_angle(ax, hps, lines, color, alpha):
   # ax.scatter(p1.x, p1.y)
 
   p21, p22 = line_circle_intersection(l2, c_head)
-  a, b, c = map(float, l1.coefficients)
+  a, b, c = l1.coefficients
   v = a * float(p21.x) + b * float(p21.y) + c
   if v > 0:
     p21, p22 = p22, p21
@@ -334,7 +387,7 @@ class Canvas(object):
       return
 
     self.lines[line] = sym_line
-    a, b, c = map(float, sym_line.coefficients)
+    a, b, c = sym_line.coefficients
     line_vector = [[a, b, c]]
     self.line_matrix = np.concatenate(
         [self.line_matrix, line_vector], 0)
@@ -490,15 +543,12 @@ class Canvas(object):
     c = self.circles[c]
 
     # s = time.time()
-    a, b, c, d, x, y = map(float, 
-                           [p1.x, p1.y, p2.x, p2.y, c.center.x, c.center.y])
+    a, b, c, d, x, y = [p1.x, p1.y, p2.x, p2.y, 
+                        c.center.x, c.center.y]
     d1, d2 = c - a, d - b
     alpha = -2 * (d1 * (a-x) + d2 * (b-y)) / (d1 * d1 + d2 * d2)
     sym_new_point = Point(a + alpha * d1, b + alpha * d2)
-    # print(' > ', time.time() - s)
-    # s = time.time()
     self.update_point(new_point, sym_new_point)
-    # print(' >>> ', time.time() - s)
     return self.line2points
 
   def add_intersecting_point_line_circle(
@@ -556,8 +606,7 @@ class Canvas(object):
 
 
 def _is_different_side(line, point1, point2):
-  a, b, c = map(float, line.coefficients)
-  p1, p2 = point1.evalf(), point2.evalf()
+  a, b, c = line.coefficients
   d1 = p1.x * a + p1.y * b + c
   d2 = p2.x * a + p2.y * b + c
   return d1 * d2 < 0

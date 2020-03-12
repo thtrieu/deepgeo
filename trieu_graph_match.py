@@ -48,7 +48,8 @@ def strip_match_relations(premise_relations, conclusion_relations, state_relatio
 
   # sort according to branch_count
   premise_relations, _ = zip(*sorted(
-      zip(premise_relations, rel_branch_count), reverse=True))
+      zip(premise_relations, rel_branch_count), 
+      reverse=True))  # very important speedup!
 
   return list(premise_relations), state_candidates
 
@@ -71,13 +72,21 @@ def recursively_match(
     object_mappings,
     distinct=None,
     timeout=None,
-    match_all=False):
+    match_all=False):  
+  # average time: 23,967,474e-8
   matches = cython_graph_match.recursively_match(
       query_relations,
       state_candidates,
       object_mappings,
       distinct=distinct or [],
       return_all=match_all)
+  # average time: 98,308,578e-8
+  # matches = recursively_match_slow(
+  #   query_relations,
+  #   state_candidates,
+  #   object_mappings,
+  #   distinct=distinct or [],
+  #   timeout=None)
   return matches
 
 
@@ -464,16 +473,15 @@ def match_relations(premise_relations,
 
   augmented_relations = augmented_relations or []
   # Rearrage relations to optimize recursion branching
-  with Timer('preprocess'):
-    sorted_premise_relations, state_candidates = strip_match_relations(
-        premise_relations, conclusion_relations, 
-        state_relations + augmented_relations)
+  sorted_premise_relations, state_candidates = strip_match_relations(
+      premise_relations, conclusion_relations, 
+      state_relations + augmented_relations)
 
-    if randomize:
-      for rel_type in state_candidates:
-        np.random.shuffle(state_candidates[rel_type])
+  if randomize:
+    for rel_type in state_candidates:
+      np.random.shuffle(state_candidates[rel_type])
 
-  with Timer('premise_match'):
+  with Timer('action/premise_match'):
     premise_matches = recursively_match(
         query_relations=sorted_premise_relations,
         state_candidates=state_candidates,
@@ -500,8 +508,7 @@ def match_relations(premise_relations,
     # Copy state_candidates over
     # So that different conclusion matches won't tamper with each other.
     # Because each of them will put in new objects into state_candidates.
-
-    with Timer('conclusion_match'):
+    with Timer('action/conclusion_match'):
       state_candidates_ = {x: list(y) for x, y in state_candidates.items()}
       matched_conclusion, all_match = match_conclusions(
           conclusion=conclusion, 

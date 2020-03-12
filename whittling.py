@@ -40,7 +40,10 @@ def get_state_and_proof_objects(last_action, state):
     if isinstance(rel, (SegmentHasLength, LineHasDirection, AngleHasMeasure)):
       obj, val = rel.init_list
       new_objs.append(obj)
-      val2objs[val] = state.val2valrel[val]
+      try:
+        val2objs[val] = state.val2valrel[val]
+      except:
+        import pdb; pdb.set_trace()
 
   # Loop through values correspond to new objects
   for val, rels in val2objs.items():
