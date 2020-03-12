@@ -68,21 +68,14 @@ def recursively_match(
     state_candidates,
     object_mappings,
     distinct=None,
-    timeout=None):
-  
-  # t = time.time()
-  # Cython cannot make 
-  # recursion_state
+    timeout=None,
+    match_all=False):
   matches = cython_graph_match.recursively_match(
       query_relations,
       state_candidates,
       object_mappings,
       distinct=distinct or [],
-      return_all=0)
-  # print(time.time() - t)
-  # matches = list(matches)
-  # print(len(matches))
-  # exit()
+      return_all=match_all)
   return matches
 
 
@@ -445,7 +438,8 @@ def match_relations(premise_relations,
                     randomize=False,
                     distinct=None,
                     mapping=None,
-                    timeout=None):
+                    timeout=None,
+                    match_all=False):
   """Yield list of matched list of relations in state_relation.
   
   Args:
@@ -481,7 +475,8 @@ def match_relations(premise_relations,
       state_candidates=state_candidates,
       object_mappings=mapping or {},
       distinct=distinct,
-      timeout=timeout)
+      timeout=timeout,
+      match_all=match_all)
 
   if augmented_relations:
     # We build state candidates without the augmented relations.

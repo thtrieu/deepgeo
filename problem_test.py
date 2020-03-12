@@ -11,6 +11,7 @@ import tensorflow as tf
 import geometry
 import theorems
 import numpy as np
+import data_gen_lib
 
 from tensor2tensor.bin import t2t_trainer
 
@@ -29,41 +30,9 @@ relations = {
     (Angle, AngleMeasure): geometry.AngleHasMeasure
 }
 
-action_vocab = {
-    theorems.ConstructMidPoint: 0,  # 0.000365972518921
-    theorems.ConstructMirrorPoint: 1,
-    theorems.ConstructIntersectSegmentLine: 2,
-    theorems.ConstructParallelLine: 3,
-    theorems.ConstructThirdLine: 4,
-    theorems.EqualAnglesBecauseParallel: 5,  # 1.73088312149
-    theorems.SAS: 6,  # 0.251692056656
-    theorems.ASA: 7,  # 2.26002907753 3.96637487411
-    theorems.ParallelBecauseCorrespondingAngles: 8,
-    theorems.ParallelBecauseInteriorAngles: 9,
-}
 
-action_vocab = {y: x() for x, y in action_vocab.items()}
-
-
-class CLS(object):
-  pass
-
-
-vocab = {
-    'PAD': 0,
-    CLS: 1,
-    geometry.Point: 2,
-    geometry.Segment: 3,
-    geometry.Line: 4,
-    geometry.HalfPlane: 5,
-    geometry.Angle: 6,
-    geometry.Circle: 7,
-    geometry.SegmentLength: 8,
-    geometry.AngleMeasure: 9,
-    geometry.LineDirection: 10
-}
-
-vocab = {y: x for x, y in vocab.items()}
+action_vocab = {y: x() for x, y in data_gen_lib.action_vocab.items()}
+vocab = {y: x for x, y in data_gen_lib.vocab.items()}
 
 
 def check(sequence, attention_mask, theorem, target, depth):

@@ -3,17 +3,18 @@ from __future__ import division
 from __future__ import print_function
 
 import time
+import numpy as np
+
 import theorems_utils
 import trieu_graph_match
 import geometry
-import numpy as np
-
-from theorems_utils import *
-
+import whittling
+import action_chain_lib
 import theorems
 import sketch
 import explore
 
+from theorems_utils import *
 from theorems import *
 
 from geometry import Point, Line, Segment, Angle, HalfPlane, Circle
@@ -128,7 +129,8 @@ def time_sas():
   matches = trieu_graph_match.match_relations(
       premise, state.relations,
       conclusion=theorem.conclusion, 
-      randomize=False, distinct=theorem.distinct)
+      randomize=False, distinct=theorem.distinct,
+      match_all=True)
   start = time.time()
   matches = list(matches)
   print(time.time() - start)
@@ -169,7 +171,8 @@ def sas():
       premise, state.relations,
       conclusion=theorem.conclusion, 
       randomize=False, 
-      distinct=theorem.distinct)
+      distinct=theorem.distinct,
+      match_all=True)
   matches = list(matches)
   print(time.time() - start)
   for _, m in matches:
@@ -357,7 +360,7 @@ def test_thales():
   ]
 
   s = time.time()
-  state, canvas, action_chain = explore.execute_steps(steps, state, canvas)
+  state, canvas, action_chain = action_chain_lib.execute_steps(steps, state, canvas)
   print('thales exec time ', time.time()-s)
   assert len(state.name2obj) == 70, len(state.name2obj)
   assert len(canvas.points) == 6, len(canvas.points)
@@ -383,7 +386,7 @@ def test_intersect_line_line():
   ]
 
   s = time.time()
-  state, canvas, action_chain = explore.execute_steps(steps, state, canvas)
+  state, canvas, action_chain = action_chain_lib.execute_steps(steps, state, canvas)
   print('line line exec time ', time.time()-s)
   assert len(state.name2obj) == 24, len(state.name2obj)
   assert len(canvas.points) == 4, len(canvas.points)
@@ -404,7 +407,7 @@ def test_intersect_line_line2():
 
   s = time.time()
   try:
-    state, canvas, action_chain = explore.execute_steps(steps, state, canvas)
+    state, canvas, action_chain = action_chain_lib.execute_steps(steps, state, canvas)
   except sketch.InvalidLineIntersect:
     print('Invalid ok.')
     return
@@ -460,7 +463,7 @@ def test_thales_whittle1():
   ]
 
   print('\nRunning thales redundant 1:')
-  state, canvas, action_chain = explore.execute_steps(steps, state, canvas)
+  state, canvas, action_chain = action_chain_lib.execute_steps(steps, state, canvas)
 
   # Extract state queue & proof queue that prove P2 is mid AC
   conclusion = action_chain[-1].matched_conclusion
@@ -502,7 +505,7 @@ def test_thales_whittle1():
       (used_theorems['asa'], 'A=A B=P2 C=P1 D=C F=P4 de=ca ef=l2')
   ]
 
-  proved_problem, proved_canvas, _ = explore.execute_steps(
+  proved_problem, proved_canvas, _ = action_chain_lib.execute_steps(
       steps, problem, problem_canvas)
 
   assert len(proved_canvas.points) == 6
@@ -540,7 +543,7 @@ def test_thales_whittle2():
   ]
 
   print('\nRunning thales redundant 2:')
-  state, canvas, action_chain = explore.execute_steps(steps, state, canvas)
+  state, canvas, action_chain = action_chain_lib.execute_steps(steps, state, canvas)
 
   # Extract state queue & proof queue that prove P2 is mid AC
   state_queue, proof_queue = get_state_and_proof_objects(action_chain[-1], '10m')
@@ -583,7 +586,7 @@ def test_thales_whittle2():
       (used_theorems['asa'], 'A=A B=P2 C=P1 D=C F=P4 de=ca ef=l1')
   ]
 
-  proved_problem, proved_canvas, _ = explore.execute_steps(
+  proved_problem, proved_canvas, _ = action_chain_lib.execute_steps(
       steps, problem, problem_canvas)
 
   assert len(proved_canvas.points) == 6
@@ -615,7 +618,7 @@ def test_whittle0():
   ]
 
   print('\nRunning ABC=CAX redundant 0:')
-  state, canvas, action_chain = explore.execute_steps(steps, state, canvas)
+  state, canvas, action_chain = action_chain_lib.execute_steps(steps, state, canvas)
   # import pdb; pdb.set_trace()
   # Extract state queue & proof queue that prove AB = CP3
   # conclusion = action_chain[-1].matched_conclusion
@@ -652,7 +655,7 @@ def test_whittle0():
       (used_theorems['asa'], 'A=C B=B C=A D=A F=C de=l3 ef=l2')
   ]
 
-  proved_problem, proved_canvas, _ = explore.execute_steps(
+  proved_problem, proved_canvas, _ = action_chain_lib.execute_steps(
       steps, problem, problem_canvas)
 
   assert len(proved_canvas.points) == 4
@@ -678,7 +681,7 @@ def test_whittle1():
   ]
 
   print('\nRunning ABC=CAX redundant 1:')
-  state, canvas, action_chain = explore.execute_steps(steps, state, canvas)
+  state, canvas, action_chain = action_chain_lib.execute_steps(steps, state, canvas)
   # import pdb; pdb.set_trace()
   # Extract state queue & proof queue that prove AB = CP3
   # conclusion = action_chain[-1].matched_conclusion
@@ -712,7 +715,7 @@ def test_whittle1():
       (used_theorems['asa'], 'A=A B=B C=C D=C F=A de=l1 ef=l2')
   ]
 
-  proved_problem, proved_canvas, _ = explore.execute_steps(
+  proved_problem, proved_canvas, _ = action_chain_lib.execute_steps(
       steps, problem, problem_canvas)
 
   assert len(proved_canvas.points) == 4
@@ -736,7 +739,7 @@ def test_whittle2():
   ]
 
   print('\nRunning ABC=CAX redundant 2:')
-  state, canvas, action_chain = explore.execute_steps(steps, state, canvas)
+  state, canvas, action_chain = action_chain_lib.execute_steps(steps, state, canvas)
   # Extract state queue & proof queue that prove AB = CP3
   # conclusion = action_chain[-1].matched_conclusion
   # queue = list(conclusion.topological_list[-6])
@@ -767,7 +770,7 @@ def test_whittle2():
       (used_theorems['asa'], 'A=A B=B C=C D=C F=A de=l1 ef=l2')
   ]
 
-  proved_problem, proved_canvas, _ = explore.execute_steps(
+  proved_problem, proved_canvas, _ = action_chain_lib.execute_steps(
       steps, problem, problem_canvas)
 
   assert len(proved_canvas.points) == 4
@@ -795,7 +798,7 @@ def test_whittle3():
   ]
 
   print('\nRunning Parallel proof redundant:')
-  state, canvas, action_chain = explore.execute_steps(steps, state, canvas)
+  state, canvas, action_chain = action_chain_lib.execute_steps(steps, state, canvas)
   # Extract state queue & proof queue that prove AB = CP3
   # conclusion = action_chain[-1].matched_conclusion
   # queue = list(conclusion.topological_list[-2])
@@ -830,7 +833,7 @@ def test_whittle3():
       (used_theorems['.parallel'], 'l=ca l1=l2 l2=l4')
   ]
 
-  proved_problem, proved_canvas, _ = explore.execute_steps(
+  proved_problem, proved_canvas, _ = action_chain_lib.execute_steps(
       steps, problem, problem_canvas)
 
   assert len(proved_canvas.points) == 6
@@ -858,7 +861,7 @@ def test_whittle3a():
   ]
 
   print('\nRunning Parallel proof redundant:')
-  state, canvas, action_chain = explore.execute_steps(steps, state, canvas)
+  state, canvas, action_chain = action_chain_lib.execute_steps(steps, state, canvas)
   # Extract state queue & proof queue that prove AB = CP3
   # conclusion = action_chain[-1].matched_conclusion
   # queue = list(conclusion.topological_list[-2])
@@ -900,7 +903,7 @@ def test_whittle3a():
       (used_theorems['.parallel'], 'l=ca l1=l2 l2=l4')
   ]
 
-  proved_problem, proved_canvas, _ = explore.execute_steps(
+  proved_problem, proved_canvas, _ = action_chain_lib.execute_steps(
       steps, problem, problem_canvas)
 
   assert len(proved_canvas.points) == 6
@@ -934,7 +937,7 @@ def test_whittle4():
   ]
 
   print('\nRunning Parallel proof redundant:')
-  state, canvas, action_chain = explore.execute_steps(steps, state, canvas)
+  state, canvas, action_chain = action_chain_lib.execute_steps(steps, state, canvas)
   # Extract state queue & proof queue that prove AB = CP3
   # conclusion = action_chain[-1].matched_conclusion
   # queue = list(conclusion.topological_list[-2])
@@ -969,7 +972,7 @@ def test_whittle4():
       (used_theorems['.parallel'], 'l=ab l1=l4 l2=ca')
   ]
 
-  proved_problem, proved_canvas, _ = explore.execute_steps(
+  proved_problem, proved_canvas, _ = action_chain_lib.execute_steps(
       steps, problem, problem_canvas)
 
   assert len(proved_canvas.points) == 5
@@ -994,7 +997,7 @@ def test_whittle5():
   ]
 
   print('\nRunning Parallel proof redundant:')
-  state, canvas, action_chain = explore.execute_steps(steps, state, canvas)
+  state, canvas, action_chain = action_chain_lib.execute_steps(steps, state, canvas)
   state_queue, proof_queue = get_state_and_proof_objects(action_chain[-1], '7m')
 
   s = time.time()
@@ -1020,7 +1023,7 @@ def test_whittle5():
       (used_theorems['sas'], 'A=P1 B=C C=P3 D=P1 E=A F=B'),
   ]
 
-  proved_problem, proved_canvas, _ = explore.execute_steps(
+  proved_problem, proved_canvas, _ = action_chain_lib.execute_steps(
       steps, problem, problem_canvas)
 
   assert len(proved_canvas.points) == 5 
@@ -1045,7 +1048,7 @@ def test_whittle6():
   ]
 
   print('\nRunning Parallel proof redundant:')
-  state, canvas, action_chain = explore.execute_steps(steps, state, canvas)
+  state, canvas, action_chain = action_chain_lib.execute_steps(steps, state, canvas)
 
   obj1 = state.name2obj['s2']
   obj2 = state.name2obj['s4']
@@ -1082,7 +1085,7 @@ def test_whittle6():
       (used_theorems['asa'], 'A=A B=C C=B D=B F=A de=l2 ef=l1'),  # P2
   ]
 
-  proved_problem, proved_canvas, _ = explore.execute_steps(
+  proved_problem, proved_canvas, _ = action_chain_lib.execute_steps(
       steps, problem, problem_canvas)
 
   assert len(proved_canvas.points) == 5 
@@ -1096,8 +1099,8 @@ def whittle(state_queue, proof_queue, action_chain,
   # and crystallize what is relevant as premise & conclusion
   # of a discovered theorem.
 
-  whittled_state = explore.whittle_from(list(state_queue), action_chain)
-  proof_whittled = explore.whittle_from(
+  whittled_state = whittling.whittle_from(list(state_queue), action_chain)
+  proof_whittled = whittling.whittle_from(
       list(proof_queue), action_chain, 
       goal_objects=state_queue, whittled_state=whittled_state)
 

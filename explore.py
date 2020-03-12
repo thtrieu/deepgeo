@@ -3,35 +3,26 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import theorems_utils
-import geometry
-import sketch
-import theorems
 import numpy as np
 import time
 import os
-import trieu_graph_match
 import glob
 import pickle as pkl
 import traceback
 
-from collections import defaultdict as ddict
-
-from theorems_utils import collinear, concyclic, in_halfplane
-from theorems_utils import divides_halfplanes, line_and_halfplanes
-from theorems_utils import have_length, have_measure, have_direction
-from theorems_utils import segment_def, angle_def
-from theorems_utils import diff_side, same_side
-from theorems_utils import Conclusion
+import theorems_utils
+import geometry
+import sketch
+import theorems
+import trieu_graph_match
+import whittling
+import data_gen_lib
+import action_chain_lib
 
 from geometry import Point, Line, Segment, Angle, HalfPlane, Circle
 from geometry import SegmentLength, AngleMeasure, LineDirection
-from geometry import SegmentHasLength, AngleHasMeasure, LineHasDirection
-from geometry import PointEndsSegment, HalfplaneCoversAngle, LineBordersHalfplane
-from geometry import LineContainsPoint, CircleContainsPoint, HalfPlaneContainsPoint
 
 import tensorflow as tf
-
 tf.compat.v1.flags.DEFINE_boolean('pdb', False, '')
 tf.compat.v1.flags.DEFINE_boolean('verbose', False, '')
 tf.compat.v1.flags.DEFINE_string('mode', 'datagen', '')
@@ -41,6 +32,7 @@ tf.compat.v1.flags.DEFINE_integer('max_depth', 45, '')
 tf.compat.v1.flags.DEFINE_integer('max_line', 6, '')
 tf.compat.v1.flags.DEFINE_integer('max_point', 8, '')
 tf.compat.v1.flags.DEFINE_integer('explore_worker_id', 0, '')
+
 
 FLAGS = tf.compat.v1.flags.FLAGS
 
@@ -92,8 +84,8 @@ class ExplorationBackoffDFSBase(object):
         theorems.all_theorems['mirror'],
         theorems.all_theorems['seg_line'],
         theorems.all_theorems['parallel'],
-        theorems.all_theorems['perp_on'],
-        theorems.all_theorems['perp_out'],
+        # theorems.all_theorems['perp_on'],
+        # theorems.all_theorems['perp_out'],
         theorems.all_theorems['bisect'],
         theorems.all_theorems['line'],
     ]
@@ -105,6 +97,9 @@ class ExplorationBackoffDFSBase(object):
         theorems.all_theorems['asa'],
     ]
     self.all_theorems = self.construct_theorems + self.deduct_theorems
+
+    # For profiling:
+    self.timed = dict(action=0, copy=0, add=0, proof=0, draw=0, spatial=0)
 
   def random_action(self, state, depth, canvas):
     if depth <= self.max_construction:
@@ -181,6 +176,15 @@ class ExplorationBackoffDFSBase(object):
 
     return action_gen(predefined_steps)
 
+  def print_stats(self):
+    # How much proof collected?
+    self.proof_extractor.print_sizes()
+    times = '   '.join(['{}: {:.4f}'.format(name, t)
+                        for name, t in sorted(self.timed.items())
+                        ])
+    # Profiling different part of pipeline
+    print(times)
+
   def _recursive_explore(self, action_chain, state, canvas, 
                          steps=None, do_pdb=False, depth=None):
     """Random Back-off DFS.
@@ -199,24 +203,28 @@ class ExplorationBackoffDFSBase(object):
       x = np.arange(depth0, self.max_construction)
       backoff = np.random.choice(x, p=x[::-1]*1.0/np.sum(x))
       print('Reach max depth ', depth, ' backoff = ', backoff)
-      self.proof_extractor.print_sizes()
+      self.print_stats()
       return backoff
 
+    tab = ' ' * depth
+
+    t = time.time()
     actions = self.get_actions(state, depth, canvas, steps)
     for action in actions:
+      self.timed['action'] += time.time()-t
       if FLAGS.verbose:
-        print(' ' * depth, depth, type(action.theorem).__name__, action.duration)
+        print(tab, depth, type(action.theorem).__name__, action.duration)
       # This is needed for whittling proof.
       action.set_chain_position(depth - 1)
       action_chain.append(action)
 
       # Branch the tree by copying state & canvas.
-      # s = time.time()
+      t = time.time()
       new_state = state.copy()
       new_canvas = canvas.copy()
-      # print(' * copy ', time.time() - s)
+      self.timed['copy'] += time.time()-t
 
-      # s = time.time()
+      t = time.time()
       try:
         new_state.add_relations(action.new_objects)
       except ValueError:
@@ -224,21 +232,22 @@ class ExplorationBackoffDFSBase(object):
         # import pdb; pdb.set_trace()
         traceback.print_exc()
         return 1
-      # print(' * add ', time.time() - s)
+      self.timed['add'] += time.time()-t
 
       # By drawing we add spatial relations (point in halfplanes)
       # to the state through inspection.
       # spatial_relations is dict(line: [a1, a2, ..], [b1, b2, ..])
       # where a1, a2 are points on the same halfplane and so are b1, b2..
-      # s = time.time()
+      t = time.time()
       line2pointgroups = action.draw(new_canvas)
-      # print(' * draw ', time.time() - s)
+      self.timed['draw'] += time.time()-t
 
-      # s = time.time()
+      t = time.time()
       new_state.add_spatial_relations(line2pointgroups)
       new_canvas.update_hps(new_state.line2hps)
-      # print(' * spatial ', time.time() - s)
+      self.timed['spatial'] += time.time()-t
 
+      t = time.time()
       try:
         self.proof_extractor.collect_proof(
             action_chain, self.init_state, self.init_canvas, 
@@ -246,6 +255,7 @@ class ExplorationBackoffDFSBase(object):
       except:
         traceback.print_exc()
         exit()
+      self.timed['proof'] += time.time()-t
 
       if len(action_chain) == 100:
         import pdb; pdb.set_trace()
@@ -258,6 +268,9 @@ class ExplorationBackoffDFSBase(object):
       if backoff < depth:
         return backoff
 
+      # Timing next action.
+      t = time.time()
+
     # At this point, we are out of eligible action to pick:
     if depth > 1:
       # Random backoff
@@ -265,13 +278,13 @@ class ExplorationBackoffDFSBase(object):
       x = np.arange(depth0, self.max_construction)
       backoff = np.random.choice(x, p=x[::-1]*1.0/np.sum(x))
       print('Out of option at depth ', depth, ' backoff = ', backoff)
-      self.proof_extractor.print_sizes()
+      self.print_stats()
       # import pdb; pdb.set_trace()
       return backoff
 
     # Out of option at depth = 1, do it again.
     print('Out of option at depth 1, start a new Backoff DFS.')
-    self.proof_extractor.print_sizes()
+    self.print_stats()
     self.explore()
 
 
@@ -440,91 +453,14 @@ class ExplorationBackoffDFS(ExplorationBackoffDFSBase):
     action_chain.pop(-1)
 
 
-def get_state_and_proof_objects(last_action, state):
-  """Yields pairs (problem_queue, proof_queue).
-
-  Last action essentially add new equalities into state.
-  Suppose they are a=b=v1, c=d=v2
-
-  So if the state has (a=e, c=f), we have just observe
-  the following 4 proofs:
-    * a = b
-      => yield (a, b), (v1, a=v1, b=v1)
-    * e = b
-      => yield (e, b), (v1, e=v1, b=v1)
-    * c = d
-      => ..
-    * f = d
-      => ..
-  """
-  # Collect new value to rel in conclusion:
-  new_objs, val2objs = [], {}
-  for rel in last_action.new_objects:
-    if isinstance(rel, (SegmentHasLength, LineHasDirection, AngleHasMeasure)):
-      obj, val = rel.init_list
-      new_objs.append(obj)
-      val2objs[val] = state.val2valrel[val]
-
-  # Loop through values correspond to new objects
-  for val, rels in val2objs.items():
-    # if there are < 2 objs associated with this val
-    # then we move on
-    if len(rels) < 2:
-      continue
-
-    # Loop through all distinct pair of rels
-    for i, rel1 in enumerate(rels[:-1]):
-      for rel2 in rels[i+1:]:
-        # both objects are not new, move on.
-        obj1, obj2 = rel1.init_list[0], rel2.init_list[0]
-        if obj1 not in new_objs and obj2 not in new_objs:
-          continue
-        # Else yield the state and proof queues
-        problem_queue = [obj1, obj2]
-        proof_queue = [(val, rel1, rel2)]
-        yield problem_queue, proof_queue
-
-
-class ProofReservoir(object):
-
-  def __init__(self, depth, out_dir, max_store=1000):
-    self.depth = depth
-    self.name = 'res.{:03}.depth.{:02}'.format(FLAGS.explore_worker_id, depth)
-    self.out_dir = out_dir
-    self.store = []
-    self.max_store = max_store
-    self.size = 0
-
-  def add(self, proof):
-    self.store.append(proof)
-    self.size += 1
-    if len(self.store) == self.max_store:
-      self.dump()
-
-  def dump(self):
-    files = os.path.join(self.out_dir, self.name)
-    flush_count = len(glob.glob(files + '*'))
-
-    filename = '{}.part.{:05}'.format(self.name, flush_count)
-    all_arrays = sum([example.arrays for example in self.store], [])
-    
-    print('\n\t/!\\ Flushing {} ..\n'.format(filename))
-
-    target_file = os.path.join(self.out_dir, filename)
-    write_to = target_file
-
-    with open(write_to, 'wb') as f:
-      np.savez_compressed(f, *all_arrays)
-    
-    self.store = []
-
-
 class ProofExtractor(object):
 
   def __init__(self, out_dir, max_state_size=127):
     self.max_state_size = max_state_size
-    self.reservoirs = {depth: ProofReservoir(depth, out_dir)
-                       for depth in range(100)}
+    self.reservoirs = {
+        depth: data_gen_lib.ProofReservoir(
+            depth, out_dir, FLAGS.explore_worker_id)
+        for depth in range(100)}
     self.opposite_angle_check = theorems.OppositeAnglesCheck()
     self.thales_check = theorems.ThalesCheck()
     # self.checks = [theorems.ThalesCheck(), 
@@ -549,14 +485,15 @@ class ProofExtractor(object):
       return []
 
     # With this new last_action, what are the new discoveries?
-    all_discoveries = get_state_and_proof_objects(last_action, full_state)
+    all_discoveries = whittling.get_state_and_proof_objects(
+        last_action, full_state)
 
     for problem_queue, proof_queue in all_discoveries:
-      # problem_queue = (obj1, obj2)
-      # proof_queue = [(val, rel1, rel2)]
-      theorem_premise_constructions = whittle_from(
+
+      theorem_premise_constructions = whittling.whittle_from(
           list(problem_queue), action_chain)
-      proof_steps = whittle_from(
+
+      proof_steps = whittling.whittle_from(
           list(proof_queue), action_chain, 
           problem_queue, theorem_premise_constructions)
 
@@ -597,10 +534,11 @@ class ProofExtractor(object):
         redundant_actions.append(action)
 
     # Add theorem_premise_constructions into theorem_premise
-    build_theorem_premise(theorem_premise,
-                          theorem_premise_constructions, 
-                          action_chain,
-                          full_state)
+    data_gen_lib.build_theorem_premise(
+        theorem_premise,
+        theorem_premise_constructions, 
+        action_chain,
+        full_state)
 
     # Detect if the extracted proof is the one we care about:
     if self.opposite_angle_check.found(theorem_premise, goal_objects):
@@ -640,7 +578,7 @@ class ProofExtractor(object):
         break
 
       # Now we add the action into the problem state
-      add_action(theorem_premise, action, full_state)
+      action_chain_lib.add_action(theorem_premise, action, full_state)
 
   def augment_and_serialize(
       self, state, goal_objects, action, full_state, redundant_actions):
@@ -668,7 +606,7 @@ class ProofExtractor(object):
     np.random.shuffle(redundant_actions)
     for red_action in redundant_actions:
       # print(' * Try ', red_action.to_str())
-      add_action(state, red_action, full_state)
+      action_chain_lib.add_action(state, red_action, full_state)
       if len(state.name2obj) + 1 > self.max_state_size:
         break
       example = self.serialize(state, goal_objects, action)
@@ -695,401 +633,15 @@ class ProofExtractor(object):
         print('Failed matching {} {}'.format(action.theorem.name, match))
       return None
 
-    seq, _, obj2idx, attention_mask = serialize_state(state)
-
-    # Get the goal object triplet (val, obj1, obj2)
-    val, rel1, rel2 = goal_objects
-    obj1, obj2 = rel1.init_list[0], rel2.init_list[0]
-
-    # Get their idx and appropriately add masks to them.
-    val_idx = len(seq)
-    seq.append(vocab[type(val)])
-
-    for obj in [obj1, obj2]:
-      obj_idx = obj2idx[obj]
-      attention_mask[val_idx, obj_idx] = True
-      attention_mask[obj_idx, val_idx] = True
-
-    target = [obj2idx[action.mapping[obj]]
-              for _, obj in sorted(action.theorem.names.items())]
-    target = [action_vocab[type(action.theorem)]] + target
-
-    return Example(np.array(seq, np.int8), 
-                   attention_mask,
-                   np.array(target, np.int8))
-
-
-def build_theorem_premise(theorem_premise,
-                          theorem_premise_constructions, 
-                          action_chain,
-                          full_state):
-  # Add relevant relations to our theorem_premise
-  for construction, action in zip(theorem_premise_constructions, 
-                                  action_chain):
-    if construction == []:
-      continue
-    if construction == True:  # Full action
-      theorem_premise.add_relations(action.conclusion_objects)
-    else:  # Only the relevant part of action is added
-      all_constructions = sum(construction, [])
-      all_constructions = list(set(all_constructions))
-      theorem_premise.add_relations(all_constructions)
-
-  # Next, we add spatial relations
-  # First we copy the line-hp relations over
-  for name, obj in theorem_premise.name2obj.items():
-    if isinstance(obj, Line):
-      hp1, hp2 = full_state.line2hps[obj]
-      # problem_state.add_one(hp1)
-      # problem_state.add_one(hp2)
-      theorem_premise.add_one(LineBordersHalfplane(obj, hp1))
-      theorem_premise.add_one(LineBordersHalfplane(obj, hp2))
-
-  # Second we copy the hp-point relations over:
-  for hp in theorem_premise.all_hps:
-    if hp not in full_state.hp2points:
-      # It is possible that some hp exists without 
-      # containing any points, but only for specifying angles.
-      continue
-    for p in full_state.hp2points[hp]:
-      if p in theorem_premise.all_points:
-        theorem_premise.add_one(HalfPlaneContainsPoint(hp, p))
-
-
-def serialize_state(state):
-  seq = [1]  # CLS
-  obj_list = ['CLS']
-  obj2idx = {}
-  connections = []
-
-  for relation in state.relations:
-    for obj in relation.init_list:
-      if obj not in obj2idx:
-        obj2idx[obj] = len(seq)
-        # Halfpi got a separate embedding to other Angles:
-        if obj == geometry.halfpi:
-          seq.append(vocab[obj])
-        else:
-          seq.append(vocab[type(obj)])
-        obj_list.append(obj)
-
-    obj1, obj2 = relation.init_list
-    connections.append((obj2idx[obj1], obj2idx[obj2]))
-    connections.append((obj2idx[obj2], obj2idx[obj1]))
-
-  attention_mask = np.zeros([len(seq) + 1,  # +1 for goal val.
-                             len(seq) + 1], dtype=bool)
-  for id1, id2 in connections:
-    attention_mask[id1, id2] = True
-  # CLS look at everything and vice versa.
-  attention_mask[:, 0] = True
-  attention_mask[0, :] = True
-
-  return seq, obj_list, obj2idx, attention_mask
-
-
-
-class Example(object):
-
-  def __init__(self, sequence, attention_mask, target):
-    self.sequence = sequence
-    self.attention_mask = attention_mask
-    self.target = target
-    self.arrays = [sequence, attention_mask, target]
-
-
-action_vocab = {
-    theorems.ConstructMidPoint: 0,  # 0.000365972518921
-    theorems.ConstructMirrorPoint: 1,
-    theorems.ConstructIntersectSegmentLine: 2,
-    theorems.ConstructParallelLine: 3,
-    theorems.ConstructThirdLine: 4,
-    theorems.EqualAnglesBecauseParallel: 5,  # 1.73088312149
-    theorems.SAS: 6,  # 0.251692056656
-    theorems.ASA: 7,  # 2.26002907753 3.96637487411
-    
-    theorems.ParallelBecauseCorrespondingAngles: 8,
-    theorems.ParallelBecauseInteriorAngles: 9,
-    theorems.ConstructPerpendicularLineFromPointOn: 10,
-    theorems.ConstructPerpendicularLineFromPointOut: 11,
-    theorems.ConstructAngleBisector: 12
-}
-
-vocab = {
-    'PAD': 0,
-    'CLS': 1,
-    Point: 2,
-    Segment: 3,
-    Line: 4,
-    HalfPlane: 5,
-    Angle: 6,
-    Circle: 7,
-    SegmentLength: 8,
-    AngleMeasure: 9,
-    LineDirection: 10,
-    geometry.halfpi: 11
-}
-
-
-def add_action(state, action, full_state):
-  for obj in action.conclusion_objects:
-    state.add_one(obj)
-    if isinstance(obj, Line):
-      hp1, hp2 = full_state.line2hps[obj]
-      state.add_one(LineBordersHalfplane(obj, hp1))
-      state.add_one(LineBordersHalfplane(obj, hp2))
-
-  for hp in state.all_hps:
-    if hp not in full_state.hp2points:
-      continue
-    for p in full_state.hp2points[hp]:
-      if p in state.all_points:
-        state.add_one(HalfPlaneContainsPoint(hp, p))
-
-
-VALUE_ENTITIES = (
-    AngleMeasure, SegmentLength, LineDirection
-)
-
-VALUE_RELATIONS = (
-    AngleHasMeasure, SegmentHasLength, LineHasDirection
-)
-
-
-def print_name(dependents):
-  s = []
-  for d in dependents:
-    if isinstance(d, tuple):
-      i, a, b = d
-      s.append('{} {} {}'.format(i.name, a.name, b.name))
-    elif isinstance(d, int):
-      s.append(str(d))
-    else:
-      s.append(d.name)
-  return ', '.join(s)
-
-
-def whittle_from(queue, action_chain, 
-                 goal_objects=None, whittled_state=None):
-  # Whittled info will be put into here:
-  whittled = [[] for _ in range(len(action_chain))]
-  # We expect empty [] if the corresponding action in action_chain
-  # is not relevant, True, if the whole action is needed
-  # and a list of constructions, if action is not needed but only
-  # part of its conclusion
-  # Keep track of the head of the queue 
-  # (we don't pop things from queue)
-  i = 0
-  non_critical_count = 0  # count when the whole premise is not needed.
-
-  while i < len(queue):
-    query = queue[i]
-    i += 1
-
-    if isinstance(query, tuple):
-      val, rel1, rel2 = query
-      
-      obj1, obj2 = rel1.init_list[0], rel2.init_list[0]
-      dependents = val.dependency_path(obj1, obj2)
-      if not all([d is not None for d in dependents]):
-        import pdb; pdb.set_trace()
-        raise ValueError('Path not found between {} and {} in {}'.format(
-            obj1.name, obj2.name,
-            {x.name: {a.name: b for a, b in y.items()} for x, y in val.edges.items()}))
-
-      dependents += [obj1, obj2]
-      queue.extend(dependents)
-      continue
-
-    if isinstance(query, int):
-      critical = True
-      pos = query
-    else:
-      pos = query.chain_position  # at init state already
-      if pos is None:
-        continue
-      critical = query.critical
-
-    # the whole action and its premise is visited.
-    if (whittled_state and whittled_state[pos] == True 
-        or whittled[pos] == True): 
-      continue
-
-    action = action_chain[pos]
-    # When the whole action is not needed and there is still
-    # critical query, we defer this query to the end
-    # This optimizes running time because it maximizes
-    # the hit `if whittled[pos] == True` above.
-    if not critical and len(queue) - (i-1) > non_critical_count:
-      non_critical_count += 1
-      queue.append(query)
-      continue
-    elif critical:
-      # The whole action is needed.
-      whittled[pos] = True
-
-      # Now we add the whole premise to the dependents:
-      dependents = []
-      # premise of type VALUE_RELATIONS is post-processed here:
-      valrels = {}
-
-      for obj in action.theorem.premise_objects:
-        if not isinstance(obj, VALUE_ENTITIES + VALUE_RELATIONS):
-          dependents.append(action.mapping[obj])
-        elif isinstance(obj, VALUE_RELATIONS):
-          val = obj.init_list[1]
-          if val not in valrels:
-            valrels[val] = []
-          valrels[val].append(obj)
-
-      # This format (val, rel1, rel2) is for a later call
-      # val.dependency_path(rel1, rel2)
-      for val, (rel1, rel2) in valrels.items():
-        val, rel1, rel2 = map(action.mapping.get, (val, rel1, rel2))
-        if rel1 != rel2:
-          dependents.append((val, rel1, rel2))
-        else:
-          dependents.append(rel1)
-
-    else:  # Non critical
-      found = action.matched_conclusion.topological_list[
-          query.conclusion_position]
-      whittled[pos].append(found)
-      # Here we ignore the relations in `found` themselves
-      # because we know that they are created at chain_pos = pos
-      # there is no need to go further. Only init_list are concerned.
-      dependents = sum([c.init_list for c in found
-                        if hasattr(c, 'init_list')], tuple())
-      non_critical_count -= 1
-
-    # Push dependents into queue.
-    for dep in dependents:
-      if dep not in queue:
-        queue.append(dep)
-      if hasattr(dep, 'init_list'):
-        a, b = dep.init_list
-        if a not in queue:
-          queue.append(a)
-        if b not in queue:
-          queue.append(b)
-
-  return whittled
-
-
-def _is_numeric(string):
-  try:
-    _ = int(string)
-    return True
-  except:
-    return False
-
-
-def _find(state, name):
-  if name in state.name2obj:
-    return state.name2obj[name]
-
-  names = [n.split('_') for n in state.name2obj.keys()]
-  names = [n for n in names if (
-              len(n) == 2 and
-              n[0] == name and
-              _is_numeric(n[1]) 
-           )]
-  if len(names) != 1:
-    raise ValueError('Failed looking for {}'.format(name))
-
-  name = '_'.join(names[0])
-  return state.name2obj[name]
-
-
-def _find_premise(premise_objects, name):
-  for obj in premise_objects:
-    if obj.name.startswith(name):
-      return obj
-  return None
-
-
-def execute_steps(steps, state, canvas, verbose=False):
-  action_chain = []
-
-  for i, (theorem, command) in enumerate(steps):
-    # print(i + 1, ' ', type(theorem).__name__, command)
-    name_maps = [c.split('=') for c in command.split()]
-    mapping = dict(
-        (theorem.names[a], _find(state, b))
-        if a in theorem.names
-        else (_find_premise(theorem.premise_objects, a), _find(state, b))
-        for a, b in name_maps)
-    action_gen = theorem.match_from_input_mapping(
-        state, mapping, randomize=False)
-
-    try:
-      action = action_gen.next()
-    except StopIteration:
-      raise ValueError('Matching not found {} {}'.format(theorem, command))
-
-    # print(' '.join(['{}::{}'.format(x.name, y.name)
-    #                 for x, y in action.mapping.items()
-    #                 if isinstance(x, AngleHasMeasure)]))
-    print(i+1, action.to_str())
-    action.set_chain_position(i)
-    action_chain.append(action)
-
-    if verbose:
-      print('\tAdd : {}'.format([obj.name for obj in action.new_objects]))
-    state.add_relations(action.new_objects)
-    line2pointgroups = action.draw(canvas)
-    state.add_spatial_relations(line2pointgroups)
-    canvas.update_hps(state.line2hps)
-
-  return state, canvas, action_chain
-
-
-def init_by_normal_triangle():
-  geometry.reset()
-  canvas = sketch.Canvas()
-  state = theorems_utils.State()
-
-  A, B, C = map(Point, 'ABC')
-  ab, bc, ca = map(Line, 'ab bc ca'.split())
-  AB, BC, CA = map(Segment, 'AB BC CA'.split())
-
-  state.add_relations(
-      # [A, B, C, ab, bc, ca, AB, BC, CA] +
-      segment_def(AB, A, B) +
-      segment_def(BC, B, C) +
-      segment_def(CA, C, A) +
-      collinear(ab, A, B) +
-      collinear(bc, B, C) +
-      collinear(ca, C, A)
-  )
-
-  state.add_spatial_relations(canvas.add_triangle(A, B, C, ab, bc, ca))
-  canvas.update_hps(state.line2hps)
-  return state, canvas, []
-
-
-def init_by_thales():
-  geometry.reset()
-  init_state, init_canvas, _ = init_by_normal_triangle()
-  state, canvas = init_state.copy(), init_canvas.copy()
-
-  steps = [
-      (theorems.all_theorems['mid'], 'A=A B=B'),  # P1
-      (theorems.all_theorems['parallel'], 'A=P1 l=bc'),  # l1
-      (theorems.all_theorems['seg_line'], 'l=l1 A=A B=C'),  # P1
-      (theorems.all_theorems['parallel'], 'A=C l=ab'),  # l2
-      (theorems.all_theorems['line'], 'A=P1 B=C'),  # l3
-  ]
-
-  state, canvas, action_chain = execute_steps(steps, state, canvas)
-  return state, canvas, action_chain
-
+    state_obj_ids, _, obj2idx, attention_mask = data_gen_lib.serialize_state(state)
+    return data_gen_lib.build_example(
+        action, state_obj_ids, goal_objects, attention_mask, obj2idx)
 
 
 if __name__ == '__main__':
   np.random.seed(int(time.time() % 42949671) * 100 + FLAGS.explore_worker_id)
-  state, canvas, action_chain = init_by_normal_triangle()
-  # state, canvas, action_chain = init_by_thales()
+  state, canvas, action_chain = action_chain_lib.init_by_normal_triangle()
+  # state, canvas, action_chain = action_chain_lib.init_by_thales()
   explorer = ExplorationBackoffDFS(state, canvas, FLAGS.out_dir, action_chain)
 
   if FLAGS.mode == 'datagen':
