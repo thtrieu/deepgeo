@@ -94,8 +94,8 @@ class ExplorationBackoffDFSBase(object):
         theorems.all_theorems['parallel'],
         theorems.all_theorems['perp_on'],
         theorems.all_theorems['perp_out'],
-        theorems.all_theorems['bisect'],
         theorems.all_theorems['line'],
+        theorems.all_theorems['bisect'],
     ]
     self.deduct_theorems = [
         theorems.all_theorems['eq'],
@@ -654,9 +654,9 @@ if __name__ == '__main__':
   explorer = ExplorationBackoffDFS(state, canvas, FLAGS.out_dir, action_chain)
 
   if FLAGS.enable_profiling:
-    profiling.enable_profiling()
+    profiling.enable()
   else:
-    profiling.disable_profiling()
+    profiling.disable()
 
   if FLAGS.mode == 'datagen':
     explorer.explore(FLAGS.pdb)

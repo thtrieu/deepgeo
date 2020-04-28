@@ -7,12 +7,12 @@ _ENABLE_PROFILING = False
 _ALL_RECORDERS = {}
 
 
-def enable_profiling():
+def enable():
   global _ENABLE_PROFILING
   _ENABLE_PROFILING = True
 
 
-def disable_profiling():
+def disable():
   global _ENABLE_PROFILING
   _ENABLE_PROFILING = False
 

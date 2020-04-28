@@ -14,6 +14,7 @@ from collections import defaultdict as ddict
 from profiling import Timer
 
 import cython_graph_match
+import parallel_graph_match
 
 from geometry import Point, Line, Segment, Angle, HalfPlane, Circle 
 from geometry import SegmentLength, AngleMeasure, LineDirection
@@ -72,14 +73,25 @@ def recursively_match(
     object_mappings,
     distinct=None,
     timeout=None,
-    match_all=False):  
+    match_all=False,):  
+
+  # profiling.enable()
+  # query_relations_copy = list(query_relations)
+  # state_candidates_copy = {k: list(v) for k, v in 
+  #                          state_candidates.items()}
+  # object_mappings_copy = {k: v for k, v in object_mappings.items()}
+  # distinct_copy = list(distinct)
+
   # average time: 23,967,474e-8
-  matches = cython_graph_match.recursively_match(
-      query_relations,
-      state_candidates,
-      object_mappings,
-      distinct=distinct or [],
-      return_all=match_all)
+  with Timer('match'):
+    matches = cython_graph_match.recursively_match(
+        query_relations,
+        state_candidates,
+        object_mappings,
+        distinct=distinct or [],
+        return_all=match_all)
+
+
   # average time: 98,308,578e-8
   # matches = recursively_match_slow(
   #   query_relations,
@@ -87,6 +99,27 @@ def recursively_match(
   #   object_mappings,
   #   distinct=distinct or [],
   #   timeout=None)
+  # with Timer('match'):
+  #   matches = list(matches)
+
+  # with Timer('match'):
+  #   matches = parallel_graph_match.recursively_match(
+  #       query_relations,
+  #       state_candidates,
+  #       object_mappings,
+  #       distinct=distinct or [],
+  #       parallel_depth=1,
+  #       return_all=match_all)
+
+  # print(len(matches), len(query_relations), [len(x) for x in matches])
+  # m = matches[0]
+  # keys = [(k.name, k) for k in m.keys()]
+  # for _, k in sorted(keys):
+  #   v = m[k]
+  #   print(k.name, v.name)
+  # profiling.print_records()
+
+  # exit()
   return matches
 
 
@@ -508,11 +541,11 @@ def match_relations(premise_relations,
     # Copy state_candidates over
     # So that different conclusion matches won't tamper with each other.
     # Because each of them will put in new objects into state_candidates.
+    state_candidates_copy = {x: list(y) for x, y in state_candidates.items()}
     with Timer('action/conclusion_match'):
-      state_candidates_ = {x: list(y) for x, y in state_candidates.items()}
       matched_conclusion, all_match = match_conclusions(
           conclusion=conclusion, 
-          state_candidates=state_candidates_, 
+          state_candidates=state_candidates_copy, 
           premise_match=premise_match, 
           state_relations=state_relations,
           # Distinct is needed to avoid rematching the same premise

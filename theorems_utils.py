@@ -107,6 +107,33 @@ def _copy(structure):
             for (key, val) in structure.items()}
 
 
+def equal(struct1, struct2, prefix=''):
+  if not isinstance(struct1, type(struct2)):
+    return False
+
+  if not isinstance(struct1, (tuple, list, dict)):
+    return struct1 == struct2
+
+  if not len(struct1) == len(struct2):
+    print(prefix + 'not eq len')
+    return False
+
+  if isinstance(struct1, dict):
+    if not all([key in struct2 for key in struct1]):
+      print(prefix + 'not same keys')
+      return False
+
+    return all([equal(struct2[key], val, prefix + '[{}]'.format(key))
+                for key, val in struct1.items()])
+
+  for i, x in enumerate(struct1):
+    y = struct2[i]
+    prefix += '[{}]'.format(i)
+    if not equal(x, y):
+      return False
+  return True
+
+
 class State(object):
 
   def __init__(self):
