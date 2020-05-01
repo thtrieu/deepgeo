@@ -225,6 +225,7 @@ class GeoAll20(GeoAllN):
 
 @registry.register_problem
 class GeoUptoDepthN(GeoUpto5):
+  """Balanced between depths."""
 
   def generate_encoded_samples(self, data_dir, tmp_dir, dataset_split):
     """A generator that generates samples that are encoded.

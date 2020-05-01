@@ -275,7 +275,7 @@ def attention_layer(from_tensor,
                     batch_size=None,
                     from_seq_length=None,
                     to_seq_length=None,
-                    top_k=-1,
+                    attention_top_k=-1,
                     densify_attention_mask=False):
   """Performs multi-headed attention from `from_tensor` to `to_tensor`.
 
@@ -379,7 +379,7 @@ def attention_layer(from_tensor,
   # `query_layer` = [B*F, N*H]
   query_layer = tf.layers.dense(
       from_tensor_2d,
-      num_attention_heads * size_per_head,
+      N * H,
       activation=query_act,
       name='query',
       kernel_initializer=create_initializer(initializer_range))
@@ -387,7 +387,7 @@ def attention_layer(from_tensor,
   # `value_layer` = [B*T, N*H]
   value_layer = tf.layers.dense(
       to_tensor_2d,
-      num_attention_heads * size_per_head,
+      N * H,
       activation=value_act,
       name='value',
       kernel_initializer=create_initializer(initializer_range))
@@ -407,31 +407,35 @@ def attention_layer(from_tensor,
     to_tensor_2d = tf.reshape(to_tensor, [-1, N*H])  # B*F*T, N*H
 
   key_layer = tf.layers.dense(
-      to_tensor_2d,
-      num_attention_heads * size_per_head,
+      to_tensor_2d,  # B*T, N*H or B*F*T, N*H
+      N * H,
       activation=key_act,
       name='key',
       kernel_initializer=create_initializer(initializer_range))
 
   # `query_layer` = [B, N, F, H]
-  query_layer = transpose_for_scores(query_layer, batch_size,
-                                     num_attention_heads, from_seq_length,
-                                     size_per_head)
+  query_layer = transpose_for_scores(
+      query_layer, batch_size, N, F, H)
 
-  # `key_layer` = [B, N, T, H]
   if densify_attention_mask:
-    query_layer = tf.reshape(query_layer, [-1, N, F, 1, H])  # B N F 1 H
-    key_layer =  tf.reshape(key_layer, [-1, F, T, N, H])  # B F T N H
-    key_layer =  tf.transpose(key_layer, [0, 3, 1, 2, 4]) # B N F T H
-    attention_scores = tf.matmul(query_layer, key_layer, transpose_b=True)
-    attention_scores = tf.reshape(attention_scores, [-1, N, F, T])  # B N F T
+    # B N F 1 H
+    query_layer = tf.reshape(query_layer, [-1, N, F, 1, H])
+    # B F T N H
+    key_layer =  tf.reshape(key_layer, [-1, F, T, N, H])
+    # B N F T H
+    key_layer =  tf.transpose(key_layer, [0, 3, 1, 2, 4])
+    attention_scores = tf.matmul(  # B N F 1 H x B N F H T = B N F 1 T
+        query_layer, key_layer, transpose_b=True)
+    # B N F T
+    attention_scores = tf.reshape(attention_scores, [-1, N, F, T])  
   else:
-    key_layer = transpose_for_scores(key_layer, batch_size, N, T, H)  # B N T H
+    # B N T H
+    key_layer = transpose_for_scores(key_layer, batch_size, N, T, H)
     attention_scores = tf.matmul(  # B N F H x B N H T = B N F T
         query_layer, key_layer, transpose_b=True)
 
-  attention_scores = tf.multiply(attention_scores,
-                                 1.0 / math.sqrt(float(size_per_head)))
+  attention_scores = tf.multiply(
+      attention_scores, 1.0 / math.sqrt(float(H)))
 
   if not densify_attention_mask and attention_mask is not None:
     # `attention_mask` = [B, 1, F, T]
@@ -453,8 +457,8 @@ def attention_layer(from_tensor,
     # effectively the same as removing these entirely.
     attention_scores += adder
 
-  if top_k > 0:
-    top_k_val, _ = tf.nn.top_k(attention_scores, top_k, sorted=False)
+  if attention_top_k > 0:
+    top_k_val, _ = tf.nn.top_k(attention_scores, attention_top_k, sorted=False)
     top_k_min = tf.math.reduce_min(top_k_val, axis=-1, keepdims=True)
     top_k_mask = tf.math.greater_equal(attention_scores, top_k_min)
     adder = (1.0 - tf.cast(top_k_mask, tf.float32)) * -10000.0
@@ -464,8 +468,8 @@ def attention_layer(from_tensor,
   # `attention_probs` = [B, N, F, T]
   attention_probs = tf.nn.softmax(attention_scores)
 
-  # We don't want to dropout further if top_k is already being used.
-  if top_k == -1:
+  # We don't want to dropout further if attention_top_k is already being used.
+  if attention_top_k == -1:
     # This is actually dropping out entire tokens to attend to, which might
     # seem a bit unusual, but is taken from the original Transformer paper.
     attention_probs = dropout(attention_probs, attention_probs_dropout_prob)
@@ -509,7 +513,8 @@ def transformer_model(input_tensor,
                       attention_probs_dropout_prob=0.1,
                       initializer_range=0.02,
                       do_return_all_layers=False,
-                      top_k=-1):
+                      attention_top_k=-1,
+                      densify_attention_mask=False):
   """Multi-headed, multi-layer Transformer from 'Attention is All You Need'.
 
   This is almost an exact implementation of the original Transformer encoder.
@@ -547,6 +552,10 @@ def transformer_model(input_tensor,
   Raises:
     ValueError: A Tensor shape or parameter is invalid.
   """
+  if attention_top_k == 0:
+    raise ValueError(
+        'hparams.attention_top_k can only be (-1) everything or positive. Found 0.')
+  
   if hidden_size % num_attention_heads != 0:
     raise ValueError(
         'The hidden size (%d) is not a multiple of the number of attention '
@@ -590,7 +599,8 @@ def transformer_model(input_tensor,
               batch_size=batch_size,
               from_seq_length=seq_length,
               to_seq_length=seq_length,
-              top_k=top_k)
+              attention_top_k=attention_top_k,
+              densify_attention_mask=densify_attention_mask)
           attention_heads.append(attention_head)
 
         attention_output = None
@@ -655,7 +665,8 @@ def cached_transformer_model(
     attention_probs_dropout_prob=0.1,
     initializer_range=0.02,
     do_return_all_layers=False,
-    top_k=-1):
+    attention_top_k=-1,
+    densify_attention_mask=False):
   """Multi-headed, multi-layer Transformer from 'Attention is All You Need'.
 
   This is almost an exact implementation of the original Transformer encoder.
@@ -742,7 +753,8 @@ def cached_transformer_model(
               size_per_head=attention_head_size,
               attention_probs_dropout_prob=attention_probs_dropout_prob,
               initializer_range=initializer_range,
-              top_k=top_k)
+              attention_top_k=attention_top_k,
+              densify_attention_mask=densify_attention_mask)
               # do_return_2d_tensor=False,
               # batch_size=batch_size,
               # from_seq_length=1,
