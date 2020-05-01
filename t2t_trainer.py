@@ -32,7 +32,7 @@ from __future__ import print_function
 from tensor2tensor.bin import t2t_trainer
 
 import model
-import model2
+# import model2
 import problem
 
 
