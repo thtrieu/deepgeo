@@ -142,11 +142,13 @@ import tensorflow as tf
 from collections import defaultdict as ddict
 
 import theorems
-import explore
 import problem
 import model
 import model2
 import time
+import action_chain_lib
+import traceback
+import data_gen_lib
 
 from geometry import Point, Line, Segment, Angle, HalfPlane, Circle
 from geometry import SegmentLength, AngleMeasure, LineDirection
@@ -310,10 +312,10 @@ def execute_user_steps(steps, new_obj_names, state, canvas, verbose=False):
     name_maps = [c.split('=') for c in command.split()]
 
     mapping = dict(
-        (theorem.names[a], explore._find(state, b))
+        (theorem.names[a], action_chain_lib._find(state, b))
         if a in theorem.names
-        else (explore._find_premise(theorem.premise_objects, a), 
-              explore._find(state, b))
+        else (action_chain_lib._find_premise(theorem.premise_objects, a), 
+              action_chain_lib._find(state, b))
         for a, b in name_maps)
     action_gen = theorem.match_from_input_mapping(state, mapping, randomize=False)
 
@@ -543,7 +545,7 @@ class StepLoop(object):
     self.canvas_chain = []  # for illustration
 
   def init_with_user_action_steps(self, action_steps, new_obj_names, goal_objs):
-    state, canvas, _ = explore.init_by_normal_triangle()
+    state, canvas, _ = action_chain_lib.init_by_normal_triangle()
     execute_user_steps(
         action_steps, new_obj_names, state, canvas)
 
@@ -567,7 +569,7 @@ class StepLoop(object):
     self.goal_objects = (val, goal_obj1, goal_obj2)
 
   def make_features_from_state_and_goal(self):
-    seq, obj_list, obj2idx, attention_mask = explore.serialize_state(self.state)
+    seq, obj_list, obj2idx, attention_mask = data_gen_lib.serialize_state(self.state)
     self.state_object_list = obj_list
 
     val, obj1, obj2 = self.goal_objects
@@ -614,6 +616,7 @@ class StepLoop(object):
         self.init_with_user_action_steps(steps, obj_names, goal_objs)
       except Exception as e:
         print(e)
+        traceback.print_exc()
         continue
 
       print('\n Working on it ..')
@@ -817,6 +820,7 @@ def main(_):
         yield convert_text_inputs_to_action_steps(text_input)
       except Exception as e:
         print(e)
+        traceback.print_exc()
         continue
 
   StepLoop().predict(estimator, user_action_steps_generator())

@@ -17,7 +17,6 @@ python t2t_trainer.py \
 --output_dir=local_ckpt \
 --alsologtostderr
 
-
 python t2t_trainer.py \
 --model=graph_transformer2 \
 --hparams_set=graph_transformer2_base_local \

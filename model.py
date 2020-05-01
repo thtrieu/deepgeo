@@ -245,7 +245,8 @@ class GraphTransformer(BaseModel):
           hidden_dropout_prob=hparams.dropout_prob,
           attention_probs_dropout_prob=hparams.dropout_prob,
           initializer_range=hparams.initializer_range,
-          do_return_all_layers=True)
+          do_return_all_layers=True,
+          top_k=hparams.top_k)
 
     sequence_output, attention_weights = all_encoder_layers[-1]  # [batch seq_len hid_size]
     cls_vector = sequence_output[:, 0:1, :]  # [batch 1 hid_size]
@@ -391,7 +392,8 @@ class GraphTransformer(BaseModel):
           hidden_dropout_prob=hparams.dropout_prob,
           attention_probs_dropout_prob=hparams.dropout_prob,
           initializer_range=hparams.initializer_range,
-          do_return_all_layers=True)
+          do_return_all_layers=True,
+          top_k=hparams.top_k)
 
       decoder_output = all_decoder_layers[-1]  # [batch, 1, hid_size]
     return decoder_output
@@ -479,7 +481,8 @@ class GraphTransformer(BaseModel):
             hidden_dropout_prob=hparams.dropout_prob,
             attention_probs_dropout_prob=hparams.dropout_prob,
             initializer_range=hparams.initializer_range,
-            do_return_all_layers=True)
+            do_return_all_layers=True,
+            top_k=hparams.top_k)
 
         decoder_output, _ = all_decoder_layers[-1]  # [batch, dec_len, hid_size]
         theorem_feature = decoder_output[:, 0, :]  # [batch, hid_size]
@@ -556,7 +559,9 @@ def graph_transformer():
       entity_num_type=16,  # Point, Line, Segment, etc
       num_theorems=32,
       max_premise=16,
-      state_vocab_size=4  # state/goal etc
+      state_vocab_size=4,  # state/goal etc
+
+      top_k=-1,
   )
 
 
@@ -586,4 +591,5 @@ def graph_transformer_base_local():
       graph_transformer_base(),
       batch_shuffle_size=8,
       batch_size=2,
+      top_k=-1
   )
