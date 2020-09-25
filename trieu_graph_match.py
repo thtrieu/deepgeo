@@ -14,7 +14,7 @@ from collections import defaultdict as ddict
 from profiling import Timer
 
 import cython_graph_match
-import parallel_graph_match
+# import parallel_graph_match
 
 from geometry import Point, Line, Segment, Angle, HalfPlane, Circle 
 from geometry import SegmentLength, AngleMeasure, LineDirection
@@ -83,13 +83,13 @@ def recursively_match(
   # distinct_copy = list(distinct)
 
   # average time: 23,967,474e-8
-  with Timer('match'):
-    matches = cython_graph_match.recursively_match(
-        query_relations,
-        state_candidates,
-        object_mappings,
-        distinct=distinct or [],
-        return_all=match_all)
+  # with Timer('match'):
+  matches = cython_graph_match.recursively_match(
+      query_relations,
+      state_candidates,
+      object_mappings,
+      distinct=distinct or [],
+      return_all=match_all)
 
 
   # average time: 98,308,578e-8

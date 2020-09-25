@@ -92,10 +92,10 @@ class ExplorationBackoffDFSBase(object):
         theorems.all_theorems['mirror'],
         theorems.all_theorems['seg_line'],
         theorems.all_theorems['parallel'],
-        theorems.all_theorems['perp_on'],
-        theorems.all_theorems['perp_out'],
+        # theorems.all_theorems['perp_on'],
+        # theorems.all_theorems['perp_out'],
         theorems.all_theorems['line'],
-        theorems.all_theorems['bisect'],
+        # theorems.all_theorems['bisect'],
     ]
     self.deduct_theorems = [
         theorems.all_theorems['eq'],
