@@ -44,24 +44,28 @@ def get_state_and_proof_objects(last_action, state):
         val2objs[val] = state.val2valrel[val]
       except:
         import pdb; pdb.set_trace()
+  
+  # At this point:
+  # new_objs = [b, d]
+  # val2objs = {v1: [a, b, e], v2: [c, d, f]}
 
   # Loop through values correspond to new objects
   for val, rels in val2objs.items():
     # if there are < 2 objs associated with this val
-    # then we move on
+    # then we move on, nothing to prove here.
     if len(rels) < 2:
       continue
 
     # Loop through all distinct pair of rels
     for i, rel1 in enumerate(rels[:-1]):
       for rel2 in rels[i+1:]:
-        # both objects are not new, move on.
+        # both objects are not new, move on,
         obj1, obj2 = rel1.init_list[0], rel2.init_list[0]
         if obj1 not in new_objs and obj2 not in new_objs:
-          continue
+          continue  # e.g. obj1 = a, obj2 = e
         # Else yield the state and proof queues
-        problem_queue = [obj1, obj2]
-        proof_queue = [(val, rel1, rel2)]
+        problem_queue = [obj1, obj2]  # e.g. [a, b] or [a, e]
+        proof_queue = (val, rel1, rel2)
         yield problem_queue, proof_queue
 
 
@@ -73,20 +77,27 @@ def whittle_from(queue, action_chain,
   # is not relevant, True, if the whole action is needed
   # and a list of constructions, if action is not needed but only
   # part of its conclusion
+
   # Keep track of the head of the queue 
-  # (we don't pop things from queue)
+  # we don't pop things from queue but move this pointer ahead.
   i = 0
   non_critical_count = 0  # count when the whole premise is not needed.
 
+  # The idea is to look at the head of the queue,
+  # see what are its dependents, add those to the queue tail, and move on.
   while i < len(queue):
     query = queue[i]
-    i += 1
+    i += 1  # move on.
 
     if isinstance(query, tuple):
-      val, rel1, rel2 = query
+      val, rel1, rel2 = query  # what are the dependent of this 3-tuple?
       
+      # obj1 and obj2 are the first two dependents
       obj1, obj2 = rel1.init_list[0], rel2.init_list[0]
+
+      # Then there are also others
       dependents = val.dependency_path(obj1, obj2)
+
       if not all([d is not None for d in dependents]):
         import pdb; pdb.set_trace()
         raise ValueError('Path not found between {} and {} in {}'.format(
@@ -97,6 +108,7 @@ def whittle_from(queue, action_chain,
       queue.extend(dependents)
       continue
 
+    # An integer in the queue
     if isinstance(query, int):
       critical = True
       pos = query
@@ -126,6 +138,7 @@ def whittle_from(queue, action_chain,
 
       # Now we add the whole premise to the dependents:
       dependents = []
+
       # premise of type VALUE_RELATIONS is post-processed here:
       valrels = {}
 

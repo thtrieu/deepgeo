@@ -47,12 +47,8 @@ class Action(object):
       if isinstance(obj, (SegmentHasLength, AngleHasMeasure, LineHasDirection)):
         val = obj.init_list[1]
         if val not in vals:
-          # print('set {} to {} {} : {}'.format(pos, val, val.name, {x.name: {a.name: b for a, b in y.items()} for x, y in val.edges.items()}))
           val.set_chain_position(pos)
           vals[val] = True
-          # print('now ', {x.name: {a.name: b for a, b in y.items()} for x, y in val.edges.items()})
-        # if val.name == '1m':
-        #   print(val, {x.name: {a.name: b for a, b in y.items()} for x, y in val.edges.items()})
 
   def draw(self, canvas):
     return self.theorem.draw(self.mapping, canvas)
@@ -892,7 +888,7 @@ class SSS(Congruences):
 
   def __init__(self):
     A, B, C, D, E, F = map(Point, 'ABCDEF')
-    AB, BC, CA, DE, EF, FE = map(
+    AB, BC, CA, DE, EF, FD = map(
         Segment, ['AB', 'BC', 'CA', 'DE', 'EF', 'FD'])
 
     self.premise = (

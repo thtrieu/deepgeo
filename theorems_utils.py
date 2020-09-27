@@ -87,7 +87,7 @@ def diff_side(line, point1, point2, h1=None, h2=None):
 
 
 def same_side(l, p1, p2, hp=None):
-  hp = hp or HalfPlane(line.name + '_some_hp1')
+  hp = hp or HalfPlane(l.name + '_some_hp1')
   return [
       LineBordersHalfplane(l, hp),
       HalfPlaneContainsPoint(hp, p1),
@@ -190,7 +190,7 @@ class State(object):
       if hp in l_hps:
         return l
 
-  def to_str(self):
+  def to_str(self, join=', '):
     result = []
     for r in self.relations:
       a, b = r.init_list
@@ -200,7 +200,7 @@ class State(object):
           a.name,
           type(b).__name__,
           b.name)]
-    result = ', '.join(result)
+    result = join.join(result)
     return '[{}]'.format(result)
 
   def new_relations_from_merge(self, obj1, obj2):

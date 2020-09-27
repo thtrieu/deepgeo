@@ -8,12 +8,18 @@ import numpy as np
 import math
 
 import geometry
-# from sympy import Point, Line, Segment, Circle, Ray
 
 from collections import OrderedDict as odict
 
 import matplotlib
 from matplotlib import pyplot as plt
+
+
+class Circle(object):
+
+  def __init__(self, center, radius):
+    self.center = center
+    self.radius = radius
 
 
 class Point(object):
@@ -323,9 +329,12 @@ class Canvas(object):
         p2 = sym_points[np.argmax(all_x)]
       else:
         p = sym_points[0]
-        p1, p2 = line_circle_intersection(
-            self.lines[line],
-            Circle(p, 1.0))
+        try:
+          p1, p2 = line_circle_intersection(
+              self.lines[line],
+              Circle(p, 1.0))
+        except:
+          import pdb; pdb.set_trace()
 
       if p1 == p2:  # vertical line
         all_y = [p.y for p in sym_points]
@@ -533,6 +542,7 @@ class Canvas(object):
     return {new_line: self.line2points[new_line]}
 
   def add_circumscribe_circle(self, new_circle, p1, p2, p3):
+    raise NotImplementedError('Not implemented Circle')
     p1, p2, p3 = map(self.points.get, [p1, p2, p3])
     self.circles[new_circle] = Circle(p1, p2, p3)
     return {}

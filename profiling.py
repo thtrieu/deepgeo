@@ -68,9 +68,11 @@ def print_records():
       x = x['children'][scope]
 
     scopes, name = scopes[:-1], scopes[-1]
-    name = '  ' * len(scopes) + name
+    tab = '  ' * len(scopes)
+    name = tab + name
 
-    print((name_format + ': {:>8}e-5 * {:<10} ({:2.0%})').format(
+    print((name_format + ': {:>8}e-5 * {:<10} ' + 
+           tab + '({:2.0%})').format(
         name, int(rec.avg()*10e5), rec.count, rec.sum/x['sum']))
 
 

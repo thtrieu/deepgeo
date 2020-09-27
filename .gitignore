@@ -14,3 +14,4 @@ gs_ckpt*
 cython_graph_match.c
 *.so
 build/*
+.vscode/settings.json
