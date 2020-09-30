@@ -73,28 +73,113 @@ class DebugObjects(object):
       self.state[depth] = obj
     elif isinstance(obj, theorems.Action):
       self.action[depth] = obj
+    else:
+      raise ValueError('Unrecognized type {}'.format(type(obj)))
 
   def save_chain(self, filename):
-    # geometry.reset()
-    # init_state, init_canvas, _ = init_by_normal_triangle()
-    # state, canvas = init_state.copy(), init_canvas.copy()
-
-    # steps = [
-    #     (theorems.all_theorems['mid'], 'A=A B=B'),  # P1
-    #     (theorems.all_theorems['parallel'], 'A=P1 l=bc'),  # l1
-    #     (theorems.all_theorems['seg_line'], 'l=l1 A=A B=C'),  # P1
-    #     (theorems.all_theorems['parallel'], 'A=C l=ab'),  # l2
-    #     (theorems.all_theorems['line'], 'A=P1 B=C'),  # l3
-
+    # Find out where the chain starts
     i = 0
     while self.state[i] is None:
       i += 1
-    
-    assert self.canvas[i] is not None
-    init_state = self.state[i]
-    init_canvas = self.canvas[i]
-    import pdb; pdb.set_trace()
 
+    steps = []
+    while self.action[i] is not None:
+      state, action = self.state[i+1], self.action[i]
+      matching_command = {
+          name: action.mapping[obj].name
+          for name, obj in action.theorem.names.items()}
+
+      # same as mapping, but only map from
+      # theorem -> workspace, not vice versa.
+      new_mapping = {}
+      # to account for new objects created by
+      # spatial relations and not in the matching stage.
+      line2hps = {}
+      for x, y in action.mapping.items():
+        if y not in self.action[i].new_objects:
+          continue
+
+        new_mapping[x.name] = y.name
+        # take care of the hps that are created 
+        # when spatial relations are added.
+        if isinstance(y, Line):
+          hp1, hp2 = state.line2hps[y]
+          line2hps[y.name] = [hp1.name, hp2.name]
+
+      steps.append({
+          'theorem': action.theorem.__class__.__name__,
+          'command_str': ' '.join([
+              '{}={}'.format(x, y) for x, y in 
+              matching_command.items()
+          ]),
+          'mapping': new_mapping,
+          'line2hps': line2hps
+      })
+      i += 1
+    
+    with open(filename, 'wb') as f:
+      pkl.dump(steps, f, protocol=-1)
+
+  def load_chain(self, filename, state, canvas):
+    with open(filename, 'rb') as f:
+      # old chain with old names
+      old_steps = pkl.load(f)
+    
+    state = state.copy()
+    canvas = canvas.copy()
+    # new names go here:
+    result_steps = []
+    old_to_new_names = {}
+    for i, step in enumerate(old_steps):
+      theorem = theorems.theorem_from_name[step['theorem']]
+
+      name_maps = []  # theorem to new_name for this action.
+      for map_str in step['command_str'].split():
+        name_in_theorem, name_in_workspace = map_str.split('=')
+        if name_in_workspace in old_to_new_names:
+          name_in_workspace = old_to_new_names[name_in_workspace]
+        name_maps.append([name_in_theorem, name_in_workspace])
+
+      command_str = ' '.join([
+          '{}={}'.format(x, y)
+          for x, y in name_maps
+      ])
+
+      mapping = dict(
+          (theorem.names[a], action_chain_lib._find(state, b))
+          if a in theorem.names
+          else (action_chain_lib._find_premise(theorem.premise_objects, a), 
+                action_chain_lib._find(state, b))
+          for a, b in name_maps)
+      action_gen = theorem.match_from_input_mapping(
+          state, mapping, randomize=False)
+
+      try:
+        action = action_gen.next()
+      except StopIteration:
+        raise ValueError('Matching not found {} {}'.format(theorem, command_str))
+
+      print('Loaded {}'.format(action.to_str()))
+      action.set_chain_position(i)
+
+      state.add_relations(action.new_objects)
+      line2pointgroups = action.draw(canvas)
+      state.add_spatial_relations(line2pointgroups)
+      canvas.update_hps(state.line2hps)
+
+      for x, y in action.mapping.items():
+        if y not in action.new_objects:
+          continue
+        old_y_name = step['mapping'][x.name]
+        old_to_new_names[old_y_name] = y.name
+        if isinstance(y, Line):
+          hp1, hp2 = state.line2hps[y]
+          hp1_old_name, hp2_old_name = step['line2hps'][old_y_name]
+          old_to_new_names[hp1_old_name] = hp1.name
+          old_to_new_names[hp2_old_name] = hp2.name
+
+      result_steps.append((theorem, command_str))
+    return result_steps
 
   def report(self):
     canvas_state = []
@@ -311,6 +396,7 @@ class ExplorationBackoffDFSBase(object):
           # Not happening, but if it does, back to 1.
           traceback.print_exc()
           db.report()
+          db.save_chain('save.pkl')
           import pdb; pdb.set_trace()
           exit()
 
@@ -333,10 +419,12 @@ class ExplorationBackoffDFSBase(object):
           self.proof_extractor.collect_proof(
               action_chain, self.init_state, self.init_canvas, 
               new_state, do_pdb)
+          # if depth >= 10:
+          #   raise ValueError('Debug for depth >= 10')
         except:
           traceback.print_exc()
           db.report()
-          db.save_chain()
+          db.save_chain('save.pkl')
           import pdb; pdb.set_trace()
           exit()
 
@@ -650,7 +738,7 @@ class ProofExtractor(object):
         action_chain,
         full_state)
 
-    # Detect if the extracted proof is the one we care about:
+    # Detect if the extracted proof is the one we do NOT care about:
     if self.opposite_angle_check.found(theorem_premise, goal_objects):
       return  # Nothing to look at here.
     found_thales = self.thales_check.found(theorem_premise, goal_objects)
@@ -751,8 +839,15 @@ class ProofExtractor(object):
 
 if __name__ == '__main__':
   np.random.seed(int(time.time() % 42949671) * 100 + FLAGS.explore_worker_id)
+
+  # Choose between these two inits:
+  # state, canvas, predefined_steps = action_chain_lib.init_by_thales()  
   state, canvas, predefined_steps = action_chain_lib.init_by_normal_triangle()
-  # state, canvas, predefined_steps = action_chain_lib.init_by_thales()
+
+  # Turn on these two lines to load from save.pkl
+  # predefined_steps = db.load_chain('save.pkl', state, canvas)
+  # state, canvas, _ = action_chain_lib.init_by_normal_triangle()
+
   explorer = ExplorationBackoffDFS(
       state, canvas, FLAGS.out_dir, predefined_steps)
 

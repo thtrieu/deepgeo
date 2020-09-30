@@ -169,8 +169,8 @@ def line_line_intersection(l1, l2):
 def bisector(l1, l2, point, same_sign):
   # if same_sign, the bisector bisects (+, +) and (-, -)
   # else the bisector bisects (+, -) and (-, +)
-  a1, b1, c1 = l1.coefficients
-  a2, b2, c2 = l2.coefficients
+  a1, b1, _ = l1.coefficients
+  a2, b2, _ = l2.coefficients
 
   d1 = math.sqrt(a1*a1 + b1*b1)
   d2 = math.sqrt(a2*a2 + b2*b2)
@@ -529,97 +529,97 @@ class Canvas(object):
     self.update_line(l31, Line(c, a))
     return self.line2points
 
-  def add_perp_bisector_line(self, new_line, mid, p1, p2):
-    p1, p2 = self.points[p1], self.points[p2]
-    s = Segment(p1, p2)
-    self.update_line(new_line, s.perpendicular_bisector())
-    self.update_point(mid, s.midpoint)
-    return self.line2points
+  # def add_perp_bisector_line(self, new_line, mid, p1, p2):
+  #   p1, p2 = self.points[p1], self.points[p2]
+  #   s = Segment(p1, p2)
+  #   self.update_line(new_line, s.perpendicular_bisector())
+  #   self.update_point(mid, s.midpoint)
+  #   return self.line2points
 
   def add_line(self, new_line, p1, p2):
     p1, p2 = self.points[p1], self.points[p2]
     self.update_line(new_line, Line(p1, p2))
     return {new_line: self.line2points[new_line]}
 
-  def add_circumscribe_circle(self, new_circle, p1, p2, p3):
-    raise NotImplementedError('Not implemented Circle')
-    p1, p2, p3 = map(self.points.get, [p1, p2, p3])
-    self.circles[new_circle] = Circle(p1, p2, p3)
-    return {}
+  # def add_circumscribe_circle(self, new_circle, p1, p2, p3):
+  #   raise NotImplementedError('Not implemented Circle')
+  #   p1, p2, p3 = map(self.points.get, [p1, p2, p3])
+  #   self.circles[new_circle] = Circle(p1, p2, p3)
+  #   return {}
 
-  def add_point_finish_cord(self, new_point, p1, p2, c):
-    p1 = self.points[p1]
-    p2 = self.points[p2]
-    c = self.circles[c]
+  # def add_point_finish_cord(self, new_point, p1, p2, c):
+  #   p1 = self.points[p1]
+  #   p2 = self.points[p2]
+  #   c = self.circles[c]
 
-    # s = time.time()
-    a, b, c, d, x, y = [p1.x, p1.y, p2.x, p2.y, 
-                        c.center.x, c.center.y]
-    d1, d2 = c - a, d - b
-    alpha = -2 * (d1 * (a-x) + d2 * (b-y)) / (d1 * d1 + d2 * d2)
-    sym_new_point = Point(a + alpha * d1, b + alpha * d2)
-    self.update_point(new_point, sym_new_point)
-    return self.line2points
+  #   # s = time.time()
+  #   a, b, c, d, x, y = [p1.x, p1.y, p2.x, p2.y, 
+  #                       c.center.x, c.center.y]
+  #   d1, d2 = c - a, d - b
+  #   alpha = -2 * (d1 * (a-x) + d2 * (b-y)) / (d1 * d1 + d2 * d2)
+  #   sym_new_point = Point(a + alpha * d1, b + alpha * d2)
+  #   self.update_point(new_point, sym_new_point)
+  #   return self.line2points
 
-  def add_intersecting_point_line_circle(
-      self, new_point, line1, line2, circle, other_side_point):
+#   def add_intersecting_point_line_circle(
+#       self, new_point, line1, line2, circle, other_side_point):
 
-    line1 = self.lines[line1]
-    line2 = self.lines[line2]
-    circle = self.circles[circle]
-    point = self.points[other_side_point]
+#     line1 = self.lines[line1]
+#     line2 = self.lines[line2]
+#     circle = self.circles[circle]
+#     point = self.points[other_side_point]
 
-    p1, p2 = line_circle_intersection(line1, circle)
-    # p1, p2 = line1.intersection(circle)
-    if _is_different_side(line2, p1, point):
-      self.update_point(new_point, p1)
-    else:
-      self.update_point(new_point, p2)
-    return self.line2points
+#     p1, p2 = line_circle_intersection(line1, circle)
+#     # p1, p2 = line1.intersection(circle)
+#     if _is_different_side(line2, p1, point):
+#       self.update_point(new_point, p1)
+#     else:
+#       self.update_point(new_point, p2)
+#     return self.line2points
 
-  def add_intersecting_point_circle_circle(
-      self, new_point, line, circle1, circle2, other_side_point):
-    line = self.lines[line]
-    circle1 = self.circles[circle1]
-    circle2 = self.circles[circle2]
-    point = self.points[other_side_point]
+#   def add_intersecting_point_circle_circle(
+#       self, new_point, line, circle1, circle2, other_side_point):
+#     line = self.lines[line]
+#     circle1 = self.circles[circle1]
+#     circle2 = self.circles[circle2]
+#     point = self.points[other_side_point]
 
-    p1, p2  = circle_intersection(circle1, circle2)
-    # p1, p2 = circle1.intersection(circle2)
-    if _is_different_side(line, p1, point):
-      self.update_point(new_point, p1)
-    else:
-      self.update_point(new_point, p2)
-    return self.line2points
+#     p1, p2  = circle_intersection(circle1, circle2)
+#     # p1, p2 = circle1.intersection(circle2)
+#     if _is_different_side(line, p1, point):
+#       self.update_point(new_point, p1)
+#     else:
+#       self.update_point(new_point, p2)
+#     return self.line2points
 
-  def add_twice_intersecting_circle(
-      self, new_c, new_p1, new_p2, new_line, center, p1, p2):
-    center = self.points[center]
-    p1 = self.points[p1]
-    p2 = self.points[p2]
+#   def add_twice_intersecting_circle(
+#       self, new_c, new_p1, new_p2, new_line, center, p1, p2):
+#     center = self.points[center]
+#     p1 = self.points[p1]
+#     p2 = self.points[p2]
 
-    d1 = center.distance(p1)
-    d2 = center.distance(p2)
-    d = min(d1, d2)
-    radius = d/3.0
+#     d1 = center.distance(p1)
+#     d2 = center.distance(p2)
+#     d = min(d1, d2)
+#     radius = d/3.0
 
-    c = Circle(center, radius)
-    self.circles[new_c] = c
+#     c = Circle(center, radius)
+#     self.circles[new_c] = c
 
-    # print(c.center, c.radius, p1.x, p1.y)
-    sym_newp1 = circle_segment_intersect(c, p1)
-    sym_newp2 = circle_segment_intersect(c, p2)
-    self.update_point(new_p1, sym_newp1)
-    self.update_point(new_p2, sym_newp2)
-    self.update_line(new_line, Line(sym_newp1, sym_newp2))
-    return self.line2points
+#     # print(c.center, c.radius, p1.x, p1.y)
+#     sym_newp1 = circle_segment_intersect(c, p1)
+#     sym_newp2 = circle_segment_intersect(c, p2)
+#     self.update_point(new_p1, sym_newp1)
+#     self.update_point(new_p2, sym_newp2)
+#     self.update_line(new_line, Line(sym_newp1, sym_newp2))
+#     return self.line2points
 
 
-def _is_different_side(line, point1, point2):
-  a, b, c = line.coefficients
-  d1 = p1.x * a + p1.y * b + c
-  d2 = p2.x * a + p2.y * b + c
-  return d1 * d2 < 0
+# def _is_different_side(line, point1, point2):
+#   a, b, c = line.coefficients
+#   d1 = p1.x * a + p1.y * b + c
+#   d2 = p2.x * a + p2.y * b + c
+#   return d1 * d2 < 0
 
 
 

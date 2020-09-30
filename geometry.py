@@ -83,7 +83,7 @@ class GeometryEntity(object):
 
   # We record all these information into the geometric entity
   # Because they are necessary information to figure out
-  # the dependency on the action chain and whittle proofs.
+  # the dependencies on the action chain and to whittle proofs.
 
   @property
   def conclusion_position(self):
@@ -282,6 +282,10 @@ def reset():
   global _name_bank
   _name_bank = {k: 0 for k in _name_bank}
 
+
+def reset_auto_name_bank():
+  global _name_bank
+  _name_bank = {k: 0 for k in _name_bank}
 
 
 # TODO(thtrieu): handle the case where relations does not cover all objs.

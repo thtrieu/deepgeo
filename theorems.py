@@ -950,10 +950,10 @@ class SSS(Congruences):
 
     self.conclusion = conclusion
     self._distinct = [(AB, DE),
-                      (AB, BC), (BC, AC), (AC, AB),
-                      (DE, EF), (EF, DF), (DF, DE),
-                      (ab, bc), (bc, ac), (ac, ab),
-                      (de, ef), (ef, df), (df, de),
+                      (AB, BC), (BC, CA), (CA, AB),
+                      (DE, EF), (EF, FD), (FD, DE),
+                      (ab, bc), (bc, ca), (ca, ab),
+                      (de, ef), (ef, fd), (fd, de),
                       (BAC, BCA), (BCA, ABC), (ABC, BAC),
                       (DEF, EDF), (EDF, EFD), (EFD, DEF),
                       (A, B), (B, C), (C, A),
@@ -1120,4 +1120,9 @@ all_theorems = {
     'asa': ASA(),  # 2.26002907753 3.96637487411
     '.parallel': ParallelBecauseCorrespondingAngles(),
     '.parallel2': ParallelBecauseInteriorAngles(),
+}
+
+theorem_from_name = {
+  theorem.__class__.__name__: theorem
+  for name, theorem in all_theorems.items()
 }
