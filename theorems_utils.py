@@ -50,19 +50,34 @@ def concyclic(o, *point_list):
 
 
 def have_length(name, *segment_list):
-  length = SegmentLength(name)
+  if isinstance(name, str):
+    length = SegmentLength(name)
+  elif isinstance(name, SegmentLength):
+    length = name
+  else:
+    raise ValueError('{} is not str nor SegmentLength'.format(name))
   return [SegmentHasLength(seg, length)
           for seg in list(segment_list)]
 
 
 def have_measure(name, *angle_list):
-  angle_measure = AngleMeasure(name)
+  if isinstance(name, str):
+    angle_measure = AngleMeasure(name)
+  elif isinstance(name, AngleMeasure):
+    angle_measure = name
+  else:
+    raise ValueError('{} is not str nor AngleMeasure'.format(name))
   return [AngleHasMeasure(angle, angle_measure)
           for angle in list(angle_list)]
 
 
 def have_direction(name, *line_list):
-  direction = LineDirection(name)
+  if isinstance(name, str):
+    direction = LineDirection(name)
+  elif isinstance(name, LineDirection):
+    direction = name
+  else:
+    raise ValueError('{} is not str nor LineDirection'.format(name))
   return [LineHasDirection(line, direction)
           for line in list(line_list)]
 
@@ -149,6 +164,10 @@ class State(object):
 
     self.line2hps = {}
     self.hp2points = {}
+    self.add_relations(have_measure('halfpi', geometry.halfpi))
+
+  def halfpi_val(self):
+    return self.obj2valrel[geometry.halfpi].init_list[1]
 
   def copy(self):
     copied = State()
@@ -235,8 +254,6 @@ class State(object):
 
     return new_rel1, new_rel2
 
-
-
   def add_one(self, entity):
     if isinstance(entity, tuple(non_relations)):
       # if isinstance(entity, Point):
@@ -247,7 +264,8 @@ class State(object):
       return
 
     if isinstance(entity, Merge):
-      self.merge(*entity.init_list)
+      raise NotImplementedError('Merge')
+      # self.merge(*entity.init_list)
         
     relation = entity
     for obj in relation.init_list:
@@ -305,6 +323,8 @@ class State(object):
 
   def add_transitive_relation(self, relation):
     obj, new_value = relation.init_list
+    # if new_value.name == '5m':
+    #   import pdb; pdb.set_trace()
     self.name2obj[obj.name] = obj
     self.name2obj[new_value.name] = new_value
 

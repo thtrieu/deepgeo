@@ -399,11 +399,11 @@ class ConstructPerpendicularLineFromPointOn(FundamentalTheorem):
         angle_def(angle23, hp2, hp3) +
         angle_def(angle24, hp2, hp4) +
         have_measure('halfpi', 
+                     geometry.halfpi,
                      angle13, 
                      angle14,
                      angle23,
-                     angle24,
-                     geometry.halfpi)
+                     angle24)
     ))
 
     self.for_drawing = [l2, A, l]
@@ -438,11 +438,11 @@ class ConstructPerpendicularLineFromPointOut(FundamentalTheorem):
         angle_def(angle23, hp2, hp3) +
         angle_def(angle24, hp2, hp4) +
         have_measure('halfpi', 
+                     geometry.halfpi,
                      angle13, 
                      angle14,
                      angle23,
-                     angle24,
-                     geometry.halfpi)
+                     angle24)
     ))
 
     B = Point('B')
@@ -1120,6 +1120,8 @@ all_theorems = {
     'asa': ASA(),  # 2.26002907753 3.96637487411
     '.parallel': ParallelBecauseCorrespondingAngles(),
     '.parallel2': ParallelBecauseInteriorAngles(),
+    'angle_check': OppositeAnglesCheck(),
+    'thales_check': ThalesCheck()
 }
 
 theorem_from_name = {

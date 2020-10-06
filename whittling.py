@@ -39,16 +39,26 @@ def get_state_and_proof_objects(last_action, state):
   for rel in last_action.new_objects:
     if isinstance(rel, (SegmentHasLength, LineHasDirection, AngleHasMeasure)):
       obj, val = rel.init_list
+
+      # if val == state.halfpi_val():
+      #   continue
+
       new_objs.append(obj)
-      try:
-        val2objs[val] = state.val2valrel[val]
-      except:
-        import pdb; pdb.set_trace()
+
+      if not val in state.val2valrel:
+        val = state.obj2valrel[obj].init_list[1]
+      val2objs[val] = state.val2valrel[val]
+      
+      # Old code, run into error. See debug_001.pkl
+      # try:
+      #   val2objs[val] = state.val2valrel[val]
+      # except:
+      #   import pdb; pdb.set_trace()
+      #   raise Exception
   
   # At this point:
   # new_objs = [b, d]
   # val2objs = {v1: [a, b, e], v2: [c, d, f]}
-
   # Loop through values correspond to new objects
   for val, rels in val2objs.items():
     # if there are < 2 objs associated with this val
@@ -119,9 +129,12 @@ def whittle_from(queue, action_chain,
       critical = query.critical
 
     # the whole action and its premise is visited.
-    if (whittled_state and whittled_state[pos] == True 
-        or whittled[pos] == True): 
-      continue
+    try:
+      if (whittled_state and whittled_state[pos] == True 
+          or whittled[pos] == True): 
+        continue
+    except:
+      import pdb; pdb.set_trace()
 
     action = action_chain[pos]
     # When the whole action is not needed and there is still

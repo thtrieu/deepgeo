@@ -192,7 +192,7 @@ def recursively_match_slow(
   rel_type = type(query0)
 
   # Enumerate through possible edge match:
-  for i, candidate in enumerate(state_candidates.get(rel_type, [])):
+  for _, candidate in enumerate(state_candidates.get(rel_type, [])):
     # Now we try to match edge query0 to candidate, by checking
     # if this match will cause any conflict, if not then we proceed
     # to query1 in the next recursion depth.
@@ -506,13 +506,14 @@ def match_relations(premise_relations,
 
   augmented_relations = augmented_relations or []
   # Rearrage relations to optimize recursion branching
-  sorted_premise_relations, state_candidates = strip_match_relations(
-      premise_relations, conclusion_relations, 
-      state_relations + augmented_relations)
+  with Timer('action/prepare'):
+    sorted_premise_relations, state_candidates = strip_match_relations(
+        premise_relations, conclusion_relations, 
+        state_relations + augmented_relations)
 
-  if randomize:
-    for rel_type in state_candidates:
-      np.random.shuffle(state_candidates[rel_type])
+    if randomize:
+      for rel_type in state_candidates:
+        np.random.shuffle(state_candidates[rel_type])
 
   with Timer('action/premise_match'):
     premise_matches = recursively_match(

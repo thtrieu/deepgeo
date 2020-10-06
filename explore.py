@@ -39,6 +39,7 @@ tf.compat.v1.flags.DEFINE_boolean('enable_profiling', False, '')
 
 tf.compat.v1.flags.DEFINE_string('mode', 'datagen', 'datagen or interactive')
 tf.compat.v1.flags.DEFINE_string('out_dir', '/Users/thtrieu/deepgeo/data_small/', '')
+tf.compat.v1.flags.DEFINE_string('load_chain', '', 'A chain of action to load from')
 
 tf.compat.v1.flags.DEFINE_integer('max_construction', 7, '')
 tf.compat.v1.flags.DEFINE_integer('max_depth', 45, '')
@@ -77,14 +78,12 @@ class DebugObjects(object):
       raise ValueError('Unrecognized type {}'.format(type(obj)))
 
   def save_chain(self, filename):
-    # Find out where the chain starts
-    i = 0
-    while self.state[i] is None:
-      i += 1
-
+    i = 1
     steps = []
-    while self.action[i] is not None:
+    while i <= self.depth:
       state, action = self.state[i+1], self.action[i]
+      if action is None:
+        break
       matching_command = {
           name: action.mapping[obj].name
           for name, obj in action.theorem.names.items()}
@@ -145,21 +144,24 @@ class DebugObjects(object):
           for x, y in name_maps
       ])
 
-      mapping = dict(
-          (theorem.names[a], action_chain_lib._find(state, b))
-          if a in theorem.names
-          else (action_chain_lib._find_premise(theorem.premise_objects, a), 
-                action_chain_lib._find(state, b))
-          for a, b in name_maps)
-      action_gen = theorem.match_from_input_mapping(
-          state, mapping, randomize=False)
+      try:
+        mapping = dict(
+            (theorem.names[a], action_chain_lib._find(state, b))
+            if a in theorem.names
+            else (action_chain_lib._find_premise(theorem.premise_objects, a), 
+                  action_chain_lib._find(state, b))
+            for a, b in name_maps)
+      except Exception:
+        traceback.print_exc()
+        continue
 
       try:
+        action_gen = theorem.match_from_input_mapping(
+            state, mapping, randomize=False)
         action = action_gen.next()
       except StopIteration:
         raise ValueError('Matching not found {} {}'.format(theorem, command_str))
 
-      print('Loaded {}'.format(action.to_str()))
       action.set_chain_position(i)
 
       state.add_relations(action.new_objects)
@@ -179,6 +181,7 @@ class DebugObjects(object):
           old_to_new_names[hp2_old_name] = hp2.name
 
       result_steps.append((theorem, command_str))
+      print('Loaded {}'.format(action.to_str()))
     return result_steps
 
   def report(self):
@@ -187,7 +190,7 @@ class DebugObjects(object):
     for i, (state, canvas, action) in enumerate(
         zip(self.state, self.canvas, self.action)):
 
-      if (i == self.depth):
+      if (i > self.depth):
         break
 
       assert (state is None) == (canvas is None)
@@ -297,12 +300,13 @@ class ExplorationBackoffDFSBase(object):
         continue
 
   def explore(self, predefined_steps=None, do_pdb=False):
-    self._recursive_explore(
-        [], 
-        self.init_state, 
-        self.init_canvas,
-        predefined_steps=self.predefined_steps,
-        do_pdb=do_pdb)
+    while True:
+      self._recursive_explore(
+          [], 
+          self.init_state, 
+          self.init_canvas,
+          predefined_steps=self.predefined_steps,
+          do_pdb=do_pdb)
 
   def get_actions(self, state, depth, canvas,
                   predefined_steps):
@@ -310,16 +314,29 @@ class ExplorationBackoffDFSBase(object):
       # Just do the normal random action sampling
       return self.random_action(state, depth, canvas)
     
-    # if predefined_steps == []:
+    # if predefined_steps == []: 
     #   return 0
 
     step = predefined_steps.pop(0)
     theorem, command_str = step
+    if FLAGS.verbose:
+      print(' {}Predefined: {} {}'.format(
+          ' ' * depth, theorem.__class__.__name__, command_str))
     name_maps = [c.split('=') for c in command_str.split()]
-    mapping = {theorem.names[a]: action_chain_lib._find(state, b) 
-               for a, b in name_maps}
-    action_gen = theorem.match_from_input_mapping(state, mapping)
     try:
+      mapping = dict(
+          (theorem.names[a], action_chain_lib._find(state, b))
+          if a in theorem.names
+          else (action_chain_lib._find_premise(theorem.premise_objects, a), 
+                action_chain_lib._find(state, b))
+          for a, b in name_maps)
+    except Exception:
+      traceback.print_exc()
+      import pdb; pdb.set_trace()
+      exit()
+  
+    try:
+      action_gen = theorem.match_from_input_mapping(state, mapping)
       action = action_gen.next()
     except StopIteration:
       raise ValueError('Matching not found {} {} {}'.format(
@@ -377,7 +394,7 @@ class ExplorationBackoffDFSBase(object):
       timer.stop()
 
       if FLAGS.verbose:
-        print(tab, depth, type(action.theorem).__name__, action.duration)
+        print(tab, depth, action.to_str())
 
       db.update(depth, action)
       # This is needed for whittling proof.
@@ -457,7 +474,6 @@ class ExplorationBackoffDFSBase(object):
     if FLAGS.verbose:
       print('Out of option at depth 1, start a new Backoff DFS.')
     self.print_stats()
-    self.explore()
 
 
 def print_construction(constructions):
@@ -645,10 +661,8 @@ class ProofExtractor(object):
         depth: data_gen_lib.ProofReservoir(
             depth, out_dir, FLAGS.explore_worker_id)
         for depth in range(100)}
-    self.opposite_angle_check = theorems.OppositeAnglesCheck()
-    self.thales_check = theorems.ThalesCheck()
-    # self.checks = [theorems.ThalesCheck(), 
-    #                theorems.OppositeAnglesCheck()]
+    self.opposite_angle_check = theorems.all_theorems['angle_check']
+    self.thales_check = theorems.all_theorems['thales_check']
 
   def print_sizes(self):
     size_str = '\n'.join(['Size {:>3}: {}'.format(key, reservoir.size)
@@ -771,6 +785,10 @@ class ProofExtractor(object):
           reservoir_id = 0
         else:
           reservoir_id = len(proof_actions) - i  # always >= 1
+        
+        # if reservoir_id >= 10:
+        #   db.report()
+        #   import pdb; pdb.set_trace()
         self.reservoirs[reservoir_id].add(example)
 
       if size_maxed:
@@ -840,13 +858,15 @@ class ProofExtractor(object):
 if __name__ == '__main__':
   np.random.seed(int(time.time() % 42949671) * 100 + FLAGS.explore_worker_id)
 
-  # Choose between these two inits:
+  # Choose between these inits:
   # state, canvas, predefined_steps = action_chain_lib.init_by_thales()  
   state, canvas, predefined_steps = action_chain_lib.init_by_normal_triangle()
+  # state, canvas, predefined_steps = action_chain_lib.init_by_debug_001()
 
   # Turn on these two lines to load from save.pkl
-  # predefined_steps = db.load_chain('save.pkl', state, canvas)
-  # state, canvas, _ = action_chain_lib.init_by_normal_triangle()
+  if FLAGS.load_chain:
+    predefined_steps = db.load_chain(FLAGS.load_chain, state, canvas)
+    state, canvas, _ = action_chain_lib.init_by_normal_triangle()
 
   explorer = ExplorationBackoffDFS(
       state, canvas, FLAGS.out_dir, predefined_steps)

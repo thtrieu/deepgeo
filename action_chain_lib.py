@@ -160,3 +160,19 @@ def init_by_thales():
       (theorems.all_theorems['line'], 'A=P1 B=C'),  # l3
   ]
   return state, canvas, steps
+
+
+def init_by_debug_001():
+  geometry.reset()
+  init_state, init_canvas, _ = init_by_normal_triangle()
+  state, canvas = init_state.copy(), init_canvas.copy()
+
+  steps = [
+      (theorems.all_theorems['parallel'], 'A=B B=ca'),  # l1
+      (theorems.all_theorems['bisect'], 'hp1=ab_hp2 hp2=l1_hp1'),  # l2
+      (theorems.all_theorems['seg_line'], 'l=l2 A=C B=A'),  # P1
+      (theorems.all_theorems['eq'], 'l=l2 l1=l1 l2=ca'),  # l2
+      (theorems.all_theorems['mirror'], 'A=P1 B=B'),  # l2
+      (theorems.all_theorems['asa'], 'A=P1 B=A C=B D=B F=P1 de=ab ef=ca'),  # bug??
+  ]
+  return state, canvas, steps

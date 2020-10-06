@@ -35,6 +35,7 @@ from cython.parallel import prange
 cimport numpy as np
 cimport cython
 
+from geometry import GeometryEntity
 from geometry import Point, Line, Segment, Angle, HalfPlane, Circle 
 from geometry import SegmentLength, AngleMeasure, LineDirection
 from geometry import SegmentHasLength, AngleHasMeasure, LineHasDirection
@@ -42,6 +43,36 @@ from geometry import PointEndsSegment, HalfplaneCoversAngle, LineBordersHalfplan
 from geometry import PointCentersCircle
 from geometry import Merge
 from geometry import LineContainsPoint, CircleContainsPoint, HalfPlaneContainsPoint
+
+
+# @cython.boundscheck(False)
+# @cython.wraparound(False)
+# def test():
+#   n = 100
+
+#   cdef np.ndarray[int, ndim=1, mode='c'] a = numpy.arange(n, dtype=numpy.int32)
+#   cdef list access = range(n)
+#   cdef int i
+
+#   numpy.random.shuffle(access)
+#   t = time.time()
+#   for i in access:
+#     _ = a[i]
+#   print(time.time()-t)
+
+#   cdef dict d = {object():object() for i in range(n)}
+#   access = list(d.keys())
+#   numpy.random.shuffle(access)
+
+#   cdef object o
+#   t = time.time()
+#   for o in access:
+#     _ = d[o]
+#   print(time.time()-t)
+#   exit()
+
+
+# test()
 
 
 @cython.boundscheck(False)
@@ -108,6 +139,8 @@ cpdef list recursively_match(
     # There is not any premise edge to match:
     return [object_mappings]
 
+  cdef object a, b, c, d, query0, candidate, x, y, rel_type
+
   query0 = query_relations[0]
   a, b = query0.init_list
 
@@ -132,7 +165,9 @@ cpdef list recursively_match(
 
     # Suppose edge query0 connects nodes a, b in premise graph
     # and edge candidate connects nodes c, d in state graph:
-    c, d = candidate.init_list
+    # c, d = candidate.init_list
+    c = candidate.init_list[0]
+    d = candidate.init_list[1]
 
     # Special treatment for half pi:
     if a == geometry.halfpi and c != a:
@@ -204,7 +239,7 @@ cpdef list recursively_match(
         depth=depth+1)  #,
         # counter=counter)
 
-    if match == []:
+    if len(match) == 0:
       continue
 
     if not return_all:

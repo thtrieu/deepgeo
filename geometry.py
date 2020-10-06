@@ -4,6 +4,18 @@ from __future__ import division
 from __future__ import print_function
 
 from collections import defaultdict as ddict
+import traceback
+import os
+
+
+def print_tb():
+  for line in traceback.format_stack()[:-2]:
+    l1, l2 = line.split('\n')[:2]
+    if 'anaconda2/lib' in l1:
+      continue
+    path = os.path.basename(l1.split('"')[1])
+    line_num = l1.split(',')[1].strip().split()[-1]
+    print('{}:{}\t\t{}'.format(path, line_num, l2.strip()))
 
 
 name_to_obj = {}
@@ -163,7 +175,7 @@ class CausalValue(GeometryEntity):
 
     # Loop through all pairs of objects
     for i, obj1 in enumerate(objs[:-1]):
-      for j, obj2 in enumerate(objs[i+1:]):
+      for _, obj2 in enumerate(objs[i+1:]):
         if obj2 not in self.edges_tmp[obj1]:
           self.edges_tmp[obj1][obj2] = None
         if obj1 not in self.edges_tmp[obj2]:
