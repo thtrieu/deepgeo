@@ -45,6 +45,7 @@ tf.compat.v1.flags.DEFINE_integer('max_construction', 7, '')
 tf.compat.v1.flags.DEFINE_integer('max_depth', 45, '')
 tf.compat.v1.flags.DEFINE_integer('max_line', 6, '')
 tf.compat.v1.flags.DEFINE_integer('max_point', 8, '')
+tf.compat.v1.flags.DEFINE_integer('max_circle', 0, '')
 tf.compat.v1.flags.DEFINE_integer('explore_worker_id', 0, '')
 
 
@@ -243,8 +244,8 @@ class ExplorationBackoffDFSBase(object):
         theorems.all_theorems['mirror'],
         theorems.all_theorems['seg_line'],
         theorems.all_theorems['parallel'],
-        # theorems.all_theorems['perp_on'],
-        # theorems.all_theorems['perp_out'],
+        theorems.all_theorems['perp_on'],
+        theorems.all_theorems['perp_out'],
         theorems.all_theorems['line'],
         theorems.all_theorems['bisect'],
     ]
@@ -869,7 +870,12 @@ if __name__ == '__main__':
     state, canvas, _ = action_chain_lib.init_by_normal_triangle()
 
   explorer = ExplorationBackoffDFS(
-      state, canvas, FLAGS.out_dir, predefined_steps)
+      state, canvas, FLAGS.out_dir, predefined_steps,
+      FLAGS.max_construction,
+      FLAGS.max_depth,
+      FLAGS.max_line,
+      FLAGS.max_point,
+      FLAGS.max_circle)
 
   if FLAGS.enable_profiling:
     profiling.enable()

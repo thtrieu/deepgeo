@@ -169,6 +169,38 @@ class State(object):
   def halfpi_val(self):
     return self.obj2valrel[geometry.halfpi].init_list[1]
 
+  def angle_name(self, angle):
+    [hp1, hp2], [l1, l2] = self.hp_and_line_of_angle(angle)
+    line2points = {l1: [], l2: []}
+    for rel in self.type2rel[LineContainsPoint]:
+      line, point = rel.init_list
+      if line in line2points:
+        line2points[line].append(point)
+    
+    intersection = None
+    for p in line2points[l1]:
+      if p in line2points[l2]:
+        intersection = p
+        break 
+    
+    assert intersection
+
+    hp1 = self.line2hps[l1][hp1]
+    hp2 = self.line2hps[l1][hp2]
+
+    p1, p2 = None, None
+    for p in line2points[l1]:
+      if p in self.hp2points[hp2]:
+        p1 = p
+        break 
+    for p in line2points[l2]:
+      if p in self.hp2points[hp1]:
+        p2 = p
+        break 
+    
+    assert p1 and p2
+    return '<{}-{}-{}>'.format(p1, intersection, p2)
+
   def copy(self):
     copied = State()
     copied.relations = _copy(self.relations)
