@@ -33,7 +33,7 @@ from geometry import SegmentLength, AngleMeasure, LineDirection
 
 
 import tensorflow as tf
-tf.compat.v1.flags.DEFINE_boolean('pdb', False, '')
+# tf.compat.v1.flags.DEFINE_boolean('pdb', False, '')
 tf.compat.v1.flags.DEFINE_boolean('verbose', False, '')
 tf.compat.v1.flags.DEFINE_boolean('enable_profiling', False, '')
 
@@ -205,16 +205,14 @@ class ExplorationBackoffDFSBase(object):
     self.print_stats()
     return backoff
 
-  def explore(self, do_pdb=False):
+  def explore(self):
     while True:
       self._recursive_explore(
           [], 
           self.init_state, 
-          self.init_canvas,
-          do_pdb=do_pdb)
+          self.init_canvas)
 
-  def _recursive_explore(self, action_chain, state, canvas, 
-                         do_pdb=False, 
+  def _recursive_explore(self, action_chain, state, canvas,
                          depth=None):
     """Random Back-off DFS.
 
@@ -285,7 +283,7 @@ class ExplorationBackoffDFSBase(object):
         try:
           self.proof_extractor.collect_proof(
               action_chain, self.init_state, self.init_canvas, 
-              new_state, do_pdb)
+              new_state)
           # if depth >= 10:
           #   raise ValueError('Debug for depth >= 10')
         except:
@@ -297,7 +295,7 @@ class ExplorationBackoffDFSBase(object):
 
       backoff = self._recursive_explore(
           action_chain, new_state, new_canvas,
-          do_pdb=do_pdb, depth=depth+1)
+          depth=depth+1)
       action_chain.pop(-1)
 
       if backoff < depth:
@@ -486,10 +484,6 @@ class ExplorationBackoffDFS(ExplorationBackoffDFSBase):
     new_canvas.update_hps(new_state.line2hps)
     print(' * add spatial rel ' + str(time.time()-s))
 
-    # self.proof_extractor.collect_proof(
-    #     action_chain, self.init_state, self.init_canvas, 
-    #     new_state, new_canvas, do_pdb)
-
     self.explore_interactive(
         action_chain, new_state, new_canvas, depth+1, mode)
     action_chain.pop(-1)
@@ -516,7 +510,7 @@ class ProofExtractor(object):
       print(size_str)
 
   def collect_proof(self, action_chain, init_state, init_canvas, 
-                    full_state, do_pdb=False):
+                    full_state):
     last_action = action_chain[-1]
     if not isinstance(last_action.theorem, 
                       (theorems.ASA, theorems.SAS, theorems.SSS, 
@@ -725,6 +719,6 @@ if __name__ == '__main__':
     profiling.disable()
 
   if FLAGS.mode == 'datagen':
-    explorer.explore(FLAGS.pdb)
+    explorer.explore()
   if FLAGS.mode == 'interactive':
     explorer.explore_interactive([], state, canvas, mode='theorem_input')
