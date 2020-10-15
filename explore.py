@@ -22,7 +22,10 @@ import data_gen_lib
 import action_chain_lib
 import debugging
 
-from IPython.display import clear_output
+try:
+  from IPython.display import clear_output
+except:
+  pass
 
 from profiling import Timer
 from geometry import Point, Line, Segment, Angle, HalfPlane, Circle
