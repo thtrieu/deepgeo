@@ -157,8 +157,11 @@ from geometry import PointEndsSegment, HalfplaneCoversAngle, LineBordersHalfplan
 from geometry import PointCentersCircle
 from geometry import LineContainsPoint, CircleContainsPoint, HalfPlaneContainsPoint
 
-from matplotlib import pyplot as plt
-from matplotlib import colors as mcolors
+try:
+  from matplotlib import pyplot as plt
+  from matplotlib import colors as mcolors
+except:
+  pass
 
 
 flags.DEFINE_integer('max_seq_len', 128, '')

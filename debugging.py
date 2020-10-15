@@ -1,5 +1,8 @@
 import action_chain_lib
-from matplotlib import pyplot as plt
+try:
+  from matplotlib import pyplot as plt
+except:
+  pass
 import sketch
 import numpy as np
 import traceback

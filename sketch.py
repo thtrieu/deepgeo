@@ -11,8 +11,11 @@ import geometry
 
 from collections import OrderedDict as odict
 
-import matplotlib
-from matplotlib import pyplot as plt
+try:
+  import matplotlib
+  from matplotlib import pyplot as plt
+except:
+  pass
 
 
 class Circle(object):
