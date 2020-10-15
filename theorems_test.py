@@ -13,9 +13,12 @@ import action_chain_lib
 import theorems
 import sketch
 import explore
+import state
 
 from theorems_utils import *
 from theorems import *
+
+from state import State, Conclusion
 
 from geometry import Point, Line, Segment, Angle, HalfPlane, Circle
 from geometry import SegmentLength, AngleMeasure, LineDirection
@@ -50,6 +53,7 @@ def print_construction(constructions):
 
 def state_merge_and_copy():
   AB, BC, CA, XY = map(Segment, ['AB', 'BC', 'CA', 'XY'])
+  # TEST 1
   s = time.time()
   state = State()
   state.add_relations(
@@ -62,6 +66,7 @@ def state_merge_and_copy():
   all_vals = [r.init_list[1] for r in state.relations]
   assert all_vals[1:] == all_vals[:-1]
 
+  # TEST 2
   s = time.time()
   state = State()
   state.add_relations(
@@ -75,6 +80,7 @@ def state_merge_and_copy():
   all_vals = [r.init_list[1] for r in state.relations]
   assert all_vals[1:] == all_vals[:-1]
 
+  # TEST 3
   state = State()
   state.add_relations(
       have_length('l1', AB, BC) +
@@ -92,6 +98,21 @@ def state_merge_and_copy():
   # [print(r.name) for r in state.relations]
   all_vals = [r.init_list[1] for r in state.relations]
   assert not all_vals[1:] == all_vals[:-1]
+
+  # TEST 4
+  s = time.time()
+  state = State()
+  state.add_relations(
+      have_length('l1', AB, BC) +
+      have_length('l2', AB, CA) +
+      have_length('l3', BC, XY)
+  )
+  print(time.time() - s)
+
+  # [print(r.name) for r in state.relations]
+  all_vals = [r.init_list[1] for r in state.relations]
+  # import pdb; pdb.set_trace()
+  assert all_vals[1:] == all_vals[:-1]
 
 
 def time_sas():
@@ -314,7 +335,7 @@ def sas_hp():
 
 def triangle_seed():
   init_canvas = sketch.Canvas()
-  init_state = theorems_utils.State()
+  init_state = state.State()
 
   A, B, C = map(Point, 'ABC')
   ab, bc, ca = map(Line, 'ab bc ca'.split())
@@ -476,7 +497,7 @@ def test_thales_whittle1():
 
   s = time.time()
   problem, problem_canvas, proof_steps = whittle(
-      state_queue, proof_queue, action_chain,
+      state, state_queue, proof_queue, action_chain,
       init_state, init_canvas, canvas)
   print('thales whittle time ', time.time()-s)
 
@@ -552,7 +573,7 @@ def test_thales_whittle2():
 
   s = time.time()
   problem, problem_canvas, proof_steps = whittle(
-      state_queue, proof_queue, action_chain,
+      state, state_queue, proof_queue, action_chain,
       init_state, init_canvas, canvas)
   print('thales whittle time ', time.time()-s)
 
@@ -636,7 +657,7 @@ def test_whittle0():
 
   s = time.time()
   problem, problem_canvas, proof_steps = whittle(
-      state_queue, proof_queue, action_chain,
+      state, state_queue, proof_queue, action_chain,
       init_state, init_canvas, canvas)
   print('whittle time ', time.time()-s)
 
@@ -696,7 +717,7 @@ def test_whittle1():
 
   s = time.time()
   problem, problem_canvas, proof_steps = whittle(
-      state_queue, proof_queue, action_chain,
+      state, state_queue, proof_queue, action_chain,
       init_state, init_canvas, canvas)
   print('whittle time ', time.time()-s)
 
@@ -753,7 +774,7 @@ def test_whittle2():
 
   s = time.time()
   problem, problem_canvas, proof_steps = whittle(
-      state_queue, proof_queue, action_chain,
+      state, state_queue, proof_queue, action_chain,
       init_state, init_canvas, canvas)
   print('whittle time ', time.time()-s)
   assert len(problem_canvas.points) == 4
@@ -812,7 +833,7 @@ def test_whittle3():
 
   s = time.time()
   problem, problem_canvas, proof_steps = whittle(
-      state_queue, proof_queue, action_chain,
+      state, state_queue, proof_queue, action_chain,
       init_state, init_canvas, canvas)
   print('whittle time ', time.time()-s)
 
@@ -882,7 +903,7 @@ def test_whittle3a():
 
   s = time.time()
   problem, problem_canvas, proof_steps = whittle(
-      state_queue, proof_queue, action_chain,
+      state, state_queue, proof_queue, action_chain,
       init_state, init_canvas, canvas)
   print('whittle time ', time.time()-s)
 
@@ -950,7 +971,7 @@ def test_whittle4():
 
   s = time.time()
   problem, problem_canvas, proof_steps = whittle(
-      state_queue, proof_queue, action_chain,
+      state, state_queue, proof_queue, action_chain,
       init_state, init_canvas, canvas)
   print('whittle time ', time.time()-s)
 
@@ -1004,7 +1025,7 @@ def test_whittle5():
 
   s = time.time()
   problem, problem_canvas, proof_steps = whittle(
-      state_queue, proof_queue, action_chain,
+      state, state_queue, proof_queue, action_chain,
       init_state, init_canvas, canvas)
   print('whittle time ', time.time()-s)
 
@@ -1064,7 +1085,7 @@ def test_whittle6():
 
   s = time.time()
   problem, problem_canvas, proof_steps = whittle(
-      state_queue, proof_queue, action_chain,
+      state, state_queue, proof_queue, action_chain,
       init_state, init_canvas, canvas)
   print('whittle time ', time.time()-s)
 
@@ -1095,15 +1116,16 @@ def test_whittle6():
   assert len(proved_problem.name2obj) == 60, len(proved_problem.name2obj)
 
 
-def whittle(state_queue, proof_queue, action_chain, 
+def whittle(final_state, state_queue, proof_queue, action_chain, 
             init_state, init_canvas, canvas):
   # Basically shave off any excess from action_chain
   # and crystallize what is relevant as premise & conclusion
   # of a discovered theorem.
 
-  whittled_state = whittling.whittle_from(list(state_queue), action_chain)
+  whittled_state = whittling.whittle_from(
+      final_state, list(state_queue), action_chain)
   proof_whittled = whittling.whittle_from(
-      list(proof_queue), action_chain, 
+      final_state, list(proof_queue), action_chain, 
       goal_objects=state_queue, whittled_state=whittled_state)
 
   for i, p in enumerate(proof_whittled):

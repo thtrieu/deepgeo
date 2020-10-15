@@ -146,27 +146,21 @@ class GeometryEntity(object):
 class CausalValue(GeometryEntity):
   """Handles transitivity causal dependency."""
 
-  def __init__(self, name=None, obj=None):
-    self.edges = ddict(lambda: {})
-    if obj:
-      self.edges[obj] = {}
+  def __init__(self, name=None):
+    self.edges = ddict(lambda: ddict(lambda: {}))
+    # if obj:
+    #   self.edges[obj] = {}
     # This is to add a new clique when there is new equality
     self.edges_tmp = ddict(lambda: {})
     super(CausalValue, self).__init__(name)
 
-
-  def copy(self):
-    self2 = type(self)(None)
-    self2.edges = {obj: list(neighbors)
-                   for obj, neighbors in self.edges.items()}
-    return self2
+  def copy(self, old_state, new_state):
+    self.edges[new_state] = {
+      obj1: dict(obj2_dict)
+      for obj1, obj2_dict in self.edges[old_state].items()
+    }
 
   def add_new_clique(self, objs):
-    # for source in self.edges:
-    #   if source != obj:
-    #     self.edges[source][obj] = None
-    # if obj not in self.edges:
-    #   self.edges[obj] = {x: None for x in self.edges.keys()}
     if len(objs) < 2:
       return
 
@@ -181,16 +175,18 @@ class CausalValue(GeometryEntity):
         if obj1 not in self.edges_tmp[obj2]:
           self.edges_tmp[obj2][obj1] = None
 
-  def merge(self, val):
-    # print('**', {x.name: {a.name: b for a, b in y.items()} for x, y in val.edges.items()})
-    # print('**', {x.name: {a.name: b for a, b in y.items()} for x, y in self.edges.items()})
-    for node, neighbors in val.edges.items():
-      self.edges[node].update(neighbors)
+  def merge(self, val, state):
+    for node, neighbors in val.edges[state].items():
+      if node in self.edges[state]:
+        self.edges[state][node].update(neighbors)
+      else:
+        self.edges[state][node] = dict(neighbors)
 
-  def dependency_path(self, obj1, obj2):
+  def dependency_path(self, obj1, obj2, state):
     # perform a BFS
-    visited = {obj: False for obj in self.edges}
-    parent = {obj: None for obj in self.edges}
+    edges = self.edges[state]
+    visited = {obj: False for obj in edges}
+    parent = {obj: None for obj in edges}
 
     queue = [obj1] 
     visited[obj1] = True
@@ -198,7 +194,7 @@ class CausalValue(GeometryEntity):
     found = False
     while queue:
       s = queue.pop(0)
-      for i in self.edges[s]:
+      for i in edges[s]:
         if i not in visited:
           continue
         if not visited[i]: 
@@ -220,18 +216,23 @@ class CausalValue(GeometryEntity):
       path.append(p)
 
     # return path
-    return [self.edges[p1][p2] for p1, p2 in zip(path[:-1], path[1:])]
+    return [edges[p1][p2] for p1, p2 in zip(path[:-1], path[1:])]
 
   def set_chain_position(self, pos):
     if not hasattr(self, '_chain_position'):
       self._chain_position = pos
 
     # Set the clique
-    for p1, neighbors in self.edges_tmp.items():
+    for _, neighbors in self.edges_tmp.items():
       for p2 in neighbors:
         neighbors[p2] = pos
-      # Merge
-      self.edges[p1].update(neighbors)
+
+  def merge_tmp_clique(self, state):
+    for p1, neighbors in self.edges_tmp.items():
+      if p1 in self.edges[state]:
+        self.edges[state][p1].update(neighbors)
+      else:
+        self.edges[state][p1] = dict(neighbors)
 
 
 class LineDirection(CausalValue):
@@ -258,7 +259,14 @@ class Angle(GeometryEntity):
   pass
 
 
-halfpi = Angle('halfpi')
+halfpi = None
+
+
+def get_halfpi():
+  global halfpi
+  if halfpi is None:
+    halfpi = Angle('halfpi')
+  return halfpi
 
 
 class HalfPlane(GeometryEntity):

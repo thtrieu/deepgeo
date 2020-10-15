@@ -1,6 +1,8 @@
 from geometry import SegmentLength, AngleMeasure, LineDirection
 from geometry import SegmentHasLength, AngleHasMeasure, LineHasDirection
 
+import traceback
+
 
 VALUE_ENTITIES = (
     AngleMeasure, SegmentLength, LineDirection
@@ -79,14 +81,15 @@ def get_state_and_proof_objects(last_action, state):
         yield problem_queue, proof_queue
 
 
-def whittle_from(queue, action_chain, 
+def whittle_from(final_state, queue, action_chain, 
                  goal_objects=None, whittled_state=None):
   # Whittled info will be put into here:
   whittled = [[] for _ in range(len(action_chain))]
-  # We expect empty [] if the corresponding action in action_chain
-  # is not relevant, True, if the whole action is needed
+  # We expect 
+  # empty [] if the corresponding action in action_chain is not relevant, 
+  # True, if the whole action is needed
   # and a list of constructions, if action is not needed but only
-  # part of its conclusion
+  # part of its conclusion.topological_list.
 
   # Keep track of the head of the queue 
   # we don't pop things from queue but move this pointer ahead.
@@ -99,26 +102,35 @@ def whittle_from(queue, action_chain,
     query = queue[i]
     i += 1  # move on.
 
+    # Case 1: the query is a tuple (val, rel1, rel2)
     if isinstance(query, tuple):
       val, rel1, rel2 = query  # what are the dependent of this 3-tuple?
       
       # obj1 and obj2 are the first two dependents
       obj1, obj2 = rel1.init_list[0], rel2.init_list[0]
 
-      # Then there are also others
-      dependents = val.dependency_path(obj1, obj2)
+      # Then there are also others that connects why obj1 == obj2
+      # through transitivity
+      dependents = val.dependency_path(obj1, obj2, final_state) + [obj1, obj2]
+      # dependents are now [int, int, int, ..., obj1, obj2]
 
+      # Make sure such a path of transitivity exists:
       if not all([d is not None for d in dependents]):
         import pdb; pdb.set_trace()
         raise ValueError('Path not found between {} and {} in {}'.format(
             obj1.name, obj2.name,
             {x.name: {a.name: b for a, b in y.items()} for x, y in val.edges.items()}))
 
-      dependents += [obj1, obj2]
+      # Add these dependents to the queue.
       queue.extend(dependents)
       continue
+    
+    # For the remaining cases, there are two information that is needed:
+    # 1. The position of `query` in action_chain
+    # 2. Whether the construction of this `query` is critical.
 
-    # An integer in the queue
+    # Case 2: An integer in the queue
+    # This means the WHOLE action_chain[pos].topological list is needed.
     if isinstance(query, int):
       critical = True
       pos = query
@@ -129,7 +141,7 @@ def whittle_from(queue, action_chain,
       critical = query.critical
 
     # the whole action and its premise is visited.
-    try:
+    try:  # pos = 9, len(whittled_state) = 8
       if (whittled_state and whittled_state[pos] == True 
           or whittled[pos] == True): 
         continue
@@ -174,8 +186,12 @@ def whittle_from(queue, action_chain,
           dependents.append(rel1)
 
     else:  # Non critical
-      found = action.matched_conclusion.topological_list[
-          query.conclusion_position]
+      try:
+        found = action.matched_conclusion.topological_list[
+            query.conclusion_position]
+      except:
+        traceback.print_exc()
+        import pdb; pdb.set_trace()
       whittled[pos].append(found)
       # Here we ignore the relations in `found` themselves
       # because we know that they are created at chain_pos = pos

@@ -8,7 +8,8 @@ from theorems_utils import divides_halfplanes, line_and_halfplanes
 from theorems_utils import have_length, have_measure, have_direction
 from theorems_utils import segment_def, angle_def
 from theorems_utils import diff_side, same_side
-from theorems_utils import Conclusion
+
+from state import State, Conclusion
 
 from geometry import Point, Line, Segment, Angle, HalfPlane, Circle
 from geometry import SegmentLength, AngleMeasure, LineDirection
@@ -101,7 +102,7 @@ def execute_steps(steps, state, canvas, verbose=False):
 def init_by_normal_triangle():
   geometry.reset()
   canvas = sketch.Canvas()
-  state = theorems_utils.State()
+  state = State()
 
   A, B, C = map(Point, 'ABC')
   ab, bc, ca = map(Line, 'ab bc ca'.split())
@@ -119,13 +120,13 @@ def init_by_normal_triangle():
 
   state.add_spatial_relations(canvas.add_triangle(A, B, C, ab, bc, ca))
   canvas.update_hps(state.line2hps)
-  return state, canvas, []
+  return state, canvas, [(theorems.all_theorems['right'], '')]
 
 
 def init_by_isosceles_triangle():
   geometry.reset()
   canvas = sketch.Canvas()
-  state = theorems_utils.State()
+  state = State()
 
   A, B, C = map(Point, 'ABC')
   ab, bc, ca = map(Line, 'ab bc ca'.split())
@@ -144,7 +145,7 @@ def init_by_isosceles_triangle():
 
   state.add_spatial_relations(canvas.add_triangle(A, B, C, ab, bc, ca))
   canvas.update_hps(state.line2hps)
-  return state, canvas, []
+  return state, canvas, [(theorems.all_theorems['right'], '')]
 
 
 def init_by_thales():

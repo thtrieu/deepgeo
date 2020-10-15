@@ -1,7 +1,5 @@
-"""Implement the environment.
+"""Implement the environment."""
 
-
-"""
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -11,7 +9,6 @@ import time
 import os
 import sys
 import glob
-import pickle as pkl
 import traceback
 import profiling
 
@@ -23,6 +20,7 @@ import trieu_graph_match
 import whittling
 import data_gen_lib
 import action_chain_lib
+import debugging
 
 from IPython.display import clear_output
 
@@ -30,7 +28,6 @@ from profiling import Timer
 from geometry import Point, Line, Segment, Angle, HalfPlane, Circle
 from geometry import SegmentLength, AngleMeasure, LineDirection
 
-from matplotlib import pyplot as plt
 
 import tensorflow as tf
 tf.compat.v1.flags.DEFINE_boolean('pdb', False, '')
@@ -41,8 +38,8 @@ tf.compat.v1.flags.DEFINE_string('mode', 'datagen', 'datagen or interactive')
 tf.compat.v1.flags.DEFINE_string('out_dir', '/Users/thtrieu/deepgeo/data_small/', '')
 tf.compat.v1.flags.DEFINE_string('load_chain', '', 'A chain of action to load from')
 
-tf.compat.v1.flags.DEFINE_integer('max_construction', 7, '')
-tf.compat.v1.flags.DEFINE_integer('max_depth', 45, '')
+tf.compat.v1.flags.DEFINE_integer('max_construction', 10, '')
+tf.compat.v1.flags.DEFINE_integer('max_depth', 15, '')
 tf.compat.v1.flags.DEFINE_integer('max_line', 6, '')
 tf.compat.v1.flags.DEFINE_integer('max_point', 8, '')
 tf.compat.v1.flags.DEFINE_integer('max_circle', 0, '')
@@ -58,161 +55,12 @@ non_relations = [
 ]
 
 
-class DebugObjects(object):
-  """Saves the explore chain from root upto current point."""
+db = debugging.get_db()
 
-  def __init__(self):
-    self.state = [None] * 100
-    self.canvas = [None] * 100
-    self.action = [None] * 100
-    self.depth = None
-  
-  def update(self, depth, obj=None):
-    self.depth = depth
-    if isinstance(obj, sketch.Canvas):
-      self.canvas[depth] = obj
-    elif isinstance(obj, theorems_utils.State):
-      self.state[depth] = obj
-    elif isinstance(obj, theorems.Action):
-      self.action[depth] = obj
-    else:
-      raise ValueError('Unrecognized type {}'.format(type(obj)))
 
-  def save_chain(self, filename):
-    i = 1
-    steps = []
-    while i <= self.depth:
-      state, action = self.state[i+1], self.action[i]
-      if action is None:
-        break
-      matching_command = {
-          name: action.mapping[obj].name
-          for name, obj in action.theorem.names.items()}
-
-      # same as mapping, but only map from
-      # theorem -> workspace, not vice versa.
-      new_mapping = {}
-      # to account for new objects created by
-      # spatial relations and not in the matching stage.
-      line2hps = {}
-      for x, y in action.mapping.items():
-        if y not in self.action[i].new_objects:
-          continue
-
-        new_mapping[x.name] = y.name
-        # take care of the hps that are created 
-        # when spatial relations are added.
-        if isinstance(y, Line):
-          hp1, hp2 = state.line2hps[y]
-          line2hps[y.name] = [hp1.name, hp2.name]
-
-      steps.append({
-          'theorem': action.theorem.__class__.__name__,
-          'command_str': ' '.join([
-              '{}={}'.format(x, y) for x, y in 
-              matching_command.items()
-          ]),
-          'mapping': new_mapping,
-          'line2hps': line2hps
-      })
-      i += 1
-    
-    with open(filename, 'wb') as f:
-      pkl.dump(steps, f, protocol=-1)
-
-  def load_chain(self, filename, state, canvas):
-    with open(filename, 'rb') as f:
-      # old chain with old names
-      old_steps = pkl.load(f)
-    
-    state = state.copy()
-    canvas = canvas.copy()
-    # new names go here:
-    result_steps = []
-    old_to_new_names = {}
-    for i, step in enumerate(old_steps):
-      theorem = theorems.theorem_from_name[step['theorem']]
-
-      name_maps = []  # theorem to new_name for this action.
-      for map_str in step['command_str'].split():
-        name_in_theorem, name_in_workspace = map_str.split('=')
-        if name_in_workspace in old_to_new_names:
-          name_in_workspace = old_to_new_names[name_in_workspace]
-        name_maps.append([name_in_theorem, name_in_workspace])
-
-      command_str = ' '.join([
-          '{}={}'.format(x, y)
-          for x, y in name_maps
-      ])
-
-      try:
-        mapping = dict(
-            (theorem.names[a], action_chain_lib._find(state, b))
-            if a in theorem.names
-            else (action_chain_lib._find_premise(theorem.premise_objects, a), 
-                  action_chain_lib._find(state, b))
-            for a, b in name_maps)
-      except Exception:
-        traceback.print_exc()
-        continue
-
-      try:
-        action_gen = theorem.match_from_input_mapping(
-            state, mapping, randomize=False)
-        action = action_gen.next()
-      except StopIteration:
-        raise ValueError('Matching not found {} {}'.format(theorem, command_str))
-
-      action.set_chain_position(i)
-
-      state.add_relations(action.new_objects)
-      line2pointgroups = action.draw(canvas)
-      state.add_spatial_relations(line2pointgroups)
-      canvas.update_hps(state.line2hps)
-
-      for x, y in action.mapping.items():
-        if y not in action.new_objects:
-          continue
-        old_y_name = step['mapping'][x.name]
-        old_to_new_names[old_y_name] = y.name
-        if isinstance(y, Line):
-          hp1, hp2 = state.line2hps[y]
-          hp1_old_name, hp2_old_name = step['line2hps'][old_y_name]
-          old_to_new_names[hp1_old_name] = hp1.name
-          old_to_new_names[hp2_old_name] = hp2.name
-
-      result_steps.append((theorem, command_str))
-      print('Loaded {}'.format(action.to_str()))
-    return result_steps
-
-  def report(self):
-    canvas_state = []
-    print('\nDebug:')
-    for i, (state, canvas, action) in enumerate(
-        zip(self.state, self.canvas, self.action)):
-
-      if (i > self.depth):
-        break
-
-      assert (state is None) == (canvas is None)
-      if state is None:
-        continue
-
-      action_str = action.to_str() if action else 'None'
-      print(i, action_str)
-      canvas_state.append((canvas, state))
-  
-    n = len(canvas_state)
-    nrows = int(np.ceil(n/3.))
-    _, axes = plt.subplots(
-        nrows=nrows, ncols=3, figsize=(nrows * 5, 3 * 5))
-    for i, (canvas, state) in enumerate(canvas_state):
-      ax = axes[i//3, i%3]
-      canvas.plt_show(ax, state, [], mark_segment=0)
-    plt.show()
-      
-
-db = DebugObjects()
+def verbose(*print_args):
+  if FLAGS.verbose:
+    print(*print_args)
                                 
 
 class ExplorationBackoffDFSBase(object):
@@ -258,6 +106,15 @@ class ExplorationBackoffDFSBase(object):
     ]
     self.all_theorems = self.construct_theorems + self.deduct_theorems
 
+  def print_stats(self):
+    if not FLAGS.verbose:
+      os.system('clear')
+    # Profiling different parts of pipeline
+    if FLAGS.enable_profiling:
+      profiling.print_records()
+    # How many proof collected?
+    self.proof_extractor.print_sizes()
+
   def random_action(self, state, depth, canvas):
     if depth <= self.max_construction:
       all_theorems = list(self.construct_theorems)
@@ -300,29 +157,15 @@ class ExplorationBackoffDFSBase(object):
         all_theorems.pop(i)
         continue
 
-  def explore(self, predefined_steps=None, do_pdb=False):
-    while True:
-      self._recursive_explore(
-          [], 
-          self.init_state, 
-          self.init_canvas,
-          predefined_steps=self.predefined_steps,
-          do_pdb=do_pdb)
-
-  def get_actions(self, state, depth, canvas,
-                  predefined_steps):
-    if predefined_steps is None or predefined_steps == []:
+  def get_actions(self, state, depth, canvas):
+    if self.predefined_steps is None or depth >= len(self.predefined_steps):
       # Just do the normal random action sampling
       return self.random_action(state, depth, canvas)
     
-    # if predefined_steps == []: 
-    #   return 0
-
-    step = predefined_steps.pop(0)
+    step = self.predefined_steps[depth]
     theorem, command_str = step
-    if FLAGS.verbose:
-      print(' {}Predefined: {} {}'.format(
-          ' ' * depth, theorem.__class__.__name__, command_str))
+    verbose(' {}Predefined: {} {}'.format(
+            ' ' * depth, theorem.__class__.__name__, command_str))
     name_maps = [c.split('=') for c in command_str.split()]
     try:
       mapping = dict(
@@ -347,17 +190,27 @@ class ExplorationBackoffDFSBase(object):
       yield action
     return action_gen_wrapper()
 
-  def print_stats(self):
-    if not FLAGS.verbose:
-      os.system('clear')
-    # Profiling different parts of pipeline
-    if FLAGS.enable_profiling:
-      profiling.print_records()
-    # How many proof collected?
-    self.proof_extractor.print_sizes()
+  def random_backoff(self):
+    # We randomly sample a backoff point (an integer)
+    # with probability biased towards the beginning of the chain.
+    depth0 = len(self.predefined_steps)
+    if self.max_construction > depth0:
+      x = np.arange(depth0, self.max_construction)
+    else:
+      return depth0
+    backoff = np.random.choice(x, p=x[::-1]*1.0/np.sum(x))
+    self.print_stats()
+    return backoff
+
+  def explore(self, do_pdb=False):
+    while True:
+      self._recursive_explore(
+          [], 
+          self.init_state, 
+          self.init_canvas,
+          do_pdb=do_pdb)
 
   def _recursive_explore(self, action_chain, state, canvas, 
-                         predefined_steps=None, 
                          do_pdb=False, 
                          depth=None):
     """Random Back-off DFS.
@@ -366,40 +219,33 @@ class ExplorationBackoffDFSBase(object):
     If run out of eligible action or reach max_depth, randomly
     sample a backoff point in the current chain and go back there.
     """
-    
-    if depth is None:
-      depth = len(action_chain) + 1
+    # If depth is None, set it to len(action_chain)
+    depth = depth or len(action_chain)
+
+    if action_chain:
+      if not isinstance(action_chain[0].theorem, theorems.ConstructRightAngle):
+        import pdb; pdb.set_trace()
 
     db.update(depth, state)
     db.update(depth, canvas)
 
     if depth > self.max_depth:
-      # Now we randomly sample a backoff point
-      # with probability biased towards the beginning of the chain.
-      # depth0 = len(self.init_action_chain) + 1
-      depth0 = 1
-      x = np.arange(depth0, self.max_construction)
-      backoff = np.random.choice(x, p=x[::-1]*1.0/np.sum(x))
-      if FLAGS.verbose:
-        print('Reach max depth ', depth, ' backoff = ', backoff)
-      self.print_stats()
+      backoff = self.random_backoff()
+      verbose('Reach max depth {}, backoff to {}'.format(depth, backoff))
+      # Return an integer being the random backoff point.
       return backoff
 
-    tab = ' ' * depth
-
     # Timing how long does it take to find 01 eligible action.
-    timer = Timer('action', start=True)
-    actions = self.get_actions(state, depth, canvas, predefined_steps)
+    action_timer = Timer('action', start=True)
+    actions = self.get_actions(state, depth, canvas)
 
     for action in actions:
-      timer.stop()
+      action_timer.stop()
 
-      if FLAGS.verbose:
-        print(tab, depth, action.to_str())
-
+      verbose(' ' * depth, depth, action.to_str())
       db.update(depth, action)
       # This is needed for whittling proof.
-      action.set_chain_position(depth - 1)
+      action.set_chain_position(depth)
       action_chain.append(action)
 
       # Branch the tree by copying state & canvas.
@@ -448,7 +294,6 @@ class ExplorationBackoffDFSBase(object):
 
       backoff = self._recursive_explore(
           action_chain, new_state, new_canvas,
-          predefined_steps=predefined_steps, 
           do_pdb=do_pdb, depth=depth+1)
       action_chain.pop(-1)
 
@@ -456,24 +301,17 @@ class ExplorationBackoffDFSBase(object):
         return backoff
 
       # Timing next action.
-      timer = Timer('action', start=True)
+      action_timer = Timer('action', start=True)
       # end loop
 
-    # At this point, we are out of eligible action to pick:
-    if depth > 1:
-      # Random backoff
-      # depth0 = len(self.init_action_chain) + 1
-      depth0 = 1
-      x = np.arange(depth0, self.max_construction)
-      backoff = np.random.choice(x, p=x[::-1]*1.0/np.sum(x))
-      if FLAGS.verbose:
-        print('Out of option at depth ', depth, ' backoff = ', backoff)
-      self.print_stats()
+    # At this point, we are out of eligible action to pick,
+    if depth > len(self.predefined_steps):
+      backoff = self.random_backoff()
+      verbose('Out of option at depth ', depth, ' backoff = ', backoff)
       return backoff
 
-    # Out of option at depth = 1, do it again.
-    if FLAGS.verbose:
-      print('Out of option at depth 1, start a new Backoff DFS.')
+    # Else, out of option at depth <= len(self.predefined_steps), do it again.
+    verbose('Out of option at depth {}, start a new Backoff DFS.'.format(depth))
     self.print_stats()
 
 
@@ -697,12 +535,14 @@ class ProofExtractor(object):
       # on top of init_state to produce the theorem premise.
       with Timer('proof/whittle'):
         theorem_premise_constructions = whittling.whittle_from(
+            full_state,
             list(equal_obj1_obj2),  # make a copy
             action_chain)
 
         # proof_steps are the actions on top of theorem_premise
         # to drive to the conclusion.
         proof_steps = whittling.whittle_from(
+            full_state,
             [val_rel1_rel2],  # make a copy
             action_chain, 
             equal_obj1_obj2, 
@@ -836,19 +676,18 @@ class ProofExtractor(object):
     assert len(state.name2obj) + 1 <= self.max_state_size
     match = {y: action.mapping[y]
              for x, y in action.theorem.names.items()}
-    action_gen = action.theorem.match_from_input_mapping(
-      state, match)
 
+    # Assert that this action is eligible given state.
     try:
+      action_gen = action.theorem.match_from_input_mapping(
+        state, match)
       action_gen.next()
     except StopIteration:
       match = {x: action.mapping[y].name
                for x, y in action.theorem.names.items()}
       # It is possible that adding redundant actions breaks the
       # applicability of the proof.
-      if FLAGS.verbose:
-        print(match)
-        print('Failed matching {} {}'.format(action.theorem.name, match))
+      verbose('Failed matching {} {}'.format(action.theorem.name, match))
       return None
 
     state_obj_ids, _, obj2idx, attention_mask = data_gen_lib.serialize_state(state)

@@ -15,7 +15,7 @@ import data_gen_lib
 
 from tensor2tensor.bin import t2t_trainer
 
-from theorems_utils import State
+from state import State
 from geometry import Point, Line, Segment, HalfPlane, Angle
 from geometry import SegmentLength, AngleMeasure, LineDirection
 

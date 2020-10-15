@@ -18,7 +18,7 @@ from theorems_utils import divides_halfplanes, line_and_halfplanes
 from theorems_utils import have_length, have_measure, have_direction
 from theorems_utils import segment_def, angle_def
 from theorems_utils import diff_side, same_side
-from theorems_utils import Conclusion
+from state import State, Conclusion
 
 from geometry import Point, Line, Segment, Angle, HalfPlane, Circle
 from geometry import SegmentLength, AngleMeasure, LineDirection
@@ -243,25 +243,39 @@ class OppositeAnglesCheck(Check):
     self.equals = [angle11, angle22]
 
 
-class ConstructNormalTriangle(FundamentalTheorem):
+# class ConstructNormalTriangle(FundamentalTheorem):
+
+#   def __init__(self):
+
+#     A, B, C = map(Point, 'ABC')
+#     ab, bc, ca = map(Line, 'ab bc ca'.split())
+#     AB, BC, CA = map(Segment, 'AB BC CA'.split())
+
+#     self.conclusion = Conclusion()
+#     state.add_relations(
+#         [A, B, C, ab, bc, ca, AB, BC, CA] +
+#         segment_def(AB, A, B) +
+#         segment_def(BC, B, C) +
+#         segment_def(CA, C, A) +
+#         collinear(ab, A, B) +
+#         collinear(bc, B, C) +
+#         collinear(ca, C, A)
+#     )
+
+
+class ConstructRightAngle(FundamentalTheorem):
 
   def __init__(self):
-
-    A, B, C = map(Point, 'ABC')
-    ab, bc, ca = map(Line, 'ab bc ca'.split())
-    AB, BC, CA = map(Segment, 'AB BC CA'.split())
+    self.premise = []
 
     self.conclusion = Conclusion()
-    state.add_relations(
-        [A, B, C, ab, bc, ca, AB, BC, CA] +
-        segment_def(AB, A, B) +
-        segment_def(BC, B, C) +
-        segment_def(CA, C, A) +
-        collinear(ab, A, B) +
-        collinear(bc, B, C) +
-        collinear(ca, C, A)
-    )
 
+    halfpi = geometry.get_halfpi()
+    halfpi_measure = AngleMeasure('^90degree')
+    self.conclusion.add_critical(
+        *have_measure(halfpi_measure, halfpi))
+    self.names = {}
+    super(ConstructRightAngle, self).__init__()
 
 
 class ConstructMidPoint(FundamentalTheorem):
@@ -720,8 +734,6 @@ class ParallelBecauseInteriorAngles(FundamentalTheorem):
     d = LineDirection('d')
     self.conclusion.add(LineHasDirection(l2, d))
     self.conclusion.add_critical(LineHasDirection(l3, d))
-    # self.conclusion.add_critical(LineHasDirection(l2, d),
-    #                              LineHasDirection(l3, d))
 
     self.names = dict(l=l1, l1=l2, l2=l3)
     super(ParallelBecauseInteriorAngles, self).__init__()
@@ -756,13 +768,9 @@ class EqualAnglesBecauseParallel(FundamentalTheorem):
     m1, m2 = AngleMeasure('1"'), AngleMeasure('2"')
     self.conclusion.add(AngleHasMeasure(angle11, m1))
     self.conclusion.add_critical(AngleHasMeasure(angle22, m1))
-    # self.conclusion.add_critical(AngleHasMeasure(angle11, m1),
-    #                              AngleHasMeasure(angle22, m1))
 
     self.conclusion.add(AngleHasMeasure(angle12, m2))
     self.conclusion.add_critical(AngleHasMeasure(angle21, m2))
-    # self.conclusion.add_critical(AngleHasMeasure(angle12, m2),
-    #                              AngleHasMeasure(angle21, m2))
 
     self.names = dict(l=l, l1=l1, l2=l2)
     super(EqualAnglesBecauseParallel, self).__init__()
@@ -1106,6 +1114,7 @@ class ASA(Congruences):
 
 
 all_theorems = {
+    'right': ConstructRightAngle(),
     'mid': ConstructMidPoint(),  # 0.000365972518921
     'mirror': ConstructMirrorPoint(),
     'bisect': ConstructAngleBisector(),
