@@ -35,6 +35,7 @@ from geometry import SegmentLength, AngleMeasure, LineDirection
 import tensorflow as tf
 # tf.compat.v1.flags.DEFINE_boolean('pdb', False, '')
 tf.compat.v1.flags.DEFINE_boolean('verbose', False, '')
+tf.compat.v1.flags.DEFINE_boolean('clear_screen', True, '')
 tf.compat.v1.flags.DEFINE_boolean('enable_profiling', False, '')
 
 tf.compat.v1.flags.DEFINE_string('mode', 'datagen', 'datagen or interactive')
@@ -110,7 +111,7 @@ class ExplorationBackoffDFSBase(object):
     self.all_theorems = self.construct_theorems + self.deduct_theorems
 
   def print_stats(self):
-    if not FLAGS.verbose:
+    if not FLAGS.verbose and FLAGS.clear_screen:
       os.system('clear')
     # Profiling different parts of pipeline
     if FLAGS.enable_profiling:
