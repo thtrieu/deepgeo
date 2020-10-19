@@ -16,3 +16,4 @@ cython_graph_match.c
 build/*
 .vscode/settings.json
 *.pkl
+*sbatch*
