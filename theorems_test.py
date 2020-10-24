@@ -13,6 +13,7 @@ import action_chain_lib
 import theorems
 import sketch
 import explore
+import debugging
 import state
 
 from theorems_utils import *
@@ -538,7 +539,7 @@ def test_thales_whittle1():
   # action = used_theorems['asa'].match_one_random(proved_problem)
   # assert action is None
 
-
+  
 def test_thales_whittle2():
   geometry.reset()
   init_state, init_canvas = triangle_seed()
@@ -1179,9 +1180,226 @@ def whittle(final_state, state_queue, proof_queue, action_chain,
   print()
   return new_state, new_canvas, proof_steps
 
-def hey():
-  a = [(PointEndsSegment, Point, 'A', Segment, 'AB'), (PointEndsSegment, Point, 'B', Segment, 'AB'), (PointEndsSegment, Point, 'B', Segment, 'BC'), (PointEndsSegment, Point, 'C', Segment, 'BC'), (PointEndsSegment, Point, 'C', Segment, 'CA'), (PointEndsSegment, Point, 'A', Segment, 'CA'), (LineContainsPoint, Line, 'ab', Point, 'A'), (LineContainsPoint, Line, 'ab', Point, 'B'), (LineContainsPoint, Line, 'bc', Point, 'B'), (LineContainsPoint, Line, 'bc', Point, 'C'), (LineContainsPoint, Line, 'ca', Point, 'C'), (LineContainsPoint, Line, 'ca', Point, 'A'), (LineBordersHalfplane, Line, 'ab', HalfPlane, 'ab_hp1'), (LineBordersHalfplane, Line, 'ab', HalfPlane, 'ab_hp2'), (HalfPlaneContainsPoint, HalfPlane, 'ab_hp2', Point, 'C'), (LineBordersHalfplane, Line, 'bc', HalfPlane, 'bc_hp1'), (LineBordersHalfplane, Line, 'bc', HalfPlane, 'bc_hp2'), (HalfPlaneContainsPoint, HalfPlane, 'bc_hp2', Point, 'A'), (LineBordersHalfplane, Line, 'ca', HalfPlane, 'ca_hp1'), (LineBordersHalfplane, Line, 'ca', HalfPlane, 'ca_hp2'), (HalfPlaneContainsPoint, HalfPlane, 'ca_hp2', Point, 'B'), (SegmentHasLength, Segment, 'CA', SegmentLength, '740m'), (LineContainsPoint, Line, 'ca', Point, 'P150'), (PointEndsSegment, Point, 'C', Segment, 's276'), (PointEndsSegment, Point, 'P150', Segment, 's276'), (SegmentHasLength, Segment, 's276', SegmentLength, '740m'), (HalfPlaneContainsPoint, HalfPlane, 'ab_hp2', Point, 'P150'), (HalfPlaneContainsPoint, HalfPlane, 'bc_hp1', Point, 'P150'), (LineHasDirection, Line, 'bc', LineDirection, 'd25'), (LineContainsPoint, Line, 'l94', Point, 'A'), (LineHasDirection, Line, 'l94', LineDirection, 'd25'), (LineBordersHalfplane, Line, 'l94', HalfPlane, 'l94_hp1'), (LineBordersHalfplane, Line, 'l94', HalfPlane, 'l94_hp2'), (HalfPlaneContainsPoint, HalfPlane, 'l94_hp1', Point, 'B'), (HalfPlaneContainsPoint, HalfPlane, 'l94_hp1', Point, 'C'), (HalfPlaneContainsPoint, HalfPlane, 'l94_hp1', Point, 'P150'), (LineContainsPoint, Line, 'l97', Point, 'P150'), (LineHasDirection, Line, 'l97', LineDirection, 'd25'), (LineBordersHalfplane, Line, 'l97', HalfPlane, 'l97_hp1'), (LineBordersHalfplane, Line, 'l97', HalfPlane, 'l97_hp2'), (HalfPlaneContainsPoint, HalfPlane, 'l97_hp2', Point, 'A'), (HalfPlaneContainsPoint, HalfPlane, 'l97_hp2', Point, 'B'), (HalfPlaneContainsPoint, HalfPlane, 'l97_hp2', Point, 'C'), (LineHasDirection, Line, 'ab', LineDirection, 'd26'), (LineContainsPoint, Line, 'l98', Point, 'C'), (LineHasDirection, Line, 'l98', LineDirection, 'd26'), (LineBordersHalfplane, Line, 'l98', HalfPlane, 'l98_hp1'), (LineBordersHalfplane, Line, 'l98', HalfPlane, 'l98_hp2'), (HalfPlaneContainsPoint, HalfPlane, 'l98_hp1', Point, 'A'), (HalfPlaneContainsPoint, HalfPlane, 'l98_hp1', Point, 'B'), (HalfPlaneContainsPoint, HalfPlane, 'l98_hp2', Point, 'P150'), (LineContainsPoint, Line, 'l99', Point, 'B'), (LineBordersHalfplane, Line, 'l99', HalfPlane, '.77'), (LineBordersHalfplane, Line, 'l99', HalfPlane, '.78'), (HalfplaneCoversAngle, HalfPlane, '.77', Angle, '^968'), (HalfplaneCoversAngle, HalfPlane, 'ab_hp1', Angle, '^968'), (HalfplaneCoversAngle, HalfPlane, '.77', Angle, '^969'), (HalfplaneCoversAngle, HalfPlane, 'bc_hp1', Angle, '^969'), (HalfplaneCoversAngle, HalfPlane, '.78', Angle, '^970'), (HalfplaneCoversAngle, HalfPlane, 'ab_hp1', Angle, '^970'), (HalfplaneCoversAngle, HalfPlane, '.78', Angle, '^971'), (HalfplaneCoversAngle, HalfPlane, 'bc_hp1', Angle, '^971'), (AngleHasMeasure, Angle, '^968', AngleMeasure, '531"'), (AngleHasMeasure, Angle, '^971', AngleMeasure, '531"'), (AngleHasMeasure, Angle, '^969', AngleMeasure, '532"'), (AngleHasMeasure, Angle, '^970', AngleMeasure, '532"'), (HalfPlaneContainsPoint, HalfPlane, '.77', Point, 'C'), (HalfPlaneContainsPoint, HalfPlane, '.77', Point, 'P150'), (HalfPlaneContainsPoint, HalfPlane, '.78', Point, 'A'), (LineContainsPoint, Line, 'l100', Point, 'A'), (LineBordersHalfplane, Line, 'l100', HalfPlane, '.79'), (LineBordersHalfplane, Line, 'l100', HalfPlane, '.80'), (HalfplaneCoversAngle, HalfPlane, '.79', Angle, '^972'), (HalfplaneCoversAngle, HalfPlane, 'ca_hp2', Angle, '^972'), (HalfplaneCoversAngle, HalfPlane, '.79', Angle, '^973'), (HalfplaneCoversAngle, HalfPlane, 'l94_hp1', Angle, '^973'), (HalfplaneCoversAngle, HalfPlane, '.80', Angle, '^974'), (HalfplaneCoversAngle, HalfPlane, 'ca_hp2', Angle, '^974'), (HalfplaneCoversAngle, HalfPlane, '.80', Angle, '^975'), (HalfplaneCoversAngle, HalfPlane, 'l94_hp1', Angle, '^975'), (AngleHasMeasure, Angle, '^972', AngleMeasure, '533"'), (AngleHasMeasure, Angle, '^975', AngleMeasure, '533"'), (AngleHasMeasure, Angle, '^973', AngleMeasure, '534"'), (AngleHasMeasure, Angle, '^974', AngleMeasure, '534"'), (HalfPlaneContainsPoint, HalfPlane, '.80', Point, 'B'), (HalfPlaneContainsPoint, HalfPlane, '.80', Point, 'C'), (HalfPlaneContainsPoint, HalfPlane, '.80', Point, 'P150'), (LineContainsPoint, Line, 'l101', Point, 'A'), (LineBordersHalfplane, Line, 'l101', HalfPlane, '.81'), (LineBordersHalfplane, Line, 'l101', HalfPlane, '.82'), (HalfplaneCoversAngle, HalfPlane, '.81', Angle, '^976'), (HalfplaneCoversAngle, HalfPlane, 'ab_hp2', Angle, '^976'), (HalfplaneCoversAngle, HalfPlane, '.81', Angle, '^977'), (HalfplaneCoversAngle, HalfPlane, 'ca_hp1', Angle, '^977'), (HalfplaneCoversAngle, HalfPlane, '.82', Angle, '^978'), (HalfplaneCoversAngle, HalfPlane, 'ab_hp2', Angle, '^978'), (HalfplaneCoversAngle, HalfPlane, '.82', Angle, '^979'), (HalfplaneCoversAngle, HalfPlane, 'ca_hp1', Angle, '^979'), (AngleHasMeasure, Angle, '^976', AngleMeasure, '535"'), (AngleHasMeasure, Angle, '^979', AngleMeasure, '535"'), (AngleHasMeasure, Angle, '^977', AngleMeasure, '536"'), (AngleHasMeasure, Angle, '^978', AngleMeasure, '536"'), (HalfPlaneContainsPoint, HalfPlane, '.81', Point, 'B'), (HalfPlaneContainsPoint, HalfPlane, '.81', Point, 'C'), (HalfPlaneContainsPoint, HalfPlane, '.81', Point, 'P150'), (HalfplaneCoversAngle, HalfPlane, 'ca_hp1', Angle, '^980'), (HalfplaneCoversAngle, HalfPlane, 'l98_hp1', Angle, '^980'), (HalfplaneCoversAngle, HalfPlane, 'ca_hp1', Angle, '^981'), (HalfplaneCoversAngle, HalfPlane, 'ab_hp2', Angle, '^981'), (HalfplaneCoversAngle, HalfPlane, 'ca_hp2', Angle, '^982'), (HalfplaneCoversAngle, HalfPlane, 'l98_hp1', Angle, '^982'), (HalfplaneCoversAngle, HalfPlane, 'ca_hp2', Angle, '^983'), (HalfplaneCoversAngle, HalfPlane, 'ab_hp2', Angle, '^983'), (AngleHasMeasure, Angle, '^980', AngleMeasure, '537"'), (AngleHasMeasure, Angle, '^983', AngleMeasure, '537"'), (AngleHasMeasure, Angle, '^981', AngleMeasure, '538"'), (AngleHasMeasure, Angle, '^982', AngleMeasure, '538"'), (HalfplaneCoversAngle, HalfPlane, 'ca_hp1', Angle, '^984'), (HalfplaneCoversAngle, HalfPlane, 'l94_hp1', Angle, '^984'), (HalfplaneCoversAngle, HalfPlane, 'ca_hp1', Angle, '^985'), (HalfplaneCoversAngle, HalfPlane, 'l97_hp2', Angle, '^985'), (HalfplaneCoversAngle, HalfPlane, 'ca_hp2', Angle, '^986'), (HalfplaneCoversAngle, HalfPlane, 'l94_hp1', Angle, '^986'), (HalfplaneCoversAngle, HalfPlane, 'ca_hp2', Angle, '^987'), (HalfplaneCoversAngle, HalfPlane, 'l97_hp2', Angle, '^987'), (AngleHasMeasure, Angle, '^984', AngleMeasure, '546"'), (AngleHasMeasure, Angle, '^987', AngleMeasure, '546"'), (AngleHasMeasure, Angle, '^985', AngleMeasure, '540"'), (AngleHasMeasure, Angle, '^986', AngleMeasure, '540"'), (HalfplaneCoversAngle, HalfPlane, 'ca_hp1', Angle, '^988'), (HalfplaneCoversAngle, HalfPlane, 'bc_hp1', Angle, '^988'), (HalfplaneCoversAngle, HalfPlane, 'ca_hp2', Angle, '^989'), (HalfplaneCoversAngle, HalfPlane, 'bc_hp1', Angle, '^989'), (AngleHasMeasure, Angle, '^988', AngleMeasure, '546"'), (AngleHasMeasure, Angle, '^989', AngleMeasure, '540"'), (HalfplaneCoversAngle, HalfPlane, 'ab_hp2', Angle, '^990'), (HalfplaneCoversAngle, HalfPlane, 'l94_hp1', Angle, '^990'), (HalfplaneCoversAngle, HalfPlane, 'ab_hp2', Angle, '^991'), (HalfplaneCoversAngle, HalfPlane, 'bc_hp2', Angle, '^991'), (HalfplaneCoversAngle, HalfPlane, 'ab_hp1', Angle, '^992'), (HalfplaneCoversAngle, HalfPlane, 'l94_hp1', Angle, '^992'), (HalfplaneCoversAngle, HalfPlane, 'ab_hp1', Angle, '^993'), (HalfplaneCoversAngle, HalfPlane, 'bc_hp2', Angle, '^993'), (AngleHasMeasure, Angle, '^990', AngleMeasure, '542"'), (AngleHasMeasure, Angle, '^993', AngleMeasure, '542"'), (AngleHasMeasure, Angle, '^991', AngleMeasure, '544"'), (AngleHasMeasure, Angle, '^992', AngleMeasure, '544"'), (HalfplaneCoversAngle, HalfPlane, 'bc_hp1', Angle, '^994'), (HalfplaneCoversAngle, HalfPlane, 'l98_hp1', Angle, '^994'), (HalfplaneCoversAngle, HalfPlane, 'bc_hp1', Angle, '^995'), (HalfplaneCoversAngle, HalfPlane, 'ab_hp2', Angle, '^995'), (HalfplaneCoversAngle, HalfPlane, 'bc_hp2', Angle, '^996'), (HalfplaneCoversAngle, HalfPlane, 'l98_hp1', Angle, '^996'), (AngleHasMeasure, Angle, '^994', AngleMeasure, '544"'), (AngleHasMeasure, Angle, '^995', AngleMeasure, '545"'), (AngleHasMeasure, Angle, '^996', AngleMeasure, '545"'), (HalfplaneCoversAngle, HalfPlane, 'ca_hp2', Angle, '^997'), (HalfplaneCoversAngle, HalfPlane, 'bc_hp2', Angle, '^997'), (HalfplaneCoversAngle, HalfPlane, 'ca_hp1', Angle, '^998'), (HalfplaneCoversAngle, HalfPlane, 'bc_hp2', Angle, '^998'), (AngleHasMeasure, Angle, '^997', AngleMeasure, '546"'), (AngleHasMeasure, Angle, '^998', AngleMeasure, '540"')]
 
+def test_sss_isosceles():
+  geometry.reset()
+
+  init_canvas = sketch.Canvas()
+  init_state = State()
+
+  A, B, C = map(Point, 'ABC')
+  ab, bc, ca = map(Line, 'ab bc ca'.split())
+  AB, BC, CA = map(Segment, 'AB BC CA'.split())
+
+  init_state.add_relations(
+      # [A, B, C, AB, BC, CA, ab, bc, ca] +
+      segment_def(AB, A, B) +
+      segment_def(BC, B, C) +
+      segment_def(CA, C, A) +
+      collinear(ab, A, B) +
+      collinear(bc, B, C) +
+      collinear(ca, C, A) +
+      have_length('1m', AB, CA)
+  )
+
+  init_state.add_spatial_relations(
+      init_canvas.add_triangle(A, B, C, ab, bc, ca))
+
+  state, canvas = init_state.copy(), init_canvas.copy()
+
+  # Original thales + noises
+  steps = [
+      (used_theorems['sss'], 'A=A B=B C=C D=A E=C F=B')
+  ]
+
+  print('\nRunning SSS isosceles test:')
+  action_chain_lib.execute_steps(steps, state, canvas)
+
+
+def test_asa_isosceles():
+  geometry.reset()
+
+  init_canvas = sketch.Canvas()
+  init_state = State()
+
+  A, B, C = map(Point, 'ABC')
+  ab, bc, ca = map(Line, 'ab bc ca'.split())
+  AB, BC, CA = map(Segment, 'AB BC CA'.split())
+  ab_hp, bc_hp, ca_hp = map(HalfPlane, 'ab_hp bc_hp ca_hp'.split())
+
+  ABC, BCA = Angle('ABC'), Angle('BCA')
+
+  init_state.add_relations(
+      segment_def(AB, A, B) +
+      segment_def(BC, B, C) +
+      segment_def(CA, C, A) +
+      collinear(ab, A, B) +
+      collinear(bc, B, C) +
+      collinear(ca, C, A) +
+      divides_halfplanes(ab, ab_hp, p1=C) +
+      divides_halfplanes(ca, ca_hp, p1=B) +
+      divides_halfplanes(bc, bc_hp, p1=A) +
+      angle_def(ABC, ab_hp, bc_hp) +
+      angle_def(BCA, bc_hp, ca_hp) +
+      have_measure('^1', ABC, BCA)
+  )
+
+  init_state.add_spatial_relations(
+      init_canvas.add_triangle(A, B, C, ab, bc, ca))
+
+  state, canvas = init_state.copy(), init_canvas.copy()
+
+  # Original thales + noises
+  steps = [
+      (used_theorems['asa'], 'B=A C=B A=C D=B F=C de=ab ef=ca')
+  ]
+
+  # db = debugging.get_db()
+  # best, miss = db.why_fail_to_match(
+  #     used_theorems['asa'], state, command_str='B=A C=B A=C E=A D=B F=C')
+
+  print('\nRunning ASA isosceles test:')
+  action_chain_lib.execute_steps(steps, state, canvas)
+
+
+def test_sas_isosceles():
+  geometry.reset()
+
+  init_canvas = sketch.Canvas()
+  init_state = State()
+
+  A, B, C = map(Point, 'ABC')
+  ab, bc, ca = map(Line, 'ab bc ca'.split())
+  AB, BC, CA = map(Segment, 'AB BC CA'.split())
+  ab_hp, ca_hp = map(HalfPlane, 'ab_hp ca_hp'.split())
+  CAB = Angle('CAB')
+
+  init_state.add_relations(
+      segment_def(AB, A, B) +
+      segment_def(BC, B, C) +
+      segment_def(CA, C, A) +
+      collinear(ab, A, B) +
+      collinear(bc, B, C) +
+      collinear(ca, C, A) +
+      divides_halfplanes(ab, ab_hp, p1=C) +
+      divides_halfplanes(ca, ca_hp, p1=B) +
+      angle_def(CAB, ab_hp, ca_hp) + 
+      have_length('1m', AB, CA)
+  )
+
+  init_state.add_spatial_relations(
+      init_canvas.add_triangle(A, B, C, ab, bc, ca))
+
+  state, canvas = init_state.copy(), init_canvas.copy()
+
+  # Original thales + noises
+  steps = [
+      (used_theorems['sas'], 'B=A A=B C=C E=A D=C F=B')
+  ]
+
+  # db = debugging.get_db()
+  # best, miss = db.why_fail_to_match(
+  #     used_theorems['sas'], state, command_str='B=A A=B C=C E=A D=C F=B')
+  # print(state.name_map(miss))
+
+  print('\nRunning SAS isosceles test:')
+  action_chain_lib.execute_steps(steps, state, canvas)
+
+
+def test_thales_merge_midpoint():
+  geometry.reset()
+  init_state, init_canvas = triangle_seed()
+  state, canvas = init_state.copy(), init_canvas.copy()
+
+  # Original thales + noises
+  steps = [
+      (used_theorems['mid'], 'A=A B=B'),  # P1
+      (used_theorems['parallel'], 'A=A l=bc'),  # l1  noise
+      (used_theorems['parallel'], 'A=P1 l=bc'),  # l2
+      (used_theorems['seg_line'], 'l=l2 A=A B=C'),  # P2
+      (used_theorems['mid'], 'A=A B=C'),  # P3
+      # -------------------------------------------------------
+      (used_theorems['parallel'], 'A=C l=ab'),  # l3
+      (used_theorems['line'], 'A=P1 B=C'),  # l4
+      (used_theorems['parallel'], 'A=B l=ca'),  # l5  noise
+      # -------------------------------------------------------
+      (used_theorems['eq'], 'l=l4 l1=ab l2=l3'),
+      (used_theorems['eq'], 'l=l4 l1=l2 l2=bc'),
+      (used_theorems['eq'], 'l=ab l1=l1 l2=bc'),  # noise
+      (used_theorems['asa'], 'A=P1 B=B C=C D=C F=P1 de=l3 ef=l2'),  # P4
+      (used_theorems['eq'], 'l=ca l1=ab l2=l3'),
+      (used_theorems['eq'], 'l=bc l1=ca l2=l5'),  # noise
+      (used_theorems['eq'], 'l=l2 l1=ab l2=l3'),
+      (used_theorems['asa'], 'A=A B=P2 C=P1 D=C F=P4 de=ca ef=l2'),
+      (used_theorems['unq_mid_point'], 'A=A B=C M=P2 N=P3')
+  ]
+
+  print('\nRunning thales merge test:')
+  state, canvas, action_chain = action_chain_lib.execute_steps(steps, state, canvas)
+
+  # Extract state queue & proof queue that prove P2 is mid AC
+  # conclusion = action_chain[-1].matched_conclusion
+
+  state_queue, proof_queue = get_state_and_proof_objects(action_chain[-1], '10m')
+
+  s = time.time()
+  problem, problem_canvas, proof_steps = whittle(
+      state, state_queue, proof_queue, action_chain,
+      init_state, init_canvas, canvas)
+  print('thales whittle time ', time.time()-s)
+
+  # Test if we are having the correct problem statement
+  assert len(problem_canvas.points) == 5
+  assert len(problem_canvas.lines) == 4
+  assert len(problem_canvas.circles) == 0
+  assert len(problem.name2obj) == 26, len(problem.name2obj)
+
+  # Test if we have the correct proof steps
+  chosen_proof_steps = [i for i, step in enumerate(proof_steps)
+                        if step is not None]
+  assert len(chosen_proof_steps) == 8
+  assert chosen_proof_steps == [4, 5, 7, 8, 10, 11, 13, 14]
+
+  # Test if the correct proof step applied on the problem statement
+  # give the correct solution
+  print('Proof execution:')
+  steps = [
+      (used_theorems['parallel'], 'A=C l=ab'),  # l6
+      (used_theorems['line'], 'A=P1 B=C'),  # l7
+      # -------------------------------------------------------
+      (used_theorems['eq'], 'l=l7 l1=ab l2=l6'),
+      (used_theorems['eq'], 'l=l7 l1=l2 l2=bc'),
+      (used_theorems['asa'], 'A=P1 B=B C=C D=C F=P1 de=l6 ef=l2'),  # P4
+      (used_theorems['eq'], 'l=ca l1=ab l2=l6'),
+      (used_theorems['eq'], 'l=l2 l1=ab l2=l6'),
+      (used_theorems['asa'], 'A=A B=P2 C=P1 D=C F=P4 de=ca ef=l2')
+  ]
+
+  proved_problem, proved_canvas, _ = action_chain_lib.execute_steps(
+      steps, problem, problem_canvas)
+
+  assert len(proved_canvas.points) == 6
+  assert len(proved_canvas.lines) == 6
+  assert len(proved_canvas.circles) == 0
+  assert len(proved_problem.name2obj) == 70, len(proved_problem.name2obj)
+  # action = used_theorems['asa'].match_one_random(proved_problem)
+  # assert action is None
+
+
+def test_merge_line_direction():
+  geometry.reset()
+  init_state, init_canvas = triangle_seed()
+  state, canvas = init_state.copy(), init_canvas.copy()
+
+  # Original thales + noises
+  steps = [
+      (used_theorems['perp_out'], 'A=A l=bc'),  # l1
+      (used_theorems['perp_on'], 'A=A l=l1'),  # l1  noise
+      (used_theorems['parallel'], 'A=A l=bc'),  # l2
+  ]
+
+  print('\nRunning thales merge test:')
+  state, canvas, action_chain = action_chain_lib.execute_steps(steps, state, canvas)
 
 
 if __name__ == '__main__':
@@ -1204,5 +1422,11 @@ if __name__ == '__main__':
   sas()
   time_sas()
   state_merge_and_copy()
-  print('OK')
+  test_sss_isosceles()
+  test_asa_isosceles()
+  test_sas_isosceles()
+
+  # test_thales_merge_midpoint()
+  # test_merge_line_direction()
+  print('\n [OK!]')
   print('Total time = {}'.format(time.time()-t))

@@ -92,6 +92,7 @@ class ExplorationBackoffDFSBase(object):
 
     self.proof_extractor = ProofExtractor(out_dir)
     self.construct_theorems = [
+        # theorems.all_theorems['unq_line_dir'],
         theorems.all_theorems['mid'],
         theorems.all_theorems['mirror'],
         theorems.all_theorems['seg_line'],
@@ -161,7 +162,7 @@ class ExplorationBackoffDFSBase(object):
         all_theorems.pop(i)
         continue
 
-  def get_actions(self, state, depth, canvas):
+  def get_eligible_actions(self, state, depth, canvas):
     if self.predefined_steps is None or depth >= len(self.predefined_steps):
       # Just do the normal random action sampling
       return self.random_action(state, depth, canvas)
@@ -217,16 +218,12 @@ class ExplorationBackoffDFSBase(object):
                          depth=None):
     """Random Back-off DFS.
 
-    Recursively call itself to explore the space in backoff DFS manner.
-    If run out of eligible action or reach max_depth, randomly
+    Recursively call itself to explore the space in random-backoff-DFS manner,
+    i.e., if run out of eligible action or reach max_depth, randomly
     sample a backoff point in the current chain and go back there.
     """
     # If depth is None, set it to len(action_chain)
     depth = depth or len(action_chain)
-
-    if action_chain:
-      if not isinstance(action_chain[0].theorem, theorems.ConstructRightAngle):
-        import pdb; pdb.set_trace()
 
     db.update(depth, state)
     db.update(depth, canvas)
@@ -239,16 +236,17 @@ class ExplorationBackoffDFSBase(object):
 
     # Timing how long does it take to find 01 eligible action.
     action_timer = Timer('action', start=True)
-    actions = self.get_actions(state, depth, canvas)
-
-    for action in actions:
+    for action in self.get_eligible_actions(state, depth, canvas):
       action_timer.stop()
 
       verbose(' ' * depth, depth, action.to_str())
-      db.update(depth, action)
-      # This is needed for whittling proof.
-      action.set_chain_position(depth)
+      db.update(depth, action)  # log for debugging
+
       action_chain.append(action)
+
+      # The position in the chain, i.e. depth, is needed
+      # for whittling proof.
+      action.set_chain_position(depth)
 
       # Branch the tree by copying state & canvas.
       with Timer('copy'):
@@ -259,20 +257,22 @@ class ExplorationBackoffDFSBase(object):
         try:
           new_state.add_relations(action.new_objects)
         except ValueError:
-          # Not happening, but if it does, back to 1.
+          # If this ever happens ...
           traceback.print_exc()
           db.report()
           db.save_chain('save.pkl')
           import pdb; pdb.set_trace()
           exit()
 
-      # By drawing we add spatial relations (point in halfplanes)
-      # to the state through inspection.
-      # spatial_relations is dict(line: [a1, a2, ..], [b1, b2, ..])
-      # where a1, a2 are points on the same halfplane and so are b1, b2..
+      # Now we use numerical tool to
+      # draw what have been done by action, 
+      # which results in new topological relations (point in halfplanes)
       with Timer('draw'):
         line2pointgroups = action.draw(new_canvas)
+        # line2pointgroups = {line: point_list1, point_list2}
 
+      # Add these topological relations to new_state
+      # And update halfplanes info to new_canvas.
       with Timer('spatial'):
         new_state.add_spatial_relations(line2pointgroups)
         new_canvas.update_hps(new_state.line2hps)
@@ -280,13 +280,13 @@ class ExplorationBackoffDFSBase(object):
       db.update(depth+1, new_state)
       db.update(depth+1, new_canvas)
 
+      # Now figure out all possible proof discovered 
+      # by this action.
       with Timer('proof'):
         try:
           self.proof_extractor.collect_proof(
               action_chain, self.init_state, self.init_canvas, 
               new_state)
-          # if depth >= 10:
-          #   raise ValueError('Debug for depth >= 10')
         except:
           traceback.print_exc()
           db.report()
@@ -294,11 +294,16 @@ class ExplorationBackoffDFSBase(object):
           import pdb; pdb.set_trace()
           exit()
 
+      # Go to next depth in the exploration tree.
       backoff = self._recursive_explore(
           action_chain, new_state, new_canvas,
           depth=depth+1)
+      
+      # Pop to prepare for the next eligible action.
       action_chain.pop(-1)
 
+      # Go back further if the random backoff point
+      # is not at the current depth.
       if backoff < depth:
         return backoff
 
@@ -307,12 +312,15 @@ class ExplorationBackoffDFSBase(object):
       # end loop
 
     # At this point, we are out of eligible action to pick,
+
+    # Case 1: current depth is > number of prefefined_steps: backoff
     if depth > len(self.predefined_steps):
       backoff = self.random_backoff()
       verbose('Out of option at depth ', depth, ' backoff = ', backoff)
       return backoff
 
-    # Else, out of option at depth <= len(self.predefined_steps), do it again.
+    # Else, out of option at depth <= len(self.predefined_steps),
+    # Run the whole exploration tree again, i.e., simply exit.
     verbose('Out of option at depth {}, start a new Backoff DFS.'.format(depth))
     self.print_stats()
 

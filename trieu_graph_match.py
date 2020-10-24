@@ -216,7 +216,6 @@ def create_new_rels_from_merge(obj1, obj2,
   for rel in state_relations:
     if obj_type is Line and isinstance(rel, LineBordersHalfplane):
       pass
-      
 
     if obj1 in rel.init_list:
       new_rel = rel.replace(obj1, obj2)
@@ -301,8 +300,10 @@ def match_conclusions(conclusion, state_candidates,
       # Case 1: Merging two objects
       assert len(relations) == 1
       obj1, obj2 = relations[0].init_list
+      assert obj1 in premise_match and obj2 in premise_match
       new_objs_and_rels = create_new_rels_from_merge(
-          obj1, obj2, 
+          premise_match[obj1], 
+          premise_match[obj2], 
           state_relations=state_relations,
           critical=critical,
           conclusion_position=conclusion_position)

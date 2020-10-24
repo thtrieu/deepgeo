@@ -20,6 +20,7 @@ from theorems_utils import segment_def, angle_def
 from theorems_utils import diff_side, same_side
 from state import State, Conclusion
 
+from geometry import Merge
 from geometry import Point, Line, Segment, Angle, HalfPlane, Circle
 from geometry import SegmentLength, AngleMeasure, LineDirection
 from geometry import SegmentHasLength, AngleHasMeasure, LineHasDirection
@@ -35,6 +36,7 @@ class Action(object):
     self.mapping = mapping
     self.theorem = theorem
     self.premise_objects = [mapping[x] for x in theorem.premise_objects]
+
     self.conclusion_objects = [mapping[x] for x in theorem.conclusion_objects]
     self.duration = None
 
@@ -261,6 +263,75 @@ class OppositeAnglesCheck(Check):
 #         collinear(bc, B, C) +
 #         collinear(ca, C, A)
 #     )
+
+class SameLineBecauseParallel(FundamentalTheorem):
+
+  def __init__(self):
+    l1, l1_hp1, l1_hp2 = line_and_halfplanes('l1')
+    l2, l2_hp1, l2_hp2 = line_and_halfplanes('l2')
+    A = Point('A')
+
+    self.premise = (
+        # both l1 and l2 go through a point A
+        # distinct(l1, l2) +
+        # distinct(l1_hp1, l1_hp2, l2_hp1, l2_hp2) +
+        collinear(l1, A) +
+        collinear(l2, A) +
+        # both l1 and l2 has the same direction
+        have_direction('d1', l1, l2)
+    )
+
+    # Match this as well, but we don't need this part
+    # of the premise during proof whittling.
+    # The reason is that the condition to merge l1 and l2
+    # should not include creating point B.
+    B = Point('B')
+    self.additional_premise = (
+        divides_halfplanes(l1, l1_hp1, l2_hp2, B) +
+        divides_halfplanes(l2, l2_hp1, l2_hp2, B)
+    )
+
+    self.conclusion = Conclusion()
+    self.conclusion.add_critical(Merge(l1, l2))
+    self.conclusion.add_critical(Merge(l1_hp1, l2_hp1))
+    self.conclusion.add_critical(Merge(l1_hp2, l2_hp2))
+
+    self.for_drawing = [l1, l2, l1_hp1, l2_hp2]
+    self.names = dict(l1=l1, l2=l2)
+
+    super(SameLineBecauseParallel, self).__init__()
+
+  def draw(self, mapping, canvas):
+    l1, l2, l1_hp1, l2_hp2 = map(mapping.get, self.for_drawing)
+    return canvas.remove_line(l2)
+
+
+class SamePointBecauseSameMidpoint(FundamentalTheorem):
+
+  def __init__(self):
+    l = Line('l')
+    s1, s2, s3, s4 = map(Segment, 's1 s2 s3 s4'.split())
+    A, B, M, N = map(Point, 'A B M N'.split())
+
+    self.premise = (
+        collinear(l, A, B, M) +
+        segment_def(s1, A, M) +
+        segment_def(s2, B, M) +
+        segment_def(s3, A, N) +
+        segment_def(s4, B, N) +
+        have_length('1m', s1, s2) +
+        have_length('2m', s3, s4)
+    )
+
+    self.conclusion = Conclusion()
+    self.conclusion.add_critical(Merge(M, N))
+    self.for_drawing = [A, B, M, N]
+    self.names = dict(A=A, B=B, M=M, N=N)
+
+    super(SamePointBecauseSameMidpoint, self).__init__()
+
+  def draw(self, mapping, canvas):
+    return canvas.remove_point(N)
 
 
 class ConstructRightAngle(FundamentalTheorem):
@@ -636,46 +707,6 @@ class OppositeAngles(FundamentalTheorem):
     super(OppositeAngles, self).__init__()
 
 
-class SameLineBecauseParallel(FundamentalTheorem):
-
-  def __init__(self):
-    l1, l1_hp1, l1_hp2 = line_and_halfplanes('l1')
-    l2, l2_hp1, l2_hp2 = line_and_halfplanes('l2')
-    A = Point('A')
-
-    self.premise = (
-        # both l1 and l2 go through a point A
-        collinear(A, l1) +
-        collinear(A, l2) +
-        # both l1 and l2 has the same direction
-        have_direction('d1', l1, l2)
-    )
-
-    # Match this as well, but we don't need this part
-    # of the premise during proof whittling.
-    # The reason is that the condition to merge l1 and l2
-    # should not include creating point B.
-    B = Point('B')
-    self.additional_premise = (
-        divides_halfplanes(l1, l1_hp1, l2_hp2, B) +
-        divides_halfplanes(l2, l2_hp1, l2_hp2, B)
-    )
-
-    self.conclusion = Conclusion()
-    self.conclusion.add_critical(Merge(l1, l2))
-    self.conclusion.add_critical(Merge(l1_hp1, l2_hp1))
-    self.conclusion.add_critical(Merge(l1_hp2, l2_hp2))
-
-    self.for_drawing = [l1, l2, l1_hp1, l2_hp2]
-    self.names = dict(l1=l1, l2=l2)
-
-    super(SameLineBecauseParallel, self).__init__()
-
-  def draw(self, mapping, canvas):
-    l1, l2, l1_hp1, l2_hp2 = map(mapping.get, self.for_drawing)
-    return canvas.remove_line(l2)
-
-
 class ParallelBecauseCorrespondingAngles(FundamentalTheorem):
 
   def __init__(self):
@@ -937,6 +968,9 @@ class SSS(Congruences):
     conclusion.add(*divides_halfplanes(ef, ef_hp1, p1=D))
     conclusion.add(*divides_halfplanes(fd, fd_hp1, p1=E))
 
+    ABC, BCA, CAB, DEF, EFD, FDE = map(Angle,
+        'ABC BCA CAB DEF EFD FDE'.split())
+
     conclusion.add(*angle_def(ABC, ab_hp1, bc_hp1))
     conclusion.add(*angle_def(BCA, bc_hp1, ca_hp1))
     conclusion.add(*angle_def(CAB, ca_hp1, ab_hp1))
@@ -962,8 +996,8 @@ class SSS(Congruences):
                       (DE, EF), (EF, FD), (FD, DE),
                       (ab, bc), (bc, ca), (ca, ab),
                       (de, ef), (ef, fd), (fd, de),
-                      (BAC, BCA), (BCA, ABC), (ABC, BAC),
-                      (DEF, EDF), (EDF, EFD), (EFD, DEF),
+                      (CAB, BCA), (BCA, ABC), (ABC, CAB),
+                      (DEF, FDE), (FDE, EFD), (EFD, DEF),
                       (A, B), (B, C), (C, A),
                       (D, E), (E, F), (F, D),
                       ]
@@ -972,7 +1006,7 @@ class SSS(Congruences):
                         A, B, C, D, E, F]
     self.names = dict(A=A, B=B, C=C, D=D, E=E, F=F)
 
-    super(SAS, self).__init__()
+    super(SSS, self).__init__()
 
   def draw(self, mapping, canvas):
     (ab, bc, ca, de, ef, fd,
@@ -1114,6 +1148,8 @@ class ASA(Congruences):
 
 
 all_theorems = {
+    'unq_line_dir': SameLineBecauseParallel(),
+    'unq_mid_point': SamePointBecauseSameMidpoint(),
     'right': ConstructRightAngle(),
     'mid': ConstructMidPoint(),  # 0.000365972518921
     'mirror': ConstructMirrorPoint(),
@@ -1127,6 +1163,7 @@ all_theorems = {
     'eq': EqualAnglesBecauseParallel(),  # 1.73088312149
     'sas': SAS(),  # 0.251692056656
     'asa': ASA(),  # 2.26002907753 3.96637487411
+    'sss': SSS(),
     '.parallel': ParallelBecauseCorrespondingAngles(),
     '.parallel2': ParallelBecauseInteriorAngles(),
     'angle_check': OppositeAnglesCheck(),

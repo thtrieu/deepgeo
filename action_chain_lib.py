@@ -66,17 +66,21 @@ def _find_premise(premise_objects, name):
   return None
 
 
+def mapping_from_command(command, theorem, state):
+  name_maps = [c.split('=') for c in command.split()]
+  mapping = dict(
+      (theorem.names[a], _find(state, b))
+      if a in theorem.names
+      else (_find_premise(theorem.premise_objects, a), _find(state, b))
+      for a, b in name_maps)
+  return mapping
+
+
 def execute_steps(steps, state, canvas, verbose=False):
   action_chain = []
 
   for i, (theorem, command) in enumerate(steps):
-    # print(i + 1, ' ', type(theorem).__name__, command)
-    name_maps = [c.split('=') for c in command.split()]
-    mapping = dict(
-        (theorem.names[a], _find(state, b))
-        if a in theorem.names
-        else (_find_premise(theorem.premise_objects, a), _find(state, b))
-        for a, b in name_maps)
+    mapping = mapping_from_command(command, theorem, state)
     action_gen = theorem.match_from_input_mapping(
         state, mapping, randomize=False)
 

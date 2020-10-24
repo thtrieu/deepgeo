@@ -368,7 +368,13 @@ class DebugObjects(object):
       canvas.plt_show(ax, state, [], mark_segment=0)
     plt.show(block=False)
 
-  def why_fail_to_match(self, theorem, state, mapping={}):
+  def why_fail_to_match(
+      self, theorem, state, mapping={}, command_str=''):
+
+    if len(mapping) == 0 and command_str:
+      mapping = action_chain_lib.mapping_from_command(
+          command_str, theorem, state)
+
     type2rel = ddict(lambda: [])
     for rel in state.relations:
       type2rel[type(rel)].append(rel)
@@ -384,12 +390,6 @@ class DebugObjects(object):
     miss = [rel for rel in theorem.premise 
             if rel not in best]
 
-    # recursively_match_best_effort(
-    #     theorem.premise,
-    #     state.type2rel,
-    #     mapping,
-    #     pdb_at=best
-    # )
     return best, miss
       
 
