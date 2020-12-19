@@ -41,7 +41,7 @@ from geometry import SegmentLength, AngleMeasure, LineDirection
 from geometry import SegmentHasLength, AngleHasMeasure, LineHasDirection
 from geometry import PointEndsSegment, HalfplaneCoversAngle, LineBordersHalfplane
 from geometry import PointCentersCircle
-from geometry import Merge
+from geometry import Merge, Distinct
 from geometry import LineContainsPoint, CircleContainsPoint, HalfPlaneContainsPoint
 
 
@@ -152,6 +152,7 @@ cpdef list recursively_match(
   cdef int conflict
   cdef dict appended_mappings
   cdef list match
+  cdef list match_ab_to
 
   # for i in prange(100, nogil=True):
   #   numpy.random.rand(50, 50).dot(numpy.random.rand(50, 50))
@@ -159,93 +160,98 @@ cpdef list recursively_match(
   # Enumerate through possible edge match:
   for candidate in state_candidates.get(rel_type, []):
     # counter[0] += 1
-    # Now we try to match edge query0 to candidate, by checking
+    # Now we try to match edge query_relations[0] to candidate, by checking
     # if this match will cause any conflict, if not then we proceed
-    # to query1 in the next recursion depth.
+    # to query_relations[1] in the next recursion depth.
 
     # Suppose edge query0 connects nodes a, b in premise graph
     # and edge candidate connects nodes c, d in state graph:
-    # c, d = candidate.init_list
     c = candidate.init_list[0]
     d = candidate.init_list[1]
 
-    # Special treatment for half pi:
-    if a == geometry.halfpi and c != a:
-      continue
-    if b == geometry.halfpi and d != b:
-      continue
-
-    # Now we want to match a->c, b->d without any conflict,
-    # if there is conflict then candidate cannot be matched to query0.
-    # if (object_mappings.get(a, c) != c or
-    #     object_mappings.get(b, d) != d or
-    #     # Also check for inverse map if there is any:
-    #     object_mappings.get(c, a) != a or
-    #     object_mappings.get(d, b) != b):
-    if (a in object_mappings and object_mappings[a] != c or
-        b in object_mappings and object_mappings[b] != d or
-        c in object_mappings and object_mappings[c] != a or
-        d in object_mappings and object_mappings[d] != b):
-      continue  # move on to the next candidate.
-
-    new_mappings = {a: c, b: d}
-    # Check for distinctiveness:
-    if not distinct:  # Everything is distinct except numeric values.
-      # Add the inverse mappings, so that now a <-> c and b <-> d,
-      # so that in the future c cannot be matched with any other node
-      # other than a, and d cannot be matched with any other node other
-      # than b.
-      if not isinstance(a, (SegmentLength, AngleMeasure, LineDirection)):
-        new_mappings[c] = a
-      if not isinstance(b, (SegmentLength, AngleMeasure, LineDirection)):
-        new_mappings[d] = b
+    if rel_type is Distinct:
+      match_ab_to = [(c, d), (d, c)]
     else:
-      # Check if new_mappings is going to conflict with object_mappings
-      # A conflict happens if there exist a' -> c in object_mappings and
-      # (a, a') presented in distinct. Likewise, if there exists b' -> d
-      # in object_mappings and (b, b') presented in distinct then
-      # a conflict happens. 
-      conflict = 0
-      for distinct_pair in distinct:
-        if a not in distinct_pair and b not in distinct_pair:
-          continue  # nothing to check here
+      match_ab_to = [(c, d)]
+    
+    for c, d in match_ab_to:
+      # Special treatment for half pi:
+      if a == geometry.halfpi and c != a:
+        continue
+      if b == geometry.halfpi and d != b:
+        continue
 
-        x, y = distinct_pair[0], distinct_pair[1]
-        x_map = object_mappings.get(x, new_mappings.get(x, None))
-        y_map = object_mappings.get(y, new_mappings.get(y, None))
-        # either x or y will be in new_mappings by the above "if",
-        # so x_map and y_map cannot be both None
-        if x_map == y_map:
-          conflict = 1
-          break
-
-      if conflict:
+      # Now we want to match a->c, b->d without any conflict,
+      # if there is conflict then candidate cannot be matched to query0.
+      # if (object_mappings.get(a, c) != c or
+      #     object_mappings.get(b, d) != d or
+      #     # Also check for inverse map if there is any:
+      #     object_mappings.get(c, a) != a or
+      #     object_mappings.get(d, b) != b):
+      if (a in object_mappings and object_mappings[a] != c or
+          b in object_mappings and object_mappings[b] != d or
+          c in object_mappings and object_mappings[c] != a or
+          d in object_mappings and object_mappings[d] != b):
         continue  # move on to the next candidate.
 
-    # Add {query0 -> candidate} to new_mappings
-    new_mappings[query0] = candidate
-    # Update object_mappings by copying all of its content
-    # and then add new_mappings.
+      new_mappings = {a: c, b: d}
+      # Check for distinctiveness:
+      if not distinct:  # Everything is distinct except numeric values.
+        # Add the inverse mappings, so that now a <-> c and b <-> d,
+        # so that in the future c cannot be matched with any other node
+        # other than a, and d cannot be matched with any other node other
+        # than b.
+        if not isinstance(a, (SegmentLength, AngleMeasure, LineDirection)):
+          new_mappings[c] = a
+        if not isinstance(b, (SegmentLength, AngleMeasure, LineDirection)):
+          new_mappings[d] = b
+      else:
+        # Check if new_mappings is going to conflict with object_mappings
+        # A conflict happens if there exist a' -> c in object_mappings and
+        # (a, a') presented in distinct. Likewise, if there exists b' -> d
+        # in object_mappings and (b, b') presented in distinct then
+        # a conflict happens. 
+        conflict = 0
+        for distinct_pair in distinct:
+          if a not in distinct_pair and b not in distinct_pair:
+            continue  # nothing to check here
 
-    appended_mappings = dict(object_mappings, **new_mappings)
+          x, y = distinct_pair[0], distinct_pair[1]
+          x_map = object_mappings.get(x, new_mappings.get(x, None))
+          y_map = object_mappings.get(y, new_mappings.get(y, None))
+          # either x or y will be in new_mappings by the above "if",
+          # so x_map and y_map cannot be both None
+          if x_map == y_map:
+            conflict = 1
+            break
 
-    # Move on to the next recursion depth:
-    match = recursively_match(
-        query_relations=query_relations[1:], 
-        state_candidates=state_candidates,
-        object_mappings=appended_mappings,
-        distinct=distinct,
-        return_all=return_all,
-        depth=depth+1)  #,
-        # counter=counter)
+        if conflict:
+          continue  # move on to the next candidate.
 
-    if len(match) == 0:
-      continue
+      # Add {query0 -> candidate} to new_mappings
+      new_mappings[query0] = candidate
+      # Update object_mappings by copying all of its content
+      # and then add new_mappings.
 
-    if not return_all:
-      return match
-    else:
-      all_matches.extend(match)
+      appended_mappings = dict(object_mappings, **new_mappings)
+
+      # Move on to the next recursion depth:
+      match = recursively_match(
+          query_relations=query_relations[1:], 
+          state_candidates=state_candidates,
+          object_mappings=appended_mappings,
+          distinct=distinct,
+          return_all=return_all,
+          depth=depth+1)  #,
+          # counter=counter)
+
+      if len(match) == 0:
+        continue
+
+      if not return_all:
+        return match
+      else:
+        all_matches.extend(match)
 
   # if depth == 0:
   #   print(counter[0])

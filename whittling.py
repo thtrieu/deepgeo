@@ -1,7 +1,10 @@
-from geometry import SegmentLength, AngleMeasure, LineDirection
+from geometry import CausalValue, SegmentLength, AngleMeasure, LineDirection, TransitiveRelation
 from geometry import SegmentHasLength, AngleHasMeasure, LineHasDirection
-
+from geometry import Merge
+import geometry
 import traceback
+
+from collections import defaultdict as ddict
 
 
 VALUE_ENTITIES = (
@@ -11,6 +14,99 @@ VALUE_ENTITIES = (
 VALUE_RELATIONS = (
     AngleHasMeasure, SegmentHasLength, LineHasDirection
 )
+
+
+def extract_all_valuing_goals(last_state, prev_state):
+  """Yields pairs (problem_queue, proof_queue)."""
+  prev_equal_objs = {}
+  for _, valrels in prev_state.val2valrel.items():
+    objs = [rel.init_list[0] for rel in valrels]
+    for obj in objs:
+      prev_equal_objs[obj] = objs
+
+  for val, rels in last_state.val2valrel.items():
+    if len(rels) < 2:
+      continue
+    for i, rel1 in enumerate(rels[:-1]):
+      for rel2 in rels[i+1:]:
+        obj1, obj2 = rel1.init_list[0], rel2.init_list[0]
+
+        if obj2 in prev_equal_objs.get(obj1, []) or obj1 in prev_equal_objs.get(obj2, []):
+          continue
+        
+        problem_queue = [obj1, obj2]  # e.g. [a, b] or [a, e]
+        proof_queue = (val, rel1, rel2)
+        yield problem_queue, proof_queue
+
+
+def new_relations_from_merge(prev_state, merge_rel):
+  # What are the new relations?
+  # Suppose obj2 were merged into obj1
+
+  from_obj, to_obj = merge_rel.from_obj, merge_rel.to_obj
+  from_graph = from_obj.get_merge_graph(prev_state)
+  to_graph = to_obj.get_merge_graph(prev_state)
+
+  # import pdb; pdb.set_trace()
+
+  for obj in from_graph:
+    if obj in to_graph:
+      continue
+
+    if from_obj not in from_graph[obj]:
+      continue
+
+    rel = from_graph[obj][from_obj]
+    if isinstance(rel, TransitiveRelation):
+      continue
+      
+    if isinstance(rel, int):
+      continue
+
+    new_rel = rel.replace(from_obj, to_obj)
+    yield new_rel.init_list, [(new_rel, to_obj, to_obj)]
+
+    for to_obj_equiv in to_graph['equivalents']:
+      new_rel = rel.replace(from_obj, to_obj_equiv)
+      yield new_rel.init_list, [(new_rel, to_obj_equiv, to_obj)]
+  
+  for obj in to_graph:
+    if obj in from_graph:
+      continue
+    if to_obj not in to_graph[obj]:
+      continue
+    rel = to_graph[obj][to_obj]
+    if isinstance(rel, TransitiveRelation):
+      continue
+    if isinstance(rel, int):
+      continue
+    
+    new_rel = rel.replace(to_obj, from_obj)
+    yield new_rel.init_list, [(new_rel, from_obj, to_obj)]
+    
+    for from_obj_equiv in from_graph['equivalents']:
+      new_rel = rel.replace(to_obj, from_obj_equiv)
+      yield new_rel.init_list, [(new_rel, from_obj_equiv, to_obj)]
+
+
+def extract_all_proof_goals(action_chain, last_state):
+  last_action = action_chain[-1]
+  prev_state = last_action.state
+
+  # First extract all transitive relations:
+  for problem_queue, proof_queue in extract_all_valuing_goals(
+      last_state, prev_state):
+    yield problem_queue, proof_queue
+
+  for merge_rel in last_action.merges:
+    for problem_queue, proof_queue in new_relations_from_merge(
+        prev_state, merge_rel):
+      yield problem_queue, proof_queue
+  
+  for obj in last_action.new_objects:
+    if not isinstance(obj, TransitiveRelation) and not isinstance(obj, Merge):
+      rel = obj
+      yield rel.init_list, [rel]
 
 
 def get_state_and_proof_objects(last_action, state):
@@ -39,7 +135,7 @@ def get_state_and_proof_objects(last_action, state):
   # Collect new value to rel in conclusion:
   new_objs, val2objs = [], {}
   for rel in last_action.new_objects:
-    if isinstance(rel, (SegmentHasLength, LineHasDirection, AngleHasMeasure)):
+    if isinstance(rel, VALUE_RELATIONS):
       obj, val = rel.init_list
 
       # if val == state.halfpi_val():
@@ -103,7 +199,7 @@ def whittle_from(final_state, queue, action_chain,
     i += 1  # move on.
 
     # Case 1: the query is a tuple (val, rel1, rel2)
-    if isinstance(query, tuple):
+    if isinstance(query, tuple) and isinstance(query[0], VALUE_ENTITIES):
       val, rel1, rel2 = query  # what are the dependent of this 3-tuple?
       
       # obj1 and obj2 are the first two dependents
@@ -115,40 +211,48 @@ def whittle_from(final_state, queue, action_chain,
       # dependents are now [int, int, int, ..., obj1, obj2]
 
       # Make sure such a path of transitivity exists:
-      if not all([d is not None for d in dependents]):
-        import pdb; pdb.set_trace()
-        raise ValueError('Path not found between {} and {} in {}'.format(
-            obj1.name, obj2.name,
-            {x.name: {a.name: b for a, b in y.items()} for x, y in val.edges.items()}))
+      # if not all([d is not None for d in dependents]):
+      #   import pdb; pdb.set_trace()
+      #   raise ValueError('Path not found between {} and {} in {}'.format(
+      #       obj1.name, obj2.name,
+      #       {x.name: {a.name: b for a, b in y.items()} for x, y in val.edges.items()}))
 
       # Add these dependents to the queue.
       queue.extend(dependents)
       continue
     
+    if isinstance(query, tuple):
+      rel, obj, source_obj = query
+      # import pdb; pdb.set_trace()
+      assert obj in rel.init_list
+      dependents = source_obj.find_merge_path(rel, obj, final_state)
+      queue.extend(dependents)
+      continue
+
     # For the remaining cases, there are two information that is needed:
     # 1. The position of `query` in action_chain
     # 2. Whether the construction of this `query` is critical.
 
     # Case 2: An integer in the queue
-    # This means the WHOLE action_chain[pos].topological list is needed.
+    # This means the WHOLE action_chain[pos].state.premise_objs is needed.
     if isinstance(query, int):
       critical = True
       pos = query
-    else:
-      pos = query.chain_position  # at init state already
-      if pos is None:
+    else:  # not an integer but an obj or rel.
+      pos = query.chain_position
+      if pos is None:    # at init state already
         continue
       critical = query.critical
 
-    # the whole action and its premise is visited.
-    try:  # pos = 9, len(whittled_state) = 8
-      if (whittled_state and whittled_state[pos] == True 
-          or whittled[pos] == True): 
-        continue
-    except:
-      import pdb; pdb.set_trace()
+    # the whole action and its premise is already visited.
+    if (whittled_state and whittled_state[pos] == True  # by a prev whittle_from()
+        or whittled[pos] == True):   # or by this one.
+      continue
+    # except:
+    #   import pdb; pdb.set_trace()
 
     action = action_chain[pos]
+    state = action.state
     # When the whole action is not needed and there is still
     # critical query, we defer this query to the end
     # This optimizes running time because it maximizes
@@ -166,10 +270,23 @@ def whittle_from(final_state, queue, action_chain,
 
       # premise of type VALUE_RELATIONS is post-processed here:
       valrels = {}
+      merges = ddict(lambda: [])
 
       for obj in action.theorem.premise_objects:
         if not isinstance(obj, VALUE_ENTITIES + VALUE_RELATIONS):
-          dependents.append(action.mapping[obj])
+          rel = action.mapping[obj]
+
+          if not hasattr(rel, '_init_list'):
+            dependents.append(rel)
+            continue
+
+          x, y = rel.init_list
+
+          if x in y.get_merge_graph(state):
+            merges[y].append(x)
+          if y in x.get_merge_graph(state):
+            merges[x].append(y)
+
         elif isinstance(obj, VALUE_RELATIONS):
           val = obj.init_list[1]
           if val not in valrels:
@@ -185,13 +302,32 @@ def whittle_from(final_state, queue, action_chain,
         else:
           dependents.append(rel1)
 
+      merge_positions = set()  # all positions of necessary merge actions
+      
+      for obj, others in merges.items():
+        merge_graph = obj.get_merge_graph(state)
+        equivs = set()
+        for other in others:
+          # TODO(thtrieu): for now we just pick the first equiv.
+          equiv = merge_graph[other].keys()[0]
+
+          rel = merge_graph[other][equiv]
+          dependents.append(rel)
+
+          equivs.add(equiv)
+        merge_positions.update(obj.find_min_span_subgraph(equivs, state))
+      
+      for pos in merge_positions:
+        if pos not in dependents:
+          dependents.append(pos)
+
     else:  # Non critical
-      try:
-        found = action.matched_conclusion.topological_list[
-            query.conclusion_position]
-      except:
-        traceback.print_exc()
-        import pdb; pdb.set_trace()
+      # try:
+      found = action.matched_conclusion.topological_list[
+          query.conclusion_position]
+      # except:
+      #   traceback.print_exc()
+      #   import pdb; pdb.set_trace()
       whittled[pos].append(found)
       # Here we ignore the relations in `found` themselves
       # because we know that they are created at chain_pos = pos

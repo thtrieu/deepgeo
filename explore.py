@@ -307,6 +307,10 @@ class ExplorationBackoffDFSBase(object):
       if backoff < depth:
         return backoff
 
+      # Remove new_state out of the causal chain of 
+      # all values.
+      new_state.pop()
+
       # Timing next action.
       action_timer = Timer('action', start=True)
       # end loop

@@ -17,6 +17,8 @@ try:
 except:
   pass
 
+ATOM = 1e-12
+
 
 class Circle(object):
 
@@ -313,7 +315,7 @@ class Canvas(object):
     mult = np.matmul(  # n_line, n_point
         self.line_matrix,  # [n_line, 3]
         self.point_matrix)  # [3, n_point]
-    mult = np.abs(mult) < 1e-12
+    mult = np.abs(mult) < ATOM
 
     line_ends = {}
     for line, are_on_line in zip(self.lines.keys(), mult):
@@ -410,9 +412,9 @@ class Canvas(object):
 
     # for (p_sym, p_node), v in zip(self.points_inverse.items(), mult):
     for point, v in zip(self.points, mult):
-      if v > 1e-12:
+      if v > ATOM:
         halfplane_pos.append(point)
-      elif v < -1e-12:
+      elif v < -ATOM:
         halfplane_neg.append(point)
 
     self.line2points[line] = (halfplane_neg, halfplane_pos)
@@ -434,9 +436,9 @@ class Canvas(object):
     mult = np.matmul(self.line_matrix, point_vector)[:, 0]
 
     for line, v in zip(self.line2points, mult):
-      if v > 1e-12:
+      if v > ATOM:
         self.line2points[line][1].append(node_point)
-      elif v < -1e-12:
+      elif v < -ATOM:
         self.line2points[line][0].append(node_point)
 
   def add_angle_bisector(self, new_line, point, l1, hp1, l2, hp2):
@@ -531,13 +533,6 @@ class Canvas(object):
     self.update_line(l23, Line(b, c))
     self.update_line(l31, Line(c, a))
     return self.line2points
-
-  # def add_perp_bisector_line(self, new_line, mid, p1, p2):
-  #   p1, p2 = self.points[p1], self.points[p2]
-  #   s = Segment(p1, p2)
-  #   self.update_line(new_line, s.perpendicular_bisector())
-  #   self.update_point(mid, s.midpoint)
-  #   return self.line2points
 
   def add_line(self, new_line, p1, p2):
     p1, p2 = self.points[p1], self.points[p2]

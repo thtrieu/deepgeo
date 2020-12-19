@@ -2,12 +2,14 @@ import sketch
 import theorems_utils
 import geometry
 import theorems
+import debugging
 
 from theorems_utils import collinear, concyclic, in_halfplane
 from theorems_utils import divides_halfplanes, line_and_halfplanes
 from theorems_utils import have_length, have_measure, have_direction
 from theorems_utils import segment_def, angle_def
 from theorems_utils import diff_side, same_side
+from theorems_utils import distinct
 
 from state import State, Conclusion
 
@@ -87,6 +89,8 @@ def execute_steps(steps, state, canvas, verbose=False):
     try:
       action = action_gen.next()
     except StopIteration:
+      best, miss = debugging.why_fail_to_match(theorem, state, command_str=command)
+      import pdb; pdb.set_trace()
       raise ValueError('Matching not found {} {}'.format(theorem, command))
 
     print(i+1, action.to_str())
@@ -95,6 +99,11 @@ def execute_steps(steps, state, canvas, verbose=False):
 
     if verbose:
       print('\tAdd : {}'.format([obj.name for obj in action.new_objects]))
+    
+    # import pdb; pdb.set_trace()
+    state = state.copy()
+    canvas = canvas.copy()
+    
     state.add_relations(action.new_objects)
     line2pointgroups = action.draw(canvas)
     state.add_spatial_relations(line2pointgroups)
@@ -119,7 +128,9 @@ def init_by_normal_triangle():
       segment_def(CA, C, A) +
       collinear(ab, A, B) +
       collinear(bc, B, C) +
-      collinear(ca, C, A)
+      collinear(ca, C, A) +
+      distinct(A, B, C) +
+      distinct(ab, bc, ca)
   )
 
   state.add_spatial_relations(canvas.add_triangle(A, B, C, ab, bc, ca))

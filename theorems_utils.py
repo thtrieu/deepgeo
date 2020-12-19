@@ -6,6 +6,7 @@ from __future__ import print_function
 import time
 import geometry
 
+from geometry import Distinct
 from geometry import Point, Line, Segment, Angle, HalfPlane, Circle
 from geometry import SegmentLength, AngleMeasure, LineDirection
 from geometry import SegmentHasLength, AngleHasMeasure, LineHasDirection
@@ -26,6 +27,14 @@ def divides_halfplanes(line, hp1, hp2=None, p1=None, p2=None):
     result.append(HalfPlaneContainsPoint(hp1, p1))
   if p2:
     result.append(HalfPlaneContainsPoint(hp2, p2))
+  return result
+
+
+def distinct(*obj_list):
+  result = []
+  for i, obj1 in enumerate(obj_list[:-1]):
+    for obj2 in obj_list[i+1:]:
+      result.append(Distinct(obj1, obj2))
   return result
 
 

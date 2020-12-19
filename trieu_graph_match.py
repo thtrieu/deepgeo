@@ -4,10 +4,13 @@ from __future__ import print_function
 
 import numpy as np
 import random
+
+from numpy.lib.arraysetops import isin
 import geometry
 import time
 import profiling
 import theorems_utils
+
 
 from state import Conclusion
 from collections import defaultdict as ddict
@@ -16,12 +19,14 @@ from profiling import Timer
 import cython_graph_match
 # import parallel_graph_match
 
+from theorems import all_theorems
+
 from geometry import Point, Line, Segment, Angle, HalfPlane, Circle 
 from geometry import SegmentLength, AngleMeasure, LineDirection
 from geometry import SegmentHasLength, AngleHasMeasure, LineHasDirection
 from geometry import PointEndsSegment, HalfplaneCoversAngle, LineBordersHalfplane
 from geometry import PointCentersCircle
-from geometry import Merge
+from geometry import Merge, Distinct
 from geometry import LineContainsPoint, CircleContainsPoint, HalfPlaneContainsPoint
 
 
@@ -194,50 +199,226 @@ def create_new_obj_and_rels_for_conclusion(
   return new_objs_and_rels
 
 
+def add_new_rels_from_auto_merge(
+      trigger_obj,
+      theorem, 
+      filtered_state_relations, 
+      new_rels, 
+      critical, 
+      conclusion_position,
+      current_state):
+  if theorem is None:
+    return new_rels
+
+  while True:
+    found = False
+
+    state_candidates = {}
+    for rel in filtered_state_relations + new_rels:
+      state_candidates[type(rel)] = state_candidates.get(type(rel), []) + [rel]
+
+    auto_merges = theorem.find_auto_merge_from_trigger(
+        state_candidates, {theorem.trigger_obj: trigger_obj})
+    # import pdb; pdb.set_trace()
+    for (obj1, obj2) in auto_merges:
+      # print('because {}, merging {} and {}'.format(trigger_obj.name, obj1.name, obj2.name))
+      # import pdb; pdb.set_trace()
+      new_rels += create_new_rels_from_merge(
+          obj1, obj2, 
+          filtered_state_relations + new_rels,
+          critical,
+          conclusion_position,
+          current_state)
+      found = False
+    if not found:
+      break
+  return new_rels
+
+
+def other_obj(rel, obj):
+  assert obj in rel.init_list
+  return rel.init_list[1-rel.init_list.index(obj)]
+
+
+
 def create_new_rels_from_merge(obj1, obj2, 
                                state_relations,
                                critical,
-                               conclusion_position):
+                               conclusion_position,
+                               current_state):
+  """Algorithm to merge obj1 & obj2.
+
+  Merge (obj1, obj2):
+    0. Merge obj2.merge_graph into obj1.merge_graph.
+    1. Copy all edges with obj2 to obj1, except for transitive
+      value edges, use merge_transitive_value(rel1, rel2) instead.
+    2. 
+      if isinstance(obj1, Point):
+        while SameSegment.match(state_relations, {point=obj1}):
+          Merge(seg1, seg2)  # recursive call.
+      if isinstance(obj1, Line):
+        while SameHalfPlane.match(state_relations, {line=obj1}):
+          Merge(hp1, hp2)  # recursive call.
+      if isinstance(obj1, Halfplane):
+        while SameAngle.match(state_relations, {hp=obj1}):
+          Merge(angle1, angle2)  # recursive call.
+    3. Add info that obj1 is alias of obj2.
+  """
   if not isinstance(obj1, type(obj2)):
     raise ValueError('Cannot merge {} ({}) and {} ({})'.format(
         obj1, type(obj1), obj2, type(obj2)))
 
-  if not isinstance(obj1, (Point, Segment, Line, Angle, Circle)):
+  if not isinstance(obj1, (Point, Segment, Line, Angle, Circle,
+                           SegmentLength, AngleMeasure, LineDirection)):
     raise ValueError('Cannot merge {} and {} of type {}'.format(
         obj1, obj2, type(obj1)))
 
-  new_rels = []  # return this
-  # Now we add new relations to new_rels
-  # by looping through state_relations and 
-  # copy any relation involving obj1 for obj2 & vice versa.
-
   obj_type = type(obj1)
 
-  for rel in state_relations:
-    if obj_type is Line and isinstance(rel, LineBordersHalfplane):
-      pass
+  # Now we add new relations to new_rels
+  # by looping through state_relations and 
+  # copy any relation involving obj2 for obj1
+  # then delete obj2.
 
-    if obj1 in rel.init_list:
-      new_rel = rel.replace(obj1, obj2)
-    elif obj2 in rel.init_list:
-      new_rel = rel.replace(obj2, obj1)
+  # Step 0. Merge obj2.merge_graph into obj1.merge_graph
+  merge_graph1 = obj1.get_merge_graph(current_state, {
+      other_obj(rel, obj1): {obj1: rel} 
+      for rel in state_relations 
+      if not isinstance(rel, Merge) and obj1 in rel.init_list})
+
+  merge_graph2 = obj2.get_merge_graph(current_state, {
+      other_obj(rel, obj2): {obj2: rel} 
+      for rel in state_relations 
+      if not isinstance(rel, Merge) and obj2 in rel.init_list})
+
+  assert obj2 not in merge_graph1
+  assert obj1 not in merge_graph2
+
+  # Copy merge_graph1 to merge_graph before adding info from merge_graph2
+  merge_graph = {k: dict(v) for k, v in merge_graph1.items()}
+  merge_graph[obj2] = {obj1: None}
+  merge_graph[obj1] = merge_graph.get(obj1, {})
+  merge_graph[obj1].update({obj2: None})
+
+  merge_graph['equivalents'] = list(merge_graph1['equivalents'])
+  merge_graph['equivalents'] += list(merge_graph2['equivalents'])
+  merge_graph['equivalents'] += [obj2]
+
+  # Copy info from merge_graph2
+  for obj_a, obj_b_dict in merge_graph2.items():
+    if obj_a == 'equivalents':
+      continue
+    if isinstance(obj_a, type(obj1)):
+      obj3 = obj_a
+      if obj3 in merge_graph:
+        assert isinstance(merge_graph[obj3][obj1], Distinct)
+        merge_graph[obj3].update(dict(obj_b_dict))
+      else:
+        merge_graph[obj3] = dict(obj_b_dict)
     else:
+      if obj_a in merge_graph:
+        for obj_x, rel in obj_b_dict.items():
+          assert obj_x not in merge_graph[obj_a]
+          merge_graph[obj_a][obj_x] = rel
+      else:
+        merge_graph[obj_a] = dict(obj_b_dict)
+
+  # Step 1. create new rels
+  new_rels = []  # return this
+  val_rels = {obj1: None, obj2: None}
+  for rel in state_relations:
+    if isinstance(rel, Merge):
       continue
 
-    new_rels.append(new_rel)
+    if isinstance(rel, Distinct) and obj1 in rel.init_list and obj2 in rel.init_list:
+      raise ValueError('Trying to merge distinct {}s {}'.format(obj_type, rel.name))
+    
+    # We defer transitive relations to later (see Step 1b.)
+    if (isinstance(rel, (SegmentHasLength, LineHasDirection, AngleHasMeasure)) and 
+        rel.init_list[0] in [obj1, obj2]):
+      val_rels[rel.init_list[0]] = rel
+      continue
+
+    if obj2 in rel.init_list and other_obj(rel, obj2) not in merge_graph1:
+      # add the rel that invovles obj2, but not obj1 to new_rels
+      new_rel = rel.replace(obj2, obj1)
+      new_rel.set_critical(critical)
+      new_rel.set_conclusion_position(conclusion_position)
+      new_rels.append(new_rel)
+
+  if val_rels[obj1] is None and val_rels[obj2] is None:
+    pass  # nothing to do.
+
+  elif val_rels[obj1] and val_rels[obj2] is None:
+    pass
+
+  elif val_rels[obj1] is None and val_rels[obj2]:
+    # If obj1 has no val, but obj2 has val
+    rel = val_rels[obj2]
+    val = rel.init_list[1]
+    # Then after merging obj1 and obj2, obj1 will has the same val
+    # with a lot of objs in val.edges, and the reason is that obj1==obj2:
+    val.add_new_clique([obj1, obj2])
+    new_rel = rel.replace(obj2, obj1)
     new_rel.set_critical(critical)
     new_rel.set_conclusion_position(conclusion_position)
+    new_rels.append(new_rel)
+  else:  # both has values.
+    val1 = val_rels[obj1].init_list[1]
+    val2 = val_rels[obj2].init_list[1]
 
-    if isinstance(new_rel, (SegmentHasLength, AngleHasMeasure, LineHasDirection)):
-      val = new_rel.init_list[1]
-      val.add_new_clique([obj1, obj2])
+    if val1 is val2:
+      val1.add_new_clique([obj1, obj2])
+      # this need to be in new rels, for set_chain_pos to reach it:
+      new_rels.append(val_rels[obj1])  
+    else:
+      val2.add_new_clique([obj1, obj2])
+      val2.update_edges_tmp(val1.edges[current_state])
 
+      new_rel = val_rels[obj2].replace(obj2, obj1)
+      new_rel.set_critical(critical)
+      new_rel.set_conclusion_position(conclusion_position)
+      new_rels.append(new_rel)
+  
+  # Now filter obj2 out of state_relations to recursively
+  # seek for consequently triggered merges.
+  filtered_state_relations = filter(
+      lambda x: isinstance(x, Merge) or obj2 not in x.init_list, state_relations)
+
+  theorem = None
+  if isinstance(obj1, Point):
+    theorem = all_theorems['auto_seg']
+  elif isinstance(obj1, Line):
+    theorem = all_theorems['auto_hp']
+  elif isinstance(obj1, HalfPlane):
+    theorem = all_theorems['auto_angle']
+  
+  new_rels = add_new_rels_from_auto_merge(
+    trigger_obj=obj1,
+    theorem=theorem, 
+    filtered_state_relations=filtered_state_relations, 
+    new_rels=new_rels, 
+    critical=critical, 
+    conclusion_position=conclusion_position,
+    current_state=current_state)
+  
+  # Finally remove obj2.
+  # But first remove obj2 in new_rels
+  new_rels = filter(
+      lambda rel: isinstance(rel, Merge) or obj2 not in rel.init_list, 
+      new_rels)
+
+  new_rel = Merge(obj2, obj1, merge_graph)
+  new_rel.set_critical(critical)
+  new_rel.set_conclusion_position(conclusion_position)
+
+  new_rels.append(new_rel)
   return new_rels
 
 
 def match_conclusions(conclusion, state_candidates, 
                       premise_match, state_relations, 
-                      distinct=None):
+                      distinct=None, state=None):
   """Given that premise is matched, see if the conclusion is already there.
 
   Args:
@@ -306,7 +487,17 @@ def match_conclusions(conclusion, state_candidates,
           premise_match[obj2], 
           state_relations=state_relations,
           critical=critical,
-          conclusion_position=conclusion_position)
+          conclusion_position=conclusion_position,
+          current_state=state)
+      all_merged_objs = [
+          rel.from_obj for rel in new_objs_and_rels 
+          if isinstance(rel, Merge)]
+      new_objs_and_rels = filter(
+          lambda rel: (isinstance(rel, Merge) or
+                       rel.init_list[0] not in all_merged_objs and 
+                       rel.init_list[1] not in all_merged_objs),
+          new_objs_and_rels
+      )
     else:
       # Case 2: Create new objects and relations
       new_objs_and_rels = create_new_obj_and_rels_for_conclusion(
@@ -334,7 +525,7 @@ def match_conclusions(conclusion, state_candidates,
 
 
 def match_relations(premise_relations, 
-                    state_relations,
+                    state,
                     augmented_relations=None,
                     # reverse_premise=True,
                     conclusion=None,
@@ -357,6 +548,7 @@ def match_relations(premise_relations,
       presented in the premise.
     conclusion: An object of type Conclusion
   """
+  state_relations = state.relations
 
   if conclusion:
     conclusion_relations = sum(conclusion.topological_list, [])
@@ -411,6 +603,7 @@ def match_relations(premise_relations,
           # Distinct is needed to avoid rematching the same premise
           # by rotating the match.
           distinct=distinct,
+          state=state  # needed for merging merge_graphs
       )
     if matched_conclusion.topological_list:
       yield matched_conclusion, all_match

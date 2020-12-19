@@ -18,9 +18,8 @@ from geometry import Point, Line, Segment, Angle, HalfPlane, Circle
 from geometry import SegmentLength, AngleMeasure, LineDirection
 from geometry import SegmentHasLength, AngleHasMeasure, LineHasDirection
 from geometry import PointEndsSegment, HalfplaneCoversAngle, LineBordersHalfplane
-from geometry import PointCentersCircle, Merge
+from geometry import PointCentersCircle, Merge, Distinct
 from geometry import LineContainsPoint, CircleContainsPoint, HalfPlaneContainsPoint
-
 
 
 def equal(struct1, struct2):
@@ -56,6 +55,21 @@ def equal_dict(d1, d2):
       return False 
 
   return True 
+
+
+def name_map(struct):
+  if isinstance(struct, (list, tuple)):
+    return [name_map(o) for o in struct]
+  elif isinstance(struct, dict):
+    return {
+      name_map(key): name_map(value)
+      for (key, value) in struct.items()
+    }
+  else:
+    if hasattr(struct, 'name'):
+      return struct.name
+    else:
+      return struct
 
 
 # Then match recursively
@@ -132,7 +146,8 @@ def recursively_match_best_effort(
 
   all_matches = []
   # Enumerate through possible edge match:
-  for _, candidate in enumerate(state_candidates.get(rel_type, [])):
+  candidates = state_candidates.get(rel_type, [])
+  for _, candidate in enumerate(candidates):
     # Now we try to match edge query0 to candidate, by checking
     # if this match will cause any conflict, if not then we proceed
     # to query1 in the next recursion depth.
@@ -141,71 +156,101 @@ def recursively_match_best_effort(
     # and edge candidate connects nodes c, d in state graph:
     (a, b), (c, d) = query0.init_list, candidate.init_list
 
-    # Special treatment for half pi:
-    # We match the exact object, not just its type
-    if a == geometry.halfpi and c != a:
-      continue
-    if b == geometry.halfpi and d != b:
-      continue
-
-    # Now we want to match a->c, b->d without any conflict,
-    # if there is conflict then candidate cannot be matched to query0.
-    if (object_mappings.get(a, c) != c or
-        object_mappings.get(b, d) != d or
-        # Also check for inverse map if there is any:
-        object_mappings.get(c, a) != a or
-        object_mappings.get(d, b) != b):
-      continue  # move on to the next candidate.
-
-    new_mappings = {a: c, b: d}
-    # Check for distinctiveness:
-    if not distinct:  # Everything is distinct except numeric values.
-      # Add the inverse mappings, so that now a <-> c and b <-> d,
-      # so that in the future c cannot be matched with any other node
-      # other than a, and d cannot be matched with any other node other
-      # than b.
-      if not isinstance(a, (SegmentLength, AngleMeasure, LineDirection)):
-        new_mappings[c] = a
-      if not isinstance(b, (SegmentLength, AngleMeasure, LineDirection)):
-        new_mappings[d] = b
+    if rel_type is Distinct:
+      map_ab_to = [(c, d), (d, c)]
     else:
-      # Check if new_mappings is going to conflict with object_mappings
-      # A conflict happens if there exist a' -> c in object_mappings and
-      # (a, a') presented in distinct. Likewise, if there exists b' -> d
-      # in object_mappings and (b, b') presented in distinct then
-      # a conflict happens. 
-      conflict = False
-      for distinct_pair in distinct:
-        if a not in distinct_pair and b not in distinct_pair:
-          continue  # nothing to check here
+      map_ab_to = [(c, d)]
 
-        x, y = distinct_pair
-        x_map = object_mappings.get(x, new_mappings.get(x, None))
-        y_map = object_mappings.get(y, new_mappings.get(y, None))
-        # either x or y will be in new_mappings by the above "if",
-        # so x_map and y_map cannot be both None
-        if x_map == y_map:
-          conflict = True
-          break
+    for c, d in map_ab_to:
 
-      if conflict:
+      # Special treatment for half pi:
+      # We match the exact object, not just its type
+      if a == geometry.halfpi and c != a:
+        continue
+      if b == geometry.halfpi and d != b:
+        continue
+
+      # Now we want to match a->c, b->d without any conflict,
+      # if there is conflict then candidate cannot be matched to query0.
+      if (object_mappings.get(a, c) != c or
+          object_mappings.get(b, d) != d or
+          # Also check for inverse map if there is any:
+          object_mappings.get(c, a) != a or
+          object_mappings.get(d, b) != b):
         continue  # move on to the next candidate.
 
-    # Add {query0 -> candidate} to new_mappings
-    new_mappings[query0] = candidate
-    # Update object_mappings by copying all of its content
-    # and then add new_mappings.
-    appended_mappings = dict(object_mappings, **new_mappings)
-    all_matches += recursively_match_best_effort(
-        query_relations=query_relations[1:], 
-        state_candidates=state_candidates,
-        object_mappings=appended_mappings,
-        distinct=distinct,
-        best=best,
-        pdb_at=pdb_at)
+      new_mappings = {a: c, b: d}
+      # Check for distinctiveness:
+      if not distinct:  # Everything is distinct except numeric values.
+        # Add the inverse mappings, so that now a <-> c and b <-> d,
+        # so that in the future c cannot be matched with any other node
+        # other than a, and d cannot be matched with any other node other
+        # than b.
+        if not isinstance(a, (SegmentLength, AngleMeasure, LineDirection)):
+          new_mappings[c] = a
+        if not isinstance(b, (SegmentLength, AngleMeasure, LineDirection)):
+          new_mappings[d] = b
+      else:
+        # Check if new_mappings is going to conflict with object_mappings
+        # A conflict happens if there exist a' -> c in object_mappings and
+        # (a, a') presented in distinct. Likewise, if there exists b' -> d
+        # in object_mappings and (b, b') presented in distinct then
+        # a conflict happens. 
+        conflict = False
+        for distinct_pair in distinct:
+          if a not in distinct_pair and b not in distinct_pair:
+            continue  # nothing to check here
+
+          x, y = distinct_pair
+          x_map = object_mappings.get(x, new_mappings.get(x, None))
+          y_map = object_mappings.get(y, new_mappings.get(y, None))
+          # either x or y will be in new_mappings by the above "if",
+          # so x_map and y_map cannot be both None
+          if x_map == y_map:
+            conflict = True
+            break
+
+        if conflict:
+          continue  # move on to the next candidate.
+
+      # Add {query0 -> candidate} to new_mappings
+      new_mappings[query0] = candidate
+      # Update object_mappings by copying all of its content
+      # and then add new_mappings.
+      appended_mappings = dict(object_mappings, **new_mappings)
+      all_matches += recursively_match_best_effort(
+          query_relations=query_relations[1:], 
+          state_candidates=state_candidates,
+          object_mappings=appended_mappings,
+          distinct=distinct,
+          best=best,
+          pdb_at=pdb_at)
+
   return all_matches
 
 
+def why_fail_to_match(
+    theorem, state, mapping={}, command_str=''):
+  if len(mapping) == 0 and command_str:
+    mapping = action_chain_lib.mapping_from_command(
+        command_str, theorem, state)
+
+  type2rel = ddict(lambda: [])
+  for rel in state.relations:
+    type2rel[type(rel)].append(rel)
+
+  best = [{}]
+  recursively_match_best_effort(
+      theorem.premise,
+      type2rel,
+      mapping,
+      best=best
+  )
+  best = best[0] 
+  miss = [rel for rel in theorem.premise 
+          if rel not in best]
+  return best, miss
+      
 
 class DebugObjects(object):
   """Saves the explore chain from root upto current point."""
@@ -370,27 +415,7 @@ class DebugObjects(object):
 
   def why_fail_to_match(
       self, theorem, state, mapping={}, command_str=''):
-
-    if len(mapping) == 0 and command_str:
-      mapping = action_chain_lib.mapping_from_command(
-          command_str, theorem, state)
-
-    type2rel = ddict(lambda: [])
-    for rel in state.relations:
-      type2rel[type(rel)].append(rel)
-
-    best = [{}]
-    recursively_match_best_effort(
-        theorem.premise,
-        type2rel,
-        mapping,
-        best=best
-    )
-    best = best[0] 
-    miss = [rel for rel in theorem.premise 
-            if rel not in best]
-
-    return best, miss
+    return why_fail_to_match(theorem, state, mapping, command_str)
       
 
 db = None

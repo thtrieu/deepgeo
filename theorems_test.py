@@ -21,7 +21,7 @@ from theorems import *
 
 from state import State, Conclusion
 
-from geometry import Point, Line, Segment, Angle, HalfPlane, Circle
+from geometry import Point, Line, Segment, Angle, HalfPlane, Circle, TransitiveRelation
 from geometry import SegmentLength, AngleMeasure, LineDirection
 from geometry import SegmentHasLength, AngleHasMeasure, LineHasDirection
 from geometry import PointEndsSegment, HalfplaneCoversAngle, LineBordersHalfplane
@@ -149,7 +149,7 @@ def time_sas():
   conclusion = theorem.conclusion
 
   matches = trieu_graph_match.match_relations(
-      premise, state.relations,
+      premise, state,
       conclusion=theorem.conclusion, 
       randomize=False, distinct=theorem.distinct,
       match_all=True)
@@ -192,7 +192,7 @@ def sas():
 
   start = time.time()
   matches = trieu_graph_match.match_relations(
-      premise, state.relations,
+      premise, state,
       conclusion=theorem.conclusion, 
       randomize=False, 
       distinct=theorem.distinct,
@@ -210,7 +210,7 @@ def sas():
 
   start = time.time()
   matches = trieu_graph_match.match_relations(
-      premise, state.relations,
+      premise, state,
       conclusion=theorem.conclusion, 
       randomize=False, distinct=theorem.distinct)
   matches = list(matches)
@@ -325,7 +325,7 @@ def sas_hp():
 
   matches = trieu_graph_match.match_relations(
       premise_relations=theorem.premise, 
-      state_relations=state.relations,
+      state=state,
       conclusion=theorem.conclusion,
       randomize=True,
       distinct=theorem.distinct)
@@ -349,7 +349,9 @@ def triangle_seed():
       segment_def(CA, C, A) +
       collinear(ab, A, B) +
       collinear(bc, B, C) +
-      collinear(ca, C, A)
+      collinear(ca, C, A) +
+      distinct(A, B, C) +
+      distinct(ab, bc, ca)
   )
 
   init_state.add_spatial_relations(
@@ -452,12 +454,22 @@ def get_state_and_proof_objects(last_action, val_name):
   for rel in last_action.new_objects:
     if isinstance(rel, (SegmentHasLength, LineHasDirection, AngleHasMeasure)):
       _, val = rel.init_list
+      # [val, rel1, rel2, rel3]
       new_val2rels[val.name] = [val] + val2rels[val]
 
-  queue = new_val2rels[val_name]
+  queue = new_val2rels[val_name]  # [val, rel1, rel2, rel3]
+  # [obj1, obj2, obj3]
   state_queue = [r.init_list[0] for r in queue[1:]]
+  # [(val, rel1, rel2, rel3)]
   proof_queue = [tuple(queue)]
   return state_queue, proof_queue
+
+
+def get_state_and_proof_objects_v2(rel):
+  state_queue = rel.init_list 
+  proof_queue = [rel]  # + list(rel.init_list)
+  return state_queue, proof_queue
+
 
 
 def test_thales_whittle1():
@@ -470,7 +482,7 @@ def test_thales_whittle1():
       (used_theorems['mid'], 'A=A B=B'),  # P1
       (used_theorems['parallel'], 'A=A l=bc'),  # l1  noise
       (used_theorems['parallel'], 'A=P1 l=bc'),  # l2
-      (used_theorems['seg_line'], 'l=l2 A=A B=C'),  # P1
+      (used_theorems['seg_line'], 'l=l2 A=A B=C'),  # P2
       # -------------------------------------------------------
       (used_theorems['parallel'], 'A=C l=ab'),  # l3
       (used_theorems['line'], 'A=P1 B=C'),  # l4
@@ -1144,15 +1156,16 @@ def whittle(final_state, state_queue, proof_queue, action_chain,
       continue
     if step == True:
       print(i, action.to_str())
+      new_state = new_state.copy()
       new_state.add_relations(action.conclusion_objects)
     else:
       all_constructions = sum(step, [])
+      new_state = new_state.copy()
       new_state.add_relations(all_constructions)
       print('{}. {} : {}'.format(i, action.theorem.name,
                             [r.name for r in all_constructions]))
 
-  info = {}
-  for name, obj in new_state.name2obj.items():
+  for _, obj in new_state.name2obj.items():
     if isinstance(obj, Point):
       new_canvas.update_point(obj, canvas.points[obj])
     elif isinstance(obj, Line):
@@ -1168,7 +1181,11 @@ def whittle(final_state, state_queue, proof_queue, action_chain,
     proof_steps.append(action)
 
   print()
-  print('Whittled Proof {}'.format([r.name for r in proof_queue[0]]))
+  if isinstance(proof_queue[0], (list, tuple)):
+    print('Whittled Proof {}'.format([r.name for r in proof_queue[0]]))
+  else:
+    print('Whittled Proof {}'.format(proof_queue[0].name))
+
   for i, (step, action) in enumerate(zip(proof_whittled, action_chain)):
     if step == []:
       continue
@@ -1193,6 +1210,7 @@ def test_sss_isosceles():
 
   init_state.add_relations(
       # [A, B, C, AB, BC, CA, ab, bc, ca] +
+      distinct(A, B, C) +
       segment_def(AB, A, B) +
       segment_def(BC, B, C) +
       segment_def(CA, C, A) +
@@ -1213,6 +1231,93 @@ def test_sss_isosceles():
   ]
 
   print('\nRunning SSS isosceles test:')
+  action_chain_lib.execute_steps(steps, state, canvas)
+
+
+def test_bisect_isosceles():
+  geometry.reset()
+
+  init_canvas = sketch.Canvas()
+  init_state = State()
+
+  A, B, C = map(Point, 'ABC')
+  ab, bc, ca = map(Line, 'ab bc ca'.split())
+  AB, CA = map(Segment, 'AB CA'.split())
+
+  ab_hp, ca_hp = map(HalfPlane, 'ab_hp ca_hp'.split())
+
+  init_state.add_relations(
+      # [A, B, C, AB, BC, CA, ab, bc, ca] +
+      distinct(A, B, C) +
+      distinct(ab, bc, ca) + 
+      segment_def(AB, A, B) +
+      segment_def(CA, C, A) +
+      divides_halfplanes(ab, ab_hp, p1=C) +
+      divides_halfplanes(ca, ca_hp, p1=B) +
+      collinear(ab, A, B) +
+      collinear(bc, B, C) +
+      collinear(ca, C, A) +
+      have_length('1m', AB, CA)
+  )
+
+  line2points = init_canvas.add_triangle(A, B, C, ab, bc, ca)
+  init_state.add_spatial_relations(line2points)
+  init_canvas.update_hps(init_state.line2hps)
+
+  state, canvas = init_state.copy(), init_canvas.copy()
+
+  # Original thales + noises
+  steps = [
+      (used_theorems['bisect'], 'hp1=ab_hp hp2=ca_hp'),
+      (used_theorems['seg_line'], 'l=l1 A=B B=C'),
+      (used_theorems['line'], 'A=A B=P1'),
+      (used_theorems['sas'], 'A=B B=A C=P1 D=C E=A F=P1')
+  ]
+
+  print('\nRunning bisector isosceles test:')
+  action_chain_lib.execute_steps(steps, state, canvas)
+
+
+def test_bisect_sss_isosceles():
+  geometry.reset()
+
+  init_canvas = sketch.Canvas()
+  init_state = State()
+
+  A, B, C = map(Point, 'ABC')
+  ab, bc, ca = map(Line, 'ab bc ca'.split())
+  AB, CA = map(Segment, 'AB CA'.split())
+
+  ab_hp, ca_hp = map(HalfPlane, 'ab_hp ca_hp'.split())
+
+  init_state.add_relations(
+      # [A, B, C, AB, BC, CA, ab, bc, ca] +
+      distinct(A, B, C) +
+      distinct(ab, bc, ca) + 
+      segment_def(AB, A, B) +
+      segment_def(CA, C, A) +
+      divides_halfplanes(ab, ab_hp, p1=C) +
+      divides_halfplanes(ca, ca_hp, p1=B) +
+      collinear(ab, A, B) +
+      collinear(bc, B, C) +
+      collinear(ca, C, A) +
+      have_length('1m', AB, CA)
+  )
+
+  line2points = init_canvas.add_triangle(A, B, C, ab, bc, ca)
+  init_state.add_spatial_relations(line2points)
+  init_canvas.update_hps(init_state.line2hps)
+
+  state, canvas = init_state.copy(), init_canvas.copy()
+
+  # Original thales + noises
+  steps = [
+      (used_theorems['mid'], 'A=B B=C'),
+      (used_theorems['line'], 'A=A B=P1'),
+      (used_theorems['sss'], 'A=B B=A C=P1 D=C E=A F=P1')
+  ]
+
+  print('\nRunning bisector SSS isosceles test:')
   action_chain_lib.execute_steps(steps, state, canvas)
 
 
@@ -1244,8 +1349,9 @@ def test_asa_isosceles():
       have_measure('^1', ABC, BCA)
   )
 
-  init_state.add_spatial_relations(
-      init_canvas.add_triangle(A, B, C, ab, bc, ca))
+  line2points = init_canvas.add_triangle(A, B, C, ab, bc, ca)
+  init_state.add_spatial_relations(line2points)
+  init_canvas.update_hps(init_state.line2hps)
 
   state, canvas = init_state.copy(), init_canvas.copy()
 
@@ -1287,8 +1393,9 @@ def test_sas_isosceles():
       have_length('1m', AB, CA)
   )
 
-  init_state.add_spatial_relations(
-      init_canvas.add_triangle(A, B, C, ab, bc, ca))
+  line2points = init_canvas.add_triangle(A, B, C, ab, bc, ca)
+  init_state.add_spatial_relations(line2points)
+  init_canvas.update_hps(init_state.line2hps)
 
   state, canvas = init_state.copy(), init_canvas.copy()
 
@@ -1306,17 +1413,22 @@ def test_sas_isosceles():
   action_chain_lib.execute_steps(steps, state, canvas)
 
 
-def test_thales_merge_midpoint():
+def test_thales_merge_midpoint1():
   geometry.reset()
   init_state, init_canvas = triangle_seed()
   state, canvas = init_state.copy(), init_canvas.copy()
 
   # Original thales + noises
   steps = [
+      # Let P1 be the midpoint of AB
       (used_theorems['mid'], 'A=A B=B'),  # P1
+      # Through A create l1 parallel to BC (noise)
       (used_theorems['parallel'], 'A=A l=bc'),  # l1  noise
+      # Through P1 create l2 parallel to BC 
       (used_theorems['parallel'], 'A=P1 l=bc'),  # l2
+      # P2 is the intersection of l2 and AC
       (used_theorems['seg_line'], 'l=l2 A=A B=C'),  # P2
+      # P3 is the midpoint of AC
       (used_theorems['mid'], 'A=A B=C'),  # P3
       # -------------------------------------------------------
       (used_theorems['parallel'], 'A=C l=ab'),  # l3
@@ -1338,9 +1450,106 @@ def test_thales_merge_midpoint():
   state, canvas, action_chain = action_chain_lib.execute_steps(steps, state, canvas)
 
   # Extract state queue & proof queue that prove P2 is mid AC
-  # conclusion = action_chain[-1].matched_conclusion
+  conclusion = action_chain[-1].matched_conclusion
+  goals = list(whittling.extract_all_proof_goals(action_chain, state))
+  proof_queues = state.name_map([
+      proof_queue[0][0] for _, proof_queue in goals])
+  
+  assert len(proof_queues) == 7
+  for rel_name in ['P2[s4', 'P2[s3', 'l2[P3]', 
+                   'P3[CP2', 'P3[P2P4', 'P3[AP2', 'P3[P2P1']:
+    assert rel_name in proof_queues, rel_name
 
-  state_queue, proof_queue = get_state_and_proof_objects(action_chain[-1], '10m')
+
+  for state_queue, proof_queue in goals:
+    if proof_queue[0][0].name == 'l2[P3]':
+      break
+
+  s = time.time()
+  problem, problem_canvas, proof_steps = whittle(
+      state, state_queue, proof_queue, action_chain,
+      init_state, init_canvas, canvas)
+  print('thales whittle time ', time.time()-s)
+
+  # Test if we are having the correct problem statement
+  assert len(problem_canvas.points) == 5, len(problem_canvas.points)
+  assert len(problem_canvas.lines) == 4, len(problem_canvas.lines)
+  assert len(problem_canvas.circles) == 0, len(problem_canvas.circles)
+  assert len(problem.name2obj) == 27, len(problem.name2obj)
+
+  # Test if we have the correct proof steps
+  chosen_proof_steps = [i for i, step in enumerate(proof_steps)
+                        if step is not None]
+  assert len(chosen_proof_steps) == 10, len(chosen_proof_steps)
+  assert chosen_proof_steps == [3, 5, 6, 8, 9, 11, 12, 14, 15, 16]
+
+  steps = [
+      (used_theorems['seg_line'], 'A=A B=C l=l2'),  # P5
+      (used_theorems['parallel'], 'A=C l=ab'),  # l6
+      (used_theorems['line'], 'A=P1 B=C'),  # l7
+      # -------------------------------------------------------
+      (used_theorems['eq'], 'l=l7 l1=ab l2=l6'),
+      (used_theorems['eq'], 'l=l7 l1=l2 l2=bc'),
+      (used_theorems['asa'], 'A=P1 B=B C=C D=C F=P1 de=l6 ef=l2'),  # P6
+      (used_theorems['eq'], 'l=ca l1=ab l2=l6'),
+      (used_theorems['eq'], 'l=l2 l1=ab l2=l6'),
+      (used_theorems['asa'], 'A=A B=P5 C=P1 D=C F=P6 de=ca ef=l2'),
+      (used_theorems['unq_mid_point'], 'A=A B=C M=P5 N=P3')
+  ]
+
+  # Test if the correct proof step applied on the problem statement
+  # give the correct solution
+  print('Proof execution:')
+  proved_problem, proved_canvas, _ = action_chain_lib.execute_steps(
+      steps, problem, problem_canvas)
+
+  assert len(proved_canvas.points) == 7
+  assert len(proved_canvas.lines) == 6
+  assert len(proved_canvas.circles) == 0
+  assert len(proved_problem.name2obj) == 70, len(proved_problem.name2obj)
+  # action = used_theorems['asa'].match_one_random(proved_problem)
+  # assert action is None
+
+
+def test_thales_merge_midpoint2():
+  geometry.reset()
+  init_state, init_canvas = triangle_seed()
+  state, canvas = init_state.copy(), init_canvas.copy()
+
+  # Original thales + noises
+  steps = [
+      (used_theorems['mid'], 'A=A B=B'),  # P1
+      (used_theorems['parallel'], 'A=P1 l=bc'),  # l1
+      (used_theorems['parallel'], 'A=A l=bc'),  # l2  noise
+      (used_theorems['seg_line'], 'l=l1 A=A B=C'),  # P2
+      (used_theorems['mid'], 'A=A B=C'),  # P3
+      # -------------------------------------------------------
+      (used_theorems['parallel'], 'A=C l=ab'),  # l3
+      (used_theorems['line'], 'A=P1 B=C'),  # l4
+      (used_theorems['parallel'], 'A=B l=ca'),  # l5  noise
+      # -------------------------------------------------------
+      (used_theorems['eq'], 'l=l4 l1=ab l2=l3'),
+      (used_theorems['eq'], 'l=l4 l1=l1 l2=bc'),
+      (used_theorems['eq'], 'l=ab l1=l2 l2=bc'),  # noise
+      (used_theorems['asa'], 'A=P1 B=B C=C D=C F=P1 de=l3 ef=l1'),  # P4
+      (used_theorems['eq'], 'l=ca l1=ab l2=l3'),
+      (used_theorems['eq'], 'l=bc l1=ca l2=l5'),  # noise
+      (used_theorems['eq'], 'l=l1 l1=ab l2=l3'),
+      (used_theorems['asa'], 'A=A B=P2 C=P1 D=C F=P4 de=ca ef=l1'),
+      (used_theorems['unq_mid_point'], 'A=A B=C M=P2 N=P3'),
+  ]
+
+  print('\nRunning thales merge test:')
+  state, canvas, action_chain = action_chain_lib.execute_steps(steps, state, canvas)
+
+  # Extract state queue & proof queue that prove P2 is mid AC
+  conclusion = action_chain[-1].matched_conclusion
+
+  P3_on_l1_rel = conclusion.topological_list[0][1]
+  assert isinstance(P3_on_l1_rel, LineContainsPoint)
+  assert P3_on_l1_rel.name == 'l1[P3]'
+
+  state_queue, proof_queue = get_state_and_proof_objects_v2(P3_on_l1_rel)
 
   s = time.time()
   problem, problem_canvas, proof_steps = whittle(
@@ -1352,54 +1561,54 @@ def test_thales_merge_midpoint():
   assert len(problem_canvas.points) == 5
   assert len(problem_canvas.lines) == 4
   assert len(problem_canvas.circles) == 0
-  assert len(problem.name2obj) == 26, len(problem.name2obj)
+  assert len(problem.name2obj) == 27, len(problem.name2obj)
 
   # Test if we have the correct proof steps
   chosen_proof_steps = [i for i, step in enumerate(proof_steps)
                         if step is not None]
-  assert len(chosen_proof_steps) == 8
-  assert chosen_proof_steps == [4, 5, 7, 8, 10, 11, 13, 14]
+  assert len(chosen_proof_steps) == 10, len(chosen_proof_steps)
+  assert chosen_proof_steps == [3, 5, 6, 8, 9, 11, 12, 14, 15, 16]
 
   # Test if the correct proof step applied on the problem statement
   # give the correct solution
   print('Proof execution:')
   steps = [
+      (used_theorems['seg_line'], 'A=A B=C l=l1'),  # P5
       (used_theorems['parallel'], 'A=C l=ab'),  # l6
       (used_theorems['line'], 'A=P1 B=C'),  # l7
       # -------------------------------------------------------
       (used_theorems['eq'], 'l=l7 l1=ab l2=l6'),
-      (used_theorems['eq'], 'l=l7 l1=l2 l2=bc'),
-      (used_theorems['asa'], 'A=P1 B=B C=C D=C F=P1 de=l6 ef=l2'),  # P4
+      (used_theorems['eq'], 'l=l7 l1=l1 l2=bc'),
+      (used_theorems['asa'], 'A=P1 B=B C=C D=C F=P1 de=l6 ef=l1'),  # P6
       (used_theorems['eq'], 'l=ca l1=ab l2=l6'),
-      (used_theorems['eq'], 'l=l2 l1=ab l2=l6'),
-      (used_theorems['asa'], 'A=A B=P2 C=P1 D=C F=P4 de=ca ef=l2')
+      (used_theorems['eq'], 'l=l1 l1=ab l2=l6'),
+      (used_theorems['asa'], 'A=A B=P5 C=P1 D=C F=P6 de=ca ef=l1'),
+      (used_theorems['unq_mid_point'], 'A=A B=C M=P5 N=P3')
   ]
 
   proved_problem, proved_canvas, _ = action_chain_lib.execute_steps(
       steps, problem, problem_canvas)
 
-  assert len(proved_canvas.points) == 6
+  assert len(proved_canvas.points) == 7
   assert len(proved_canvas.lines) == 6
   assert len(proved_canvas.circles) == 0
-  assert len(proved_problem.name2obj) == 70, len(proved_problem.name2obj)
-  # action = used_theorems['asa'].match_one_random(proved_problem)
-  # assert action is None
+  assert len(proved_problem.name2obj) == 73, len(proved_problem.name2obj)
 
 
-def test_merge_line_direction():
-  geometry.reset()
-  init_state, init_canvas = triangle_seed()
-  state, canvas = init_state.copy(), init_canvas.copy()
+# def test_merge_line_direction():
+#   geometry.reset()
+#   init_state, init_canvas = triangle_seed()
+#   state, canvas = init_state.copy(), init_canvas.copy()
 
-  # Original thales + noises
-  steps = [
-      (used_theorems['perp_out'], 'A=A l=bc'),  # l1
-      (used_theorems['perp_on'], 'A=A l=l1'),  # l1  noise
-      (used_theorems['parallel'], 'A=A l=bc'),  # l2
-  ]
+#   # Original thales + noises
+#   steps = [
+#       (used_theorems['perp_out'], 'A=A l=bc'),  # l1
+#       (used_theorems['perp_on'], 'A=A l=l1'),  # l1  noise
+#       (used_theorems['parallel'], 'A=A l=bc'),  # l2
+#   ]
 
-  print('\nRunning thales merge test:')
-  state, canvas, action_chain = action_chain_lib.execute_steps(steps, state, canvas)
+#   print('\nRunning thales merge test:')
+#   state, canvas, action_chain = action_chain_lib.execute_steps(steps, state, canvas)
 
 
 if __name__ == '__main__':
@@ -1425,8 +1634,10 @@ if __name__ == '__main__':
   test_sss_isosceles()
   test_asa_isosceles()
   test_sas_isosceles()
-
-  # test_thales_merge_midpoint()
+  test_bisect_isosceles()
+  test_bisect_sss_isosceles()
+  test_thales_merge_midpoint1()
+  # test_thales_merge_midpoint2()
   # test_merge_line_direction()
   print('\n [OK!]')
   print('Total time = {}'.format(time.time()-t))

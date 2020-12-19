@@ -37,7 +37,6 @@ class State(object):
     self.type2rel = {}
     self.obj2valrel = {}
     self.val2valrel = {}
-    self.valrel2pos = {}
     self.name2obj = {}
     self.all_points = []
     self.all_hps = []
@@ -46,15 +45,25 @@ class State(object):
     self.line2hps = {}
     self.hp2points = {}
 
+  def pop(self):
+    for val in self.val2valrel:
+      val.edges.pop(self)
+    
+    for rel in self.relations:
+      rel.pop(self)
+
   def copy(self):
     copied = State()
     copied.relations = _copy(self.relations)
     copied.type2rel = _copy(self.type2rel)
     copied.obj2valrel = _copy(self.obj2valrel)
     copied.val2valrel = _copy(self.val2valrel)
-    copied.valrel2pos = _copy(self.valrel2pos)
+    # copied.valrel2pos = _copy(self.valrel2pos)
     copied.name2obj = _copy(self.name2obj)
     copied.old2newvals = _copy(self.old2newvals)
+
+    for rel in self.relations:
+      rel.copy(old_state=self, new_state=copied)
 
     for val in self.val2valrel:
       val.copy(old_state=self, new_state=copied)
@@ -80,13 +89,51 @@ class State(object):
         for (key, value) in struct.items()
       }
     else:
-      if hasattr(struct, 'name'):
+      if isinstance(struct, Segment):
+        return self.segment_name(struct)
+      elif isinstance(struct, Angle):
+        return self.angle_name(struct)
+      elif isinstance(struct, HalfPlane):
+        return self.hp_name(struct)
+      elif isinstance(struct, PointEndsSegment):
+        p, s = struct.init_list
+        return p.name + '[' + self.segment_name(s)
+      elif isinstance(struct, SegmentHasLength):
+        s, l = struct.init_list
+        return self.segment_name(s) + '=' + l.name
+      elif isinstance(struct, HalfplaneCoversAngle):
+        hp, a = struct.init_list
+        return self.hp_name(hp) + '/' + self.angle_name(a)
+      elif isinstance(struct, Merge):
+        return 'merge({}=>{})'.format(
+            self.name_map(struct.from_obj), 
+            self.name_map(struct.to_obj))
+      elif hasattr(struct, 'name'):
         return struct.name
       else:
         return struct
 
+  def hp_name(self, hp):
+    l, p = None, None
+    for r in self.relations:
+      if isinstance(r, LineBordersHalfplane) and r.init_list[1] == hp:
+        l = r.init_list[0]
+      if isinstance(r, HalfPlaneContainsPoint) and r.init_list[0] == hp:
+        p = r.init_list[1]
+      if l and p:
+        break
+    return 'hp({},{})'.format(l.name, p.name)
+
   def halfpi_val(self):
     return self.obj2valrel[geometry.halfpi].init_list[1]
+
+  def segment_name(self, segment):
+    # return segment.name
+    ends = self.ends_of_segment(segment)
+    if ends:
+      return ''.join([p.name for p in ends])
+    else:
+      return segment.name
 
   def angle_name(self, angle):
     if angle == geometry.halfpi:
@@ -140,12 +187,22 @@ class State(object):
         angle, measure = rel.init_list
         val2valrels[measure].append(self.angle_name(angle))
 
-    for _, equal_angles in val2valrels.items():
-      print('>> ' + ' = '.join(equal_angles))
+    for measure, equal_angles in val2valrels.items():
+      print('>> ' + measure + ' = ' + ' = '.join(equal_angles))
+
+  def print_all_equal_segments(self):
+    val2valrels = ddict(lambda: [])
+    for rel in self.relations:
+      if isinstance(rel, SegmentHasLength):
+        seg, length = rel.init_list
+        val2valrels[length].append(self.segment_name(seg))
+
+    for length, equal_segments in val2valrels.items():
+      print('>> ' + length.name + ' = ' + ' = '.join(equal_segments))
 
   def ends_of_segment(self, segment):
     points = []
-    for p_seg in self.type2rel[PointEndsSegment]:
+    for p_seg in self.type2rel.get(PointEndsSegment, []):
       if segment == p_seg.init_list[1]:
         points.append(p_seg.init_list[0])
     return points
@@ -153,7 +210,7 @@ class State(object):
   def hp_and_line_of_angle(self, angle):
     hps = []
     lines = []
-    for hp_a in self.type2rel[HalfplaneCoversAngle]:
+    for hp_a in self.type2rel.get(HalfplaneCoversAngle, []):
       if angle == hp_a.init_list[1]:
         hp = hp_a.init_list[0]
         l = self.line_of_hp(hp)
@@ -179,38 +236,6 @@ class State(object):
     result = join.join(result)
     return '[{}]'.format(result)
 
-  def new_relations_from_merge(self, obj1, obj2):
-    """When obj1 and obj2 are recognized to be the same object.
-
-    theorems allow merging:
-      * point
-      * line -> automatic -> hps
-      * 
-
-    Automatic merge:
-      line -> hps
-      segment -> points
-      angle -> 
-
-    All relations involving obj1 also applies to obj2 and vice versa.
-    """
-    if not isinstance(obj1, type(obj2)):
-      raise ValueError('Cannot merge {} ({}) and {} ({})'.format(
-          obj1, type(obj1), obj2, type(obj2)))
-
-    if not isinstance(obj1, (Point, Segment, Line, Angle, Circle)):
-      raise ValueError('Cannot merge {} and {} of type {}'.format(
-          obj1, obj2, type(obj1)))
-
-    new_rel1, new_rel2 = [], []
-    for rel in self.relations:
-      if obj1 in rel.init_list:
-        new_rel2.append(rel.replace(obj1, obj2))
-      elif obj2 in rel.init_list:
-        new_rel1.append(rel.replace(obj2, obj1))
-
-    return new_rel1, new_rel2
-
   def add_one(self, entity):
     if isinstance(entity, tuple(non_relations)):
       # if isinstance(entity, Point):
@@ -221,8 +246,9 @@ class State(object):
       return
 
     if isinstance(entity, Merge):
-      raise NotImplementedError('Merge')
-      # self.merge(*entity.init_list)
+      self.remove(entity.from_obj)
+      entity.to_obj.merge_graph[self] = entity.merge_graph
+      return
         
     relation = entity
     for obj in relation.init_list:
@@ -232,6 +258,8 @@ class State(object):
           self.all_points.append(obj)
         elif isinstance(obj, HalfPlane):
           self.all_hps.append(obj)
+
+    # print('adding '+ self.name_map(relation))
 
     if isinstance(relation, 
                   (AngleHasMeasure, SegmentHasLength, LineHasDirection)):
@@ -269,6 +297,49 @@ class State(object):
     self.relations.append(relation)
     self.type2rel[rel_type].append(relation)
 
+  def remove(self, obj):
+    # mask = [True] * len(self.relations)
+    self.relations = filter(
+        lambda rel: obj not in rel.init_list,
+        self.relations)
+  
+    for t, rels in self.type2rel.items():
+      self.type2rel[t] = filter(
+          lambda rel: obj not in rel.init_list,
+          rels)
+
+    for val, valrels in self.val2valrel.items():
+      self.val2valrel[val] = filter(
+          lambda rel: obj not in rel.init_list,
+          valrels)
+
+    if obj in self.obj2valrel:
+      self.obj2valrel.pop(obj)
+
+    if obj in self.all_hps:
+      self.all_hps.remove(obj)
+
+    if obj in self.all_points:
+      self.all_points.remove(obj)
+
+    if obj.name in self.name2obj:
+      self.name2obj.pop(obj.name)
+
+    if obj in self.line2hps:
+      self.line2hps.pop(obj)
+    
+    for line in self.line2hps:
+      if obj in self.line2hps[line]:
+        self.line2hps[line].remove(obj)
+
+    if obj in self.hp2points:
+      self.hp2points.pop(obj)
+    
+    for hp in self.hp2points:
+      ps = self.hp2points[hp]
+      if obj in ps:
+        ps.remove(obj)
+
   def augmented_relations(self):
     augment = []
     for obj in self.name2obj.values():
@@ -293,7 +364,7 @@ class State(object):
       else:
         self.val2valrel[new_value] += [relation]
 
-      self.valrel2pos[relation] = len(self.relations)
+      # self.valrel2pos[relation] = len(self.relations)
       self.relations.append(relation)
 
       # Now, we use self.old2newvals to track to the
@@ -331,11 +402,15 @@ class State(object):
       self.obj2valrel[obj] = new_valrel
 
       # Update self.relations
-      pos = self.valrel2pos[valrel]
-      self.relations[pos] = new_valrel
+      for i, rel in enumerate(self.relations):
+        if rel == valrel:
+          self.relations[i] = new_valrel
+
+      # pos = self.valrel2pos[valrel]
+      # self.relations[pos] = new_valrel
       # Update self.valrel2pos
-      self.valrel2pos.pop(valrel)
-      self.valrel2pos[new_valrel] = pos
+      # self.valrel2pos.pop(valrel)
+      # self.valrel2pos[new_valrel] = pos
 
     # Remove old value from self.val2valrel
     self.val2valrel.pop(old_value)

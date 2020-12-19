@@ -26,6 +26,40 @@ def get_obj(name):
   return name_to_obj.get(name, None)
 
 
+def _bfs(edges, from_node, to_nodes):
+  visited = {obj: False for obj in edges}
+  parent = {obj: None for obj in edges}
+
+  queue = [from_node] 
+  visited[from_node] = True
+
+  found = None
+  while queue:
+    s = queue.pop(0)
+    for i in edges[s]:
+      if i not in visited:
+        continue
+      if not visited[i]: 
+        parent[i] = s
+        if i in to_nodes:
+          found = i
+          break
+        queue.append(i) 
+        visited[i] = True
+    if found:
+      break
+
+  if not found:
+    return []
+
+  path = [found]
+  while path[-1] != from_node:
+    p = parent[path[-1]]
+    path.append(p)
+
+  return path
+
+
 class GeometryEntity(object):
 
   def __init__(self, name=None):
@@ -40,6 +74,15 @@ class GeometryEntity(object):
 
     self.name = name
     name_to_obj[self.name] = self
+
+  def get_merge_graph(self, state, default={}):
+    if not hasattr(self, 'merge_graph'):
+      self.merge_graph = {}
+    if state not in self.merge_graph:
+      if 'equivalents' not in default:
+        default['equivalents'] = []
+      self.merge_graph[state] = default
+    return self.merge_graph[state]
 
   def get_name(self):
     global _name_bank
@@ -142,6 +185,57 @@ class GeometryEntity(object):
                 type(self).__name__,  self.name))
     self._critical = critical
 
+  def copy(self, old_state, new_state):
+    if hasattr(self, 'merge_graph') and old_state in self.merge_graph:
+      self.merge_graph[new_state] = {
+        obj1: type(obj2_dict)(obj2_dict)
+        for obj1, obj2_dict in self.merge_graph[old_state].items()
+      }
+
+  def pop(self, state):
+    if hasattr(self, 'merge_graph') and state in self.merge_graph:
+      self.merge_graph.pop(state)
+
+  def find_merge_path(self, rel, obj, state):
+    if obj == rel.init_list[0]:
+      other = rel.init_list[1]
+    else:
+      other = rel.init_list[0]
+    
+    edges = self.merge_graph[state]
+    equivalents = edges[other].keys()
+
+    path = _bfs(edges, obj, equivalents)
+    found = path[0]
+    result = [
+        edges[p2][p1] for p1, p2 in zip(path[:-1], path[1:])]
+    rel = edges[other][found]
+    return [rel] + result
+
+  def find_min_span_subgraph(self, equivs, state):
+    merge_graph = self.get_merge_graph(state)
+    
+    result = set()
+    span = [self]
+    for equiv in equivs:
+      if equiv not in span:
+        path = _bfs(merge_graph, equiv, span)
+        span += path
+        result.update([
+            merge_graph[p2][p1] for p1, p2 in zip(path[:-1], path[1:])])
+    return list(result)
+
+def update_edges(edges1, edges2):
+  for obj_a, obj_b_dict in edges2.items():
+    if obj_a in edges1:
+      for obj_b, pos in obj_b_dict.items():
+        if obj_b not in edges1[obj_a]:
+          edges1[obj_a][obj_b] = pos
+        else:
+          edges1[obj_a][obj_b] = min(pos, edges1[obj_a][obj_b])
+    else: 
+      edges1[obj_a] = dict(obj_b_dict)
+
 
 class CausalValue(GeometryEntity):
   """Handles transitivity causal dependency."""
@@ -159,6 +253,15 @@ class CausalValue(GeometryEntity):
       obj1: dict(obj2_dict)
       for obj1, obj2_dict in self.edges[old_state].items()
     }
+
+  def _has_edge_from_to(self, obj1, obj2, state):
+    return (obj1 in self.edges[state] and obj2 in self.edges[state][obj1])
+  
+  def has_edges(self, obj1, obj2, state):
+    return self._has_edge_from_to(obj1, obj2, state) or self._has_edge_from_to(obj2, obj1, state)
+
+  def update_edges_tmp(self, edges):
+    update_edges(self.edges_tmp, edges)
 
   def add_new_clique(self, objs):
     if len(objs) < 2:
@@ -185,38 +288,10 @@ class CausalValue(GeometryEntity):
   def dependency_path(self, obj1, obj2, state):
     # perform a BFS
     edges = self.edges[state]
-    visited = {obj: False for obj in edges}
-    parent = {obj: None for obj in edges}
-
-    queue = [obj1] 
-    visited[obj1] = True
-
-    found = False
-    while queue:
-      s = queue.pop(0)
-      for i in edges[s]:
-        if i not in visited:
-          continue
-        if not visited[i]: 
-          parent[i] = s
-          if i == obj2:
-            found = True
-            break
-          queue.append(i) 
-          visited[i] = True
-      if found:
-        break
-
-    path = [obj2]
-    while path[-1] != obj1:
-      try:
-        p = parent[path[-1]]
-      except:
-        import pdb; pdb.set_trace()
-      path.append(p)
-
-    # return path
-    return [edges[p1][p2] for p1, p2 in zip(path[:-1], path[1:])]
+    path = _bfs(edges, obj1, [obj2])
+    result = [
+        edges[p2][p1] for p1, p2 in zip(path[:-1], path[1:])]
+    return result
 
   def set_chain_position(self, pos):
     if not hasattr(self, '_chain_position'):
@@ -225,7 +300,8 @@ class CausalValue(GeometryEntity):
     # Set the clique
     for _, neighbors in self.edges_tmp.items():
       for p2 in neighbors:
-        neighbors[p2] = pos
+        if neighbors[p2] is None:
+          neighbors[p2] = pos
 
   def merge_tmp_clique(self, state):
     for p1, neighbors in self.edges_tmp.items():
@@ -331,15 +407,43 @@ class Relation(GeometryEntity):
       return self
 
     return type(self)(*init_list)
+  
+  def copy(self, old_state, new_state):
+    a, b = self.init_list
+    a.copy(old_state, new_state)
+    b.copy(old_state, new_state)
+
+  def pop(self, state):
+    a, b = self.init_list
+    a.pop(state)
+    b.pop(state)
+    
 
 
 class Merge(Relation):
 
+  def __init__(self, from_obj, to_obj, merge_graph={}):
+    assert from_obj != to_obj
+    assert isinstance(from_obj, type(to_obj))
+    self._init_list = from_obj, to_obj
+    self.from_obj = from_obj
+    self.to_obj = to_obj
+
+    # This is used by state.add_relation
+    # to set to_obj.merge_graph[state]
+    self.merge_graph = merge_graph
+
+    self.name = 'merge({}=>{})'.format(from_obj.name, to_obj.name)
+
+
+class Distinct(Relation):
+
   def __init__(self, obj1, obj2):
     assert isinstance(obj1, GeometryEntity) and isinstance(obj2, GeometryEntity)
-    self.name = '{}=={}'.format(obj1.name, obj2.name)
+    assert isinstance(obj1, type(obj2))
+    self.name = '{}!={}'.format(obj1.name, obj2.name)
     self._init_list = obj1, obj2
-
+    
 
 class PointEndsSegment(Relation):
 

@@ -5,14 +5,14 @@
 We present the first deep neural networks that learn to prove simple Geometry theorems, producing proof steps of both deductive reasoning and creative construction. This contrasts with prior work where reasoning or construction follows hand-designed rules and heuristics. Our models learn from simply observing random sketches of points and lines on a blank canvas, i.e. no example proof designed by human is used. We control the random sketches to verify that the neural nets can indeed solve an unseen problem, as well as problems that require more reasoning steps than the ones they are trained on.
 
 
-First please read [the project write-up](https://www.overleaf.com/read/jjcgbdqkmzcz) for a description of some concepts used throughout this README and the codebase. **Please do not share the report with anyone who does not have access to this Github repository.**
+Here is [the project write-up](https://www.overleaf.com/read/jjcgbdqkmzcz) as a rough description of some concepts used throughout this README and the codebase. **Please do not share the report with anyone who does not have access to this Github repository.**
 
 ![img](https://imgur.com/yJVCotO.png)
 
 For the uninitiated in synthetic geometry theorem proof, we suggest having a look at [this report](https://www.imo-register.org.uk/2018-report-dominic.pdf) on the International Mathematical Olympiad 2018. Both solutions for Problem 1 in this report are perfect examples of elegant and simple geometry proofs. We should pursue to build a system that can attain this level of competence (and hence capable of competing at the IMO). Some nice results in Euclidean geometry includes the [Simson Line](https://en.wikipedia.org/wiki/Simson_line), or the [Butterfly Theorem](http://www.cut-the-knot.org/pythagoras/Butterfly.shtml) (Look for proof #14). The most famous theorem includes [Morley Trisector](https://en.wikipedia.org/wiki/Morley%27s_trisector_theorem), [Nine Point Circle](http://mathworld.wolfram.com/Nine-PointCircle.html), [Euler Line](https://en.wikipedia.org/wiki/Euler_line), or [Feuerbach point
 ](https://en.wikipedia.org/wiki/Feuerbach_point). Seeing these theorems can help readers appreciate the beauty of Geometry.
 
-This project is at its very early stage where we identify all the key challenges in problem formulation, knowledge representation, modeling, and learning. We then propose a set of solutions to these challenges and built an infrastructure around it. The project is a sanity check if the whole pipeline we imagined as such can work at all. In short we made 0 to 1. The current result on a simple theorem is promising, and we are optimistic about going from 1 to 100: scaling model, data, compute up to a greater capacity.
+This project is at its very early stage where we identify all the key challenges in (1) problem formulation, (2) knowledge representation, (3) modeling, and learning. We then propose a set of solutions to these 3 challenges and built an infrastructure around it. The project is a sanity check if the whole pipeline we imagined as such can work at all.
 
 ## Requirements
 
@@ -142,20 +142,88 @@ python t2t_trainer.py \
 
 To make use of Cloud TPUs and Google Cloud Storage, please refer to [this Colab](https://colab.research.google.com/drive/1kJ3nI6-EYy38mDbbQWBEg8rEpbOuL0MX) for an example. One can also run this [second Colab](https://colab.research.google.com/drive/1N55bMyX_p_NTskhRdRN8M0bsTLmFvCmK) in parallel to continously pick up checkpoints for validation set evaluation as well as monitoring training through Tensorboard.
 
-## `TODO(thtrieu)`
 
-* Think about how to recursively apply discoveries.
-* Add the circle and relation: point centers circle. This will make the graph heterogeneous, is there a way to avoid this?
-* Think about how to handle coincidence of points and lines.
+# A rough guide to the algorithm & code
+
+## Problem formulation
+Take the following example of a theorem: 
+Given triangle ABC with sides AB=AC. Prove that angle B and C are equal.
+
+Any problem like such consists of 
+* a premise ("triangle ABC with sides AB=AC")
+* a goal ("angle B and C are equal") and 
+* the proof is a series of steps. 
+  
+We introduce the notion of a **state**, which is what we know about the problem **after** each proof step. The premise is therefore the initial state, and after each step the state got updated and enlarged. After that last step, the state contains the goal. 
+
+The proof of our example consists of 2 steps:
+
+1. Create Bisector AD of angle A. Here State = {Triangle ABC, AB=AC}, Goal = "angle B = angle C" and Action = "Create Bisector AD".
+
+2. Triangle ABD = Triangle ACD, therefore angle B = angle C. Here State = {Triangle ABC, AB=AC, AD, angle BAD = angle CAD}, Goal = "angle B = angle C" and Action = "Triangle ABC = Triangle ACD"
+
+Since each step adds to the state, we'll call each step an action. The idea here is to collect data in the form of ((State, Goal), Action) then use them to train neural networks, where Input = (State, Goal) and Output = Action. Once we collect data and train a neural net, we can produce the above proof by
+
+1. Apply the neural network on input (State = {Triangle ABC, AB=AC}, Goal="angle B = angle C"), and get the output "Create bisector AD". Add the consequence of this action to the State, which grows into State={Triangle ABC, AB=AC, AD, angle BAD = angle CAD}.
+
+2. Apply the same neural network on new input (State = {Triangle ABC, AB=AC, AD, angle BAD = angle CAD}, Goal="angle B = angle C"), and get the output "Triangle ABC = Triangle ACD". Add the consequence of this action to State, which grows into {Triangle ABC, AB=AC, AD, angle BAD = angle CAD, angle B = angle C, ...}
+
+After such two application of the same neural network, the State now contains the Goal, so the proof concludes. For more challenging problems, the idea is to apply the neural network as many times as necessary (maybe 20-30 steps) until the State contains the Goal.
+
+Notice the two actions (1) Create Bisector and (2) Equal Triangles, are rules to enlarge a given State. They are the **axioms** of Euclidean Geometry: (1) Any angle has a bisector and (2) If two triangles have two pair of equal sides and equal angle in the middle, they are equal. 
+
+There is only a limited number of such axioms (20 according to Hilbert/Tarski). Not only do we pick actions from such a limited set, but also pick from an extended set of axioms plus fundamental theorems, so that the proofs get shorter and therefore less challenging to learn.
+
+## How are we presenting (Input, Output) to the neural network?
+
+There are a two consideration:
+
+1. (Input, Output) can only be in a few forms that are known to be processable by neural networks of today: Vectors that are aranged into grid/sequence/graph/tables. For each of these modality, there is a type of neural net that is good at learning it.
+   
+2. This representation should capture the symmetries of the task, i.e., if we represent the Input as text, then the following two input texts: (1) "Given triangle ABC with AB=AC" (2) "Given triangle XYZ with two equal sides XY=ZX" should give the same output. We do not know of any text-processing neural nets that guarantee this property (so text shouldn't be the choice). Examples of other symmetries: if we rearrange the premise clauses, changing name of lines/points, changing the language, etc. the output shouldn't change as well.
+
+Once we pick a way to represent data that satisfies the two consideration, the corresponding neural net will have less to learn from scratch, because the symmetries of the task are built into this design choice.
+
+Our choice here is that Input = (State, Goal) be presented as a Graph, and Output = Action be presented as a Sequence. The task is Graph2Seq, and the neural net has Graph Neural Net as encoder, and a Transformer as its decoder.
+
+## How are we presenting Euclidean Geometry into graphs?
+
+Graphs consist of Nodes and Edges. 
+
+1. Nodes are either Point, Line, Segment, Angle, HalfPlane, Circle, SegmentLength, AngleMeasure, LineDirection.
+   
+2. Edges connects two nodes: PointEndsSegment, HalfplaneCoversAngle, LineBordersHalfplane, LineContainsPoint, HalfPlaneContainsPoint, SegmentHasLength, AngleHasMeasure, LineHasDirection, Distinct.
+
+Next section explain these node/edge types in more detail. This representation captures the symmetries in previous section, e.g. there is no need for naming points/lines (A, B, C, etc). In the context of our problem formulation, there are a few things to be represented into such graph:
+
+1. The pair (State, Goal)
+
+2. The list of all Actions (axioms/theorem) to pick from.
+
+Here State can be converted into such Graph in a straightforward manner. The Goal is a new part of the State Graph: a new node of type AngleMeasure that are connected to two nodes of type Angle (correspond to angle B and C) in the Graph. So the Input (State, Goal) to the neural net is a single Graph where the State is its subgraph, and the Goal is the remainder subgraph.
+
+Each axiom/theorem consists of two parts: a Premise and a Conclusion. Both are graphs as well. For each action, if the Premise is a subgraph of the State graph, and the conclusion is **not** a subgraph of the State graph, the action is applicable.
+
+## Specific choices in Euclidean Geometry representations
+
+As seen above, there are nodes of type SegmentLength, AngleMeasure, and LineDirection. These are "transitive value" types, any number of Segments with the same length will be connected to the same SegmentLength, so neural nets doesn't have to learn about transitivity inferences. Same for Angle - AngleMeasure, and Line - LineDirection.
+
+For every Line, two Halfplanes are created. Angles are defined as the intersection of two Halfplanes (i.e. in the graph, each Angle node is connected to two Halfplane nodes by HalfplaneCoversAngle edges). All topological relationships are captured through HalfPlaneContainsPoint edges.
+
+Distinct is the only type of edge that connects two nodes of the same type (Point and Point, Line and Line). It says the two objects are **for sure** distinct. Similar to topological relations, this relation is rarely mentioned and often implicitly assumed when human does Geometry, but is quite important. Most axiom/theorem's premise contains this type of relation. For example: the middle point M of BC and D coincides, so we cannot consider AMD to be a triangle and therefore theorems about equal triangles is not applicable, unless there is a Distinct edge between M and D.
 
 
-## What's next?
+## Input and Output to the neural network
 
-We look forward to the following:
+Input: as mentioned before the input is a single Graph where the State is its subgraph, and the Goal is the remainder subgraph. For the neural net to differentiate between the two parts, we can simply add an indicator embedding vector to each node in the graph.
 
-* Faster subgraph isomorphism matching for deeper exploration, i.e. improving the speed of **`trieu_graph_match.recursively_match(..)`**.
-* Add more eligible actions for wider exploration.
-* It is natural for human to learn about points, lines, triangles and then circles. Is there a way to design a curriculum for our models? This is not necessarily for the purpose of a better learning algorithm, but more of a need for transfer learning between models that is trained along a long-term project.
-* Solving the two technical issues in modelling detailed in the project report, Section 5. A possible solution might be found in [Deep Set Prediction Network](https://arxiv.org/abs/1906.06565)
+Output: This should be a sequence of symbols, where the first one being the type of action to perform, and the remaining symbols point to relevant parts in the State graph that correspond to the premise of the action.
 
 
+
+
+
+
+### `action_chain_lib.py`
+
+Implements 
