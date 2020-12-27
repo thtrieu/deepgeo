@@ -152,12 +152,9 @@ class ExplorationBackoffDFSBase(object):
         continue
 
       try:
-        s = time.time()
         action = action_generator.next()
-        action.duration = time.time() - s
         yield action
       except StopIteration:
-        # print('give up in ', time.time() - s, ', left ', len(all_theorems))
         theorem_actions.pop(i)
         all_theorems.pop(i)
         continue
@@ -167,6 +164,7 @@ class ExplorationBackoffDFSBase(object):
       # Just do the normal random action sampling
       return self.random_action(state, depth, canvas)
     
+    # Else, simply execute self.predefined_steps[depth]
     step = self.predefined_steps[depth]
     theorem, command_str = step
     verbose(' {}Predefined: {} {}'.format(

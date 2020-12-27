@@ -1,4 +1,4 @@
-from geometry import CausalValue, SegmentLength, AngleMeasure, LineDirection, TransitiveRelation
+from geometry import CausalValue, Relation, SegmentLength, AngleMeasure, LineDirection, TransitiveRelation
 from geometry import SegmentHasLength, AngleHasMeasure, LineHasDirection
 from geometry import Merge
 import geometry
@@ -16,7 +16,7 @@ VALUE_RELATIONS = (
 )
 
 
-def extract_all_valuing_goals(last_state, prev_state):
+def extract_all_valuing_goals(final_state, prev_state):
   """Yields pairs (problem_queue, proof_queue)."""
   prev_equal_objs = {}
   for _, valrels in prev_state.val2valrel.items():
@@ -24,7 +24,7 @@ def extract_all_valuing_goals(last_state, prev_state):
     for obj in objs:
       prev_equal_objs[obj] = objs
 
-  for val, rels in last_state.val2valrel.items():
+  for val, rels in final_state.val2valrel.items():
     if len(rels) < 2:
       continue
     for i, rel1 in enumerate(rels[:-1]):
@@ -35,7 +35,7 @@ def extract_all_valuing_goals(last_state, prev_state):
           continue
         
         problem_queue = [obj1, obj2]  # e.g. [a, b] or [a, e]
-        proof_queue = (val, rel1, rel2)
+        proof_queue = [(val, rel1, rel2)]
         yield problem_queue, proof_queue
 
 
@@ -89,24 +89,25 @@ def new_relations_from_merge(prev_state, merge_rel):
       yield new_rel.init_list, [(new_rel, from_obj_equiv, to_obj)]
 
 
-def extract_all_proof_goals(action_chain, last_state):
+def extract_all_proof_goals(action_chain, final_state):
   last_action = action_chain[-1]
   prev_state = last_action.state
 
   # First extract all transitive relations:
   for problem_queue, proof_queue in extract_all_valuing_goals(
-      last_state, prev_state):
+      final_state, prev_state):
     yield problem_queue, proof_queue
 
   for merge_rel in last_action.merges:
     for problem_queue, proof_queue in new_relations_from_merge(
         prev_state, merge_rel):
       yield problem_queue, proof_queue
-  
-  for obj in last_action.new_objects:
-    if not isinstance(obj, TransitiveRelation) and not isinstance(obj, Merge):
-      rel = obj
-      yield rel.init_list, [rel]
+
+  # for obj in last_action.new_objects:
+  #   if not isinstance(obj, TransitiveRelation) and not isinstance(obj, Merge):
+  #     if isinstance(obj, Relation):
+  #       rel = obj
+  #       yield rel.init_list, [rel]
 
 
 def get_state_and_proof_objects(last_action, state):
@@ -239,6 +240,8 @@ def whittle_from(final_state, queue, action_chain,
       critical = True
       pos = query
     else:  # not an integer but an obj or rel.
+      if isinstance(query, list):
+        import pdb; pdb.set_trace()
       pos = query.chain_position
       if pos is None:    # at init state already
         continue
@@ -275,18 +278,27 @@ def whittle_from(final_state, queue, action_chain,
       for obj in action.theorem.premise_objects:
         if not isinstance(obj, VALUE_ENTITIES + VALUE_RELATIONS):
           rel = action.mapping[obj]
+          # dependents.append(rel)
 
           if not hasattr(rel, '_init_list'):
-            dependents.append(rel)
+            if rel not in dependents:
+              dependents.append(rel)
             continue
 
           x, y = rel.init_list
 
-          if x in y.get_merge_graph(state):
+          y_merge_graph = y.get_merge_graph(state)
+          if x in y_merge_graph and x not in y_merge_graph['equivalents']:
             merges[y].append(x)
-          if y in x.get_merge_graph(state):
+
+          x_merge_graph = x.get_merge_graph(state)
+          if y in x_merge_graph and y not in x_merge_graph['equivalents']:
             merges[x].append(y)
 
+          if y not in merges[x] and x not in merges[y]:
+            if rel not in dependents:
+              dependents.append(rel)
+          
         elif isinstance(obj, VALUE_RELATIONS):
           val = obj.init_list[1]
           if val not in valrels:
@@ -312,7 +324,8 @@ def whittle_from(final_state, queue, action_chain,
           equiv = merge_graph[other].keys()[0]
 
           rel = merge_graph[other][equiv]
-          dependents.append(rel)
+          if rel not in dependents:
+            dependents.append(rel)
 
           equivs.add(equiv)
         merge_positions.update(obj.find_min_span_subgraph(equivs, state))

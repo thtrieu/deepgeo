@@ -78,13 +78,16 @@ def mapping_from_command(command, theorem, state):
   return mapping
 
 
-def execute_steps(steps, state, canvas, verbose=False):
+def execute_steps(steps, state, canvas, verbose=False, init_action_chain=None):
+  init_action_chain = init_action_chain or []
   action_chain = []
 
   for i, (theorem, command) in enumerate(steps):
     mapping = mapping_from_command(command, theorem, state)
     action_gen = theorem.match_from_input_mapping(
         state, mapping, randomize=False)
+
+    pos = i + len(init_action_chain)
 
     try:
       action = action_gen.next()
@@ -93,8 +96,8 @@ def execute_steps(steps, state, canvas, verbose=False):
       import pdb; pdb.set_trace()
       raise ValueError('Matching not found {} {}'.format(theorem, command))
 
-    print(i+1, action.to_str())
-    action.set_chain_position(i)
+    print(pos+1, action.to_str())
+    action.set_chain_position(pos)
     action_chain.append(action)
 
     if verbose:
@@ -109,7 +112,7 @@ def execute_steps(steps, state, canvas, verbose=False):
     state.add_spatial_relations(line2pointgroups)
     canvas.update_hps(state.line2hps)
 
-  return state, canvas, action_chain
+  return state, canvas, init_action_chain+action_chain
 
 
 def init_by_normal_triangle():

@@ -3,13 +3,13 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
-import random
+# import random
 
 from numpy.lib.arraysetops import isin
 import geometry
-import time
+# import time
 import profiling
-import theorems_utils
+# import theorems_utils
 
 
 from state import Conclusion
@@ -21,7 +21,7 @@ import cython_graph_match
 
 from theorems import all_theorems
 
-from geometry import Point, Line, Segment, Angle, HalfPlane, Circle 
+from geometry import Point, Line, Segment, Angle, HalfPlane, Circle, TransitiveRelation 
 from geometry import SegmentLength, AngleMeasure, LineDirection
 from geometry import SegmentHasLength, AngleHasMeasure, LineHasDirection
 from geometry import PointEndsSegment, HalfplaneCoversAngle, LineBordersHalfplane
@@ -404,9 +404,9 @@ def create_new_rels_from_merge(obj1, obj2,
   
   # Finally remove obj2.
   # But first remove obj2 in new_rels
-  new_rels = filter(
-      lambda rel: isinstance(rel, Merge) or obj2 not in rel.init_list, 
-      new_rels)
+  # new_rels = filter(
+  #     lambda rel: isinstance(rel, Merge) or obj2 not in rel.init_list, 
+  #     new_rels)
 
   new_rel = Merge(obj2, obj1, merge_graph)
   new_rel.set_critical(critical)
@@ -489,11 +489,16 @@ def match_conclusions(conclusion, state_candidates,
           critical=critical,
           conclusion_position=conclusion_position,
           current_state=state)
+
+      # Now we remove all relations related to merged_objs
       all_merged_objs = [
           rel.from_obj for rel in new_objs_and_rels 
           if isinstance(rel, Merge)]
+
+      # Filter them out, except TransitiveRelations
       new_objs_and_rels = filter(
           lambda rel: (isinstance(rel, Merge) or
+                       isinstance(rel, TransitiveRelation) or
                        rel.init_list[0] not in all_merged_objs and 
                        rel.init_list[1] not in all_merged_objs),
           new_objs_and_rels
@@ -548,7 +553,7 @@ def match_relations(premise_relations,
       presented in the premise.
     conclusion: An object of type Conclusion
   """
-  state_relations = state.relations
+  state_relations = list(state.relations)
 
   if conclusion:
     conclusion_relations = sum(conclusion.topological_list, [])
@@ -576,7 +581,7 @@ def match_relations(premise_relations,
         match_all=match_all)
 
   if augmented_relations:
-    # We build state candidates without the augmented relations.
+    # We build state candidates *without* the augmented relations.
     conclusion_state_candidates = {rel_type: [] for rel_type in state_candidates}
     for relation in state_relations:
       rel_type = type(relation)
@@ -591,8 +596,9 @@ def match_relations(premise_relations,
       continue
 
     # Copy state_candidates over
-    # So that different conclusion matches won't tamper with each other.
-    # Because each of them will put in new objects into state_candidates.
+    # So that different premise matches won't tamper with each other.
+    # Because each of them will put in a different set of new objects 
+    # into state_candidates.
     state_candidates_copy = {x: list(y) for x, y in state_candidates.items()}
     with Timer('action/conclusion_match'):
       matched_conclusion, all_match = match_conclusions(
@@ -605,7 +611,6 @@ def match_relations(premise_relations,
           distinct=distinct,
           state=state  # needed for merging merge_graphs
       )
-    if matched_conclusion.topological_list:
+    if any(matched_conclusion.critical):
+    # if matched_conclusion.topological_list:
       yield matched_conclusion, all_match
-    # else:
-    #   import pdb; pdb.set_trace()

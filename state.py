@@ -188,7 +188,7 @@ class State(object):
         val2valrels[measure].append(self.angle_name(angle))
 
     for measure, equal_angles in val2valrels.items():
-      print('>> ' + measure + ' = ' + ' = '.join(equal_angles))
+      print('>> ' + measure.name + ' = ' + ' = '.join(equal_angles))
 
   def print_all_equal_segments(self):
     val2valrels = ddict(lambda: [])
@@ -418,7 +418,19 @@ class State(object):
 
   def add_relations(self, relations):
     for rel in relations:
-      self.add_one(rel)
+      if not isinstance(rel, Merge):
+        self.add_one(rel)
+    
+    # This is copied for extracting proof related to transitive values
+    # But will not be copied to next state.
+    self.val2valrel_copy = {
+      key: list(value)
+      for key, value in self.val2valrel.items()
+    }
+
+    for rel in relations:
+      if isinstance(rel, Merge):
+        self.add_one(rel)
 
   def add_spatial_relations(self, line2pointgroups):
     for line in line2pointgroups:

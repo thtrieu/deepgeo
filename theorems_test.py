@@ -968,7 +968,7 @@ def test_whittle4():
 
       (used_theorems['eq'], 'l=l4 l1=l1 l2=ab l_hp2=l4_hp'),  # <-- 11
       (used_theorems['eq'], 'l=ca l1=l1 l2=ab'),
-      (used_theorems['asa'], 'A=B B=C C=P3 D=C de=bc ef=ab F=P1'),
+      # (used_theorems['asa'], 'A=B B=C C=P3 D=C de=bc ef=ab F=P1'),
       (used_theorems['.parallel'], 'l=ab l1=l4 l2=ca'), # <-- 14
   ]
 
@@ -996,7 +996,7 @@ def test_whittle4():
   chosen_proof_steps = [i for i, step in enumerate(proof_steps)
                         if step is not None]
   assert len(chosen_proof_steps) == 7
-  assert chosen_proof_steps == [5, 6, 7, 8, 10, 11, 14]
+  assert chosen_proof_steps == [5, 6, 7, 8, 10, 11, 13], chosen_proof_steps
 
   steps = [
       (used_theorems['eq'], 'l=bc l1=ab l2=l1'),
@@ -1134,6 +1134,7 @@ def whittle(final_state, state_queue, proof_queue, action_chain,
   # Basically shave off any excess from action_chain
   # and crystallize what is relevant as premise & conclusion
   # of a discovered theorem.
+
 
   whittled_state = whittling.whittle_from(
       final_state, list(state_queue), action_chain)
@@ -1443,6 +1444,7 @@ def test_thales_merge_midpoint1():
       (used_theorems['eq'], 'l=bc l1=ca l2=l5'),  # noise
       (used_theorems['eq'], 'l=l2 l1=ab l2=l3'),
       (used_theorems['asa'], 'A=A B=P2 C=P1 D=C F=P4 de=ca ef=l2'),
+      (used_theorems['parallel'], 'A=P3 l=ab'),  # l6
       (used_theorems['unq_mid_point'], 'A=A B=C M=P2 N=P3')
   ]
 
@@ -1451,16 +1453,24 @@ def test_thales_merge_midpoint1():
 
   # Extract state queue & proof queue that prove P2 is mid AC
   conclusion = action_chain[-1].matched_conclusion
+
   goals = list(whittling.extract_all_proof_goals(action_chain, state))
-  proof_queues = state.name_map([
-      proof_queue[0][0] for _, proof_queue in goals])
   
-  assert len(proof_queues) == 7
-  for rel_name in ['P2[s4', 'P2[s3', 'l2[P3]', 
+  proof_queues = []
+  for _, proof_queue in goals:
+    if isinstance(proof_queue[0], tuple):
+      proof_queues.append(proof_queue[0][0])
+    else:
+      proof_queues.append(proof_queue[0])
+
+  proof_queues = state.name_map(proof_queues)
+  assert len(proof_queues) == 8, proof_queues
+
+  for rel_name in ['l2[P3]', 'P2[s3', 'P2[s4', 'l6[P2]',
                    'P3[CP2', 'P3[P2P4', 'P3[AP2', 'P3[P2P1']:
     assert rel_name in proof_queues, rel_name
 
-
+  state_queue, proof_queue = None, None
   for state_queue, proof_queue in goals:
     if proof_queue[0][0].name == 'l2[P3]':
       break
@@ -1481,18 +1491,18 @@ def test_thales_merge_midpoint1():
   chosen_proof_steps = [i for i, step in enumerate(proof_steps)
                         if step is not None]
   assert len(chosen_proof_steps) == 10, len(chosen_proof_steps)
-  assert chosen_proof_steps == [3, 5, 6, 8, 9, 11, 12, 14, 15, 16]
+  assert chosen_proof_steps == [3, 5, 6, 8, 9, 11, 12, 14, 15, 17]
 
   steps = [
       (used_theorems['seg_line'], 'A=A B=C l=l2'),  # P5
-      (used_theorems['parallel'], 'A=C l=ab'),  # l6
-      (used_theorems['line'], 'A=P1 B=C'),  # l7
+      (used_theorems['parallel'], 'A=C l=ab'),  # l7
+      (used_theorems['line'], 'A=P1 B=C'),  # l8
       # -------------------------------------------------------
-      (used_theorems['eq'], 'l=l7 l1=ab l2=l6'),
-      (used_theorems['eq'], 'l=l7 l1=l2 l2=bc'),
-      (used_theorems['asa'], 'A=P1 B=B C=C D=C F=P1 de=l6 ef=l2'),  # P6
-      (used_theorems['eq'], 'l=ca l1=ab l2=l6'),
-      (used_theorems['eq'], 'l=l2 l1=ab l2=l6'),
+      (used_theorems['eq'], 'l=l8 l1=ab l2=l7'),
+      (used_theorems['eq'], 'l=l8 l1=l2 l2=bc'),
+      (used_theorems['asa'], 'A=P1 B=B C=C D=C F=P1 de=l7 ef=l2'),  # P6
+      (used_theorems['eq'], 'l=ca l1=ab l2=l7'),
+      (used_theorems['eq'], 'l=l2 l1=ab l2=l7'),
       (used_theorems['asa'], 'A=A B=P5 C=P1 D=C F=P6 de=ca ef=l2'),
       (used_theorems['unq_mid_point'], 'A=A B=C M=P5 N=P3')
   ]
@@ -1507,135 +1517,114 @@ def test_thales_merge_midpoint1():
   assert len(proved_canvas.lines) == 6
   assert len(proved_canvas.circles) == 0
   assert len(proved_problem.name2obj) == 70, len(proved_problem.name2obj)
-  # action = used_theorems['asa'].match_one_random(proved_problem)
-  # assert action is None
+
+  print('\nExtra steps')
+  steps = [
+    (used_theorems['eq'], 'l=l2 l1=ab l2=l6')
+  ]
+  state, canvas, action_chain = action_chain_lib.execute_steps(steps, state, canvas, init_action_chain=action_chain)
+
+  assert len(action_chain) == 19, len(action_chain)
+
+  goals = list(whittling.extract_all_proof_goals(action_chain, state))
+  problem_queue, proof_queue = goals[0]
+  print(state.name_map(problem_queue))
+  print(state.name_map(proof_queue))
+
+  problem, problem_canvas, proof_steps = whittle(
+      state, problem_queue, proof_queue, action_chain,
+      init_state, init_canvas, canvas)
+
+  # Test if we have the correct proof steps
+  chosen_proof_steps = [i for i, step in enumerate(proof_steps)
+                        if step is not None]
+  assert len(chosen_proof_steps) == 10, len(chosen_proof_steps)
+  assert chosen_proof_steps == [3, 6, 8, 9, 11, 12, 14, 15, 17, 18]
 
 
-def test_thales_merge_midpoint2():
+
+  # TODO(thtrieu): why is this non-deterministic?
+  # count = 0
+  # while True:
+  #   proved_problem.print_all_equal_segments()
+  #   asa = used_theorems['asa']
+  #   action = asa.match_one_random(proved_problem)
+  #   action2 = list(asa.match_all(proved_problem, randomize=False))
+  #   mapping = action_chain_lib.mapping_from_command(
+  #       'A=P6 B=P1 C=C D=B F=P1 ef=l7 fd=bc', asa, proved_problem)
+  #   action3 = list(asa.match_from_input_mapping(state, mapping))
+  #   # import pdb; pdb.set_trace()
+  #   count += 1
+  #   if action is not None:
+  #     print(count)
+  #     print(action.to_str())
+  #     print(proved_problem.name_map(action.new_objects))
+  #     import pdb; pdb.set_trace()
+  #   if action2 != []:
+  #     print(count)
+  #     a = action2[0]
+  #     print(a.to_str())
+  #     print(proved_problem.name_map(a.new_objects))
+  #     import pdb; pdb.set_trace()
+  #   else:
+  #     print('not found') 
+  #     import pdb; pdb.set_trace()
+  #   if action3 != []:
+  #     print(count)
+  #     a = action3[0]
+  #     print(a.to_str())
+  #     print(proved_problem.name_map(a.new_objects))
+  #     import pdb; pdb.set_trace()
+  #   else:
+  #     best, miss = debugging.why_fail_to_match(asa, proved_problem, mapping)
+  #     print([x.name for x in miss])
+  #     print({x.name: state.name_map(y) for x, y in best.items() 
+  #            if isinstance(x, (Point, Line)) and y in proved_problem.name2obj.values()})
+  #     import pdb; pdb.set_trace()
+  #   print(count)
+
+
+def test_merge_line_direction():
   geometry.reset()
   init_state, init_canvas = triangle_seed()
   state, canvas = init_state.copy(), init_canvas.copy()
 
   # Original thales + noises
   steps = [
-      (used_theorems['mid'], 'A=A B=B'),  # P1
-      (used_theorems['parallel'], 'A=P1 l=bc'),  # l1
-      (used_theorems['parallel'], 'A=A l=bc'),  # l2  noise
-      (used_theorems['seg_line'], 'l=l1 A=A B=C'),  # P2
-      (used_theorems['mid'], 'A=A B=C'),  # P3
-      # -------------------------------------------------------
-      (used_theorems['parallel'], 'A=C l=ab'),  # l3
-      (used_theorems['line'], 'A=P1 B=C'),  # l4
-      (used_theorems['parallel'], 'A=B l=ca'),  # l5  noise
-      # -------------------------------------------------------
-      (used_theorems['eq'], 'l=l4 l1=ab l2=l3'),
-      (used_theorems['eq'], 'l=l4 l1=l1 l2=bc'),
-      (used_theorems['eq'], 'l=ab l1=l2 l2=bc'),  # noise
-      (used_theorems['asa'], 'A=P1 B=B C=C D=C F=P1 de=l3 ef=l1'),  # P4
-      (used_theorems['eq'], 'l=ca l1=ab l2=l3'),
-      (used_theorems['eq'], 'l=bc l1=ca l2=l5'),  # noise
-      (used_theorems['eq'], 'l=l1 l1=ab l2=l3'),
-      (used_theorems['asa'], 'A=A B=P2 C=P1 D=C F=P4 de=ca ef=l1'),
-      (used_theorems['unq_mid_point'], 'A=A B=C M=P2 N=P3'),
+      (used_theorems['perp_out'], 'A=A l=bc'),  # l1
+      (used_theorems['perp_on'], 'A=A l=l1'),  # l1  noise
+      (used_theorems['parallel'], 'A=A l=bc'),  # l2
   ]
 
   print('\nRunning thales merge test:')
   state, canvas, action_chain = action_chain_lib.execute_steps(steps, state, canvas)
 
-  # Extract state queue & proof queue that prove P2 is mid AC
-  conclusion = action_chain[-1].matched_conclusion
-
-  P3_on_l1_rel = conclusion.topological_list[0][1]
-  assert isinstance(P3_on_l1_rel, LineContainsPoint)
-  assert P3_on_l1_rel.name == 'l1[P3]'
-
-  state_queue, proof_queue = get_state_and_proof_objects_v2(P3_on_l1_rel)
-
-  s = time.time()
-  problem, problem_canvas, proof_steps = whittle(
-      state, state_queue, proof_queue, action_chain,
-      init_state, init_canvas, canvas)
-  print('thales whittle time ', time.time()-s)
-
-  # Test if we are having the correct problem statement
-  assert len(problem_canvas.points) == 5
-  assert len(problem_canvas.lines) == 4
-  assert len(problem_canvas.circles) == 0
-  assert len(problem.name2obj) == 27, len(problem.name2obj)
-
-  # Test if we have the correct proof steps
-  chosen_proof_steps = [i for i, step in enumerate(proof_steps)
-                        if step is not None]
-  assert len(chosen_proof_steps) == 10, len(chosen_proof_steps)
-  assert chosen_proof_steps == [3, 5, 6, 8, 9, 11, 12, 14, 15, 16]
-
-  # Test if the correct proof step applied on the problem statement
-  # give the correct solution
-  print('Proof execution:')
-  steps = [
-      (used_theorems['seg_line'], 'A=A B=C l=l1'),  # P5
-      (used_theorems['parallel'], 'A=C l=ab'),  # l6
-      (used_theorems['line'], 'A=P1 B=C'),  # l7
-      # -------------------------------------------------------
-      (used_theorems['eq'], 'l=l7 l1=ab l2=l6'),
-      (used_theorems['eq'], 'l=l7 l1=l1 l2=bc'),
-      (used_theorems['asa'], 'A=P1 B=B C=C D=C F=P1 de=l6 ef=l1'),  # P6
-      (used_theorems['eq'], 'l=ca l1=ab l2=l6'),
-      (used_theorems['eq'], 'l=l1 l1=ab l2=l6'),
-      (used_theorems['asa'], 'A=A B=P5 C=P1 D=C F=P6 de=ca ef=l1'),
-      (used_theorems['unq_mid_point'], 'A=A B=C M=P5 N=P3')
-  ]
-
-  proved_problem, proved_canvas, _ = action_chain_lib.execute_steps(
-      steps, problem, problem_canvas)
-
-  assert len(proved_canvas.points) == 7
-  assert len(proved_canvas.lines) == 6
-  assert len(proved_canvas.circles) == 0
-  assert len(proved_problem.name2obj) == 73, len(proved_problem.name2obj)
-
-
-# def test_merge_line_direction():
-#   geometry.reset()
-#   init_state, init_canvas = triangle_seed()
-#   state, canvas = init_state.copy(), init_canvas.copy()
-
-#   # Original thales + noises
-#   steps = [
-#       (used_theorems['perp_out'], 'A=A l=bc'),  # l1
-#       (used_theorems['perp_on'], 'A=A l=l1'),  # l1  noise
-#       (used_theorems['parallel'], 'A=A l=bc'),  # l2
-#   ]
-
-#   print('\nRunning thales merge test:')
-#   state, canvas, action_chain = action_chain_lib.execute_steps(steps, state, canvas)
-
 
 if __name__ == '__main__':
   np.random.seed(1234)
   t = time.time()
-  test_intersect_line_line()
-  test_intersect_line_line2()
-  test_thales()
-  test_thales_whittle1()
-  test_thales_whittle2()
-  test_whittle0()
-  test_whittle1()
-  test_whittle2()
-  test_whittle3()
-  test_whittle4()
-  test_whittle5()
-  test_whittle6()
-  sas_hp()
-  conclusion_match()
-  sas()
-  time_sas()
-  state_merge_and_copy()
-  test_sss_isosceles()
-  test_asa_isosceles()
-  test_sas_isosceles()
-  test_bisect_isosceles()
-  test_bisect_sss_isosceles()
+  # test_intersect_line_line()
+  # test_intersect_line_line2()
+  # test_thales()
+  # test_thales_whittle1()
+  # test_thales_whittle2()
+  # test_whittle0()
+  # test_whittle1()
+  # test_whittle2()
+  # test_whittle3()
+  # test_whittle4()
+  # test_whittle5()
+  # test_whittle6()
+  # sas_hp()
+  # conclusion_match()
+  # sas()
+  # time_sas()
+  # state_merge_and_copy()
+  # test_sss_isosceles()
+  # test_asa_isosceles()
+  # test_sas_isosceles()
+  # test_bisect_isosceles()
+  # test_bisect_sss_isosceles()
   test_thales_merge_midpoint1()
   # test_thales_merge_midpoint2()
   # test_merge_line_direction()

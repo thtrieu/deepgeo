@@ -12,6 +12,8 @@ import pickle as pkl
 import state
 from collections import defaultdict as ddict
 
+import trieu_graph_match
+
 import geometry 
 
 from geometry import Point, Line, Segment, Angle, HalfPlane, Circle
@@ -229,6 +231,95 @@ def recursively_match_best_effort(
   return all_matches
 
 
+def match_conclusions(conclusion, state_candidates, 
+                      premise_match, state_relations, 
+                      distinct=None, state=None):
+  """Given that premise is matched, see if the conclusion is already there.
+
+  Returns:
+    matched_conclusion: A Conclusion() object, the same as the argument
+      `conclusion`, except all nodes and edges are replaced with ones
+      in the graph, instead of one in the theorem.
+    premise_match: updated argument `premise_match` as new edges and nodes
+      mapping are added.
+  """
+  matched_conclusion = state.Conclusion()
+  conclusion_position = 0
+
+  # new value to objects, new ones created in this conclusion
+  # will be used to create a clique & add to dependency graph.
+  concl_val2objs = ddict(lambda: [])  # val -> conclusion nodes
+
+  # Loop through relation
+  for relations, critical in conclusion:
+    # For each of the construction step in the conclusion
+    # we check if it is already in the state
+    total_match = True
+    try:
+      match = trieu_graph_match.recursively_match(
+          query_relations=relations,
+          state_candidates=state_candidates,
+          object_mappings=premise_match,
+          distinct=distinct)
+      if isinstance(match, list):
+        match = match[0]
+      else:
+        match = match.next()
+    except:
+      total_match = False
+
+    if total_match:  # if yes, move on, nothing to do here.
+      premise_match = match
+      continue
+
+    # Otherwise, we need to add new objects into the state.
+    if isinstance(relations[0], Merge):
+      # Case 1: Merging two objects
+      assert len(relations) == 1
+      obj1, obj2 = relations[0].init_list
+      assert obj1 in premise_match and obj2 in premise_match
+      new_objs_and_rels = create_new_rels_from_merge(
+          premise_match[obj1], 
+          premise_match[obj2], 
+          state_relations=state_relations,
+          critical=critical,
+          conclusion_position=conclusion_position,
+          current_state=state)
+      all_merged_objs = [
+          rel.from_obj for rel in new_objs_and_rels 
+          if isinstance(rel, Merge)]
+      new_objs_and_rels = filter(
+          lambda rel: (isinstance(rel, Merge) or
+                       rel.init_list[0] not in all_merged_objs and 
+                       rel.init_list[1] not in all_merged_objs),
+          new_objs_and_rels
+      )
+    else:
+      # Case 2: Create new objects and relations
+      new_objs_and_rels = create_new_obj_and_rels_for_conclusion(
+          conclusion=conclusion,
+          relations=relations,
+          premise_match=premise_match,
+          state_candidates=state_candidates,
+          critical=critical,
+          conclusion_position=conclusion_position,
+          val2objs=concl_val2objs
+      )
+
+    if critical:
+      matched_conclusion.add_critical(*new_objs_and_rels)
+    else:
+      matched_conclusion.add(*new_objs_and_rels)
+    conclusion_position += 1
+
+  # Finally we add dependency cliques:
+  for val, objs in concl_val2objs.items():
+    # Map both val & objs into state space.
+    premise_match[val].add_new_clique(map(premise_match.get, objs))
+
+  return matched_conclusion, premise_match
+
+
 def why_fail_to_match(
     theorem, state, mapping={}, command_str=''):
   if len(mapping) == 0 and command_str:
@@ -244,12 +335,15 @@ def why_fail_to_match(
       theorem.premise,
       type2rel,
       mapping,
+      distinct=theorem.distinct,
       best=best
   )
   best = best[0] 
   miss = [rel for rel in theorem.premise 
           if rel not in best]
+
   return best, miss
+
       
 
 class DebugObjects(object):

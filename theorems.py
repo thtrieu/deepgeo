@@ -822,6 +822,54 @@ class ConstructParallelLine(FundamentalTheorem):
     return canvas.add_parallel_line(l2, A, l)
 
 
+class ConstructIntersectLineLine(FundamentalTheorem):
+
+  def __init__(self):
+    a, b = Line('a'), Line('b')
+
+    self.premise = distinct(a, b)
+
+    X = Point('X')
+    self.conclusion = Conclusion()
+    self.conclusion.add_critical(*(
+        collinear(a, X) + collinear(b, X)
+    ))
+
+    self.for_drawing = [a, b, X]
+    self.names = dict(a=a, b=b)
+
+    super(ConstructIntersectLineLine, self).__init__()
+  
+  def draw(self, mapping, canvas):
+    a, b, X = map(mapping.get, self.for_drawing)
+    return canvas.add_intersect_line_line(X, a, b)
+
+
+class ConstructLine(FundamentalTheorem):
+
+  def __init__(self):
+    A, B = Point('A'), Point('B')
+
+    self.premise = distinct(A, B)
+
+    ab = Line('ab')
+    AB = Segment('AB')
+
+    self.conclusion = Conclusion()
+    self.conclusion.add_critical(*  # ab related.
+        collinear(ab, A, B))
+    self.conclusion.add(*segment_def(AB, A, B))
+
+    self.for_drawing = [ab, A, B]
+    self.names = dict(A=A, B=B)
+
+    super(ConstructLine, self).__init__()
+
+  def draw(self, mapping, canvas):
+    ab, A, B = map(mapping.get, self.for_drawing)
+    return canvas.add_line(ab, A, B)
+
+
 class ConstructThirdLine(FundamentalTheorem):
 
   def __init__(self):
@@ -1361,6 +1409,7 @@ all_theorems = {
     '.parallel2': ParallelBecauseInteriorAngles(),
     'angle_check': OppositeAnglesCheck(),
     'thales_check': ThalesCheck(),
+    # For auto-mergings
     'auto_seg': AutoSameSegmentBecauseSamePoint(),
     'auto_hp': AutoSameHalfplaneBecauseSameLine(),
     'auto_angle': AutoSameAngleBecauseSameHalfPlane()
