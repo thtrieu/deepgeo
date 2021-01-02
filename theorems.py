@@ -47,6 +47,15 @@ class Action(object):
       self.conclusion_objects = [mapping[x] for x in theorem.conclusion_objects]
     self.duration = None
 
+  def update(self, other):
+    assert isinstance(self.theorem, MergeTheorem), self.theorem
+    assert isinstance(other.theorem, MergeTheorem)
+    assert len(self.matched_conclusion.topological_list) == 1 
+    assert len(other.matched_conclusion.topological_list) == 1 
+
+    self.matched_conclusion.topological_list[0] += other.matched_conclusion.topological_list[0]
+    self.new_objects += other.new_objects
+
   def set_chain_position(self, pos):
     vals = {}
     for obj in self.new_objects:
@@ -286,26 +295,38 @@ class OppositeAnglesCheck(Check):
 #         collinear(ca, C, A)
 #     )
 
-class AutoMerge(FundamentalTheorem):
+# class AutoMerge(FundamentalTheorem):
 
-  def find_auto_merge_from_trigger(
-      self, state_candidates, object_mappings):
+#   def find_auto_merge_from_trigger(
+#       self, state_candidates, object_mappings):
 
-    pairs = []
-    for mapping in trieu_graph_match.recursively_match(
-        query_relations=self.premise,
-        state_candidates=state_candidates,
-        object_mappings=object_mappings,
-        distinct=self.distinct,
-        match_all=1):
+#     pairs = []
+#     for mapping in trieu_graph_match.recursively_match(
+#         query_relations=self.premise,
+#         state_candidates=state_candidates,
+#         object_mappings=object_mappings,
+#         distinct=self.distinct,
+#         match_all=1):
 
-      x, y = map(mapping.get, self.merge_pair)
-      if (x, y) not in pairs and (y, x) not in pairs:
-        pairs.append((x, y))
-    return pairs
+#       x, y = map(mapping.get, self.merge_pair)
+#       if (x, y) not in pairs and (y, x) not in pairs:
+#         pairs.append((x, y))
+#     return pairs
+
+"""
+Theorem set 1. Merge (=>)
+
+1. Point => Segment (Length)
+2. Line (LineDirection) => HP => Angle (Measure)
+3. Point <=> LineS
+"""
 
 
-class AutoSameSegmentBecauseSamePoint(AutoMerge):
+class MergeTheorem(FundamentalTheorem):
+  pass
+
+
+class SameSegmentBecauseSamePoint(MergeTheorem):
 
   def __init__(self):
     A, B = map(Point, 'A B'.split())
@@ -316,11 +337,13 @@ class AutoSameSegmentBecauseSamePoint(AutoMerge):
         segment_def(AB2, A, B)
     )
     self.trigger_obj = A
-    self.merge_pair = (AB, AB2)
-    super(AutoSameSegmentBecauseSamePoint, self).__init__()
+    self.conclusion = Conclusion()
+    self.conclusion.add_critical(Merge(AB, AB2))
+    self.names = dict(A=A, B=B)
+    super(SameSegmentBecauseSamePoint, self).__init__()
 
 
-class AutoSameHalfplaneBecauseSameLine(AutoMerge):
+class SameHalfplaneBecauseSameLine(MergeTheorem):
 
   def __init__(self):
     l = Line('l')
@@ -332,11 +355,14 @@ class AutoSameHalfplaneBecauseSameLine(AutoMerge):
         divides_halfplanes(l, hp2, p1=A)
     )
     self.trigger_obj = l
-    self.merge_pair = (hp1, hp2)
-    super(AutoSameHalfplaneBecauseSameLine, self).__init__()
+    self.conclusion = Conclusion()
+    self._distinct = [(hp1, hp2)]
+    self.conclusion.add_critical(Merge(hp1, hp2))
+    self.names = dict(hp1=hp1, hp2=hp2)
+    super(SameHalfplaneBecauseSameLine, self).__init__()
 
 
-class AutoSameAngleBecauseSameHalfPlane(AutoMerge):
+class SameAngleBecauseSameHalfPlane(MergeTheorem):
 
   def __init__(self):
     l1, l2 = Line('l1'), Line('l2')
@@ -351,11 +377,14 @@ class AutoSameAngleBecauseSameHalfPlane(AutoMerge):
         distinct(l1, l2)
     )
     self.trigger_obj = hp1
-    self.merge_pair = (angle1, angle2)
-    super(AutoSameAngleBecauseSameHalfPlane, self).__init__()
+    self._distinct = [(angle1, angle2)]
+    self.conclusion = Conclusion()
+    self.conclusion.add_critical(Merge(angle1, angle2))
+    self.names = dict(hp1=hp1, hp2=hp2)
+    super(SameAngleBecauseSameHalfPlane, self).__init__()
 
 
-class AutoSameLineBecauseSamePoint(AutoMerge):
+class SameLineBecauseSamePoint(MergeTheorem):
 
   def __init__(self):
     l1, l2 = Line('l1'), Line('l2')
@@ -367,7 +396,7 @@ class AutoSameLineBecauseSamePoint(AutoMerge):
       distinct(A, B)
     )
 
-    self.because_point = A
+    self.trigger_obj = A
     self.merge_pair = (l1, l2)
 
     self.conclusion = Conclusion()
@@ -376,10 +405,10 @@ class AutoSameLineBecauseSamePoint(AutoMerge):
     self.for_drawing = []
     self.names = dict(l1=l1, l2=l2, A=A, B=B)
 
-    super(AutoSameLineBecauseSamePoint, self).__init__()
+    super(SameLineBecauseSamePoint, self).__init__()
 
 
-class AutoSamePointBecauseSameLine(AutoMerge):
+class SamePointBecauseSameLine(MergeTheorem):
 
   def __init__(self):
     l1, l2 = Line('l1'), Line('l2')
@@ -391,7 +420,7 @@ class AutoSamePointBecauseSameLine(AutoMerge):
       distinct(l1, l2)
     )
 
-    self.because_line = l1
+    self.trigger_obj = l1
     self.merge_pair = (A, B)
 
     self.conclusion = Conclusion()
@@ -400,10 +429,10 @@ class AutoSamePointBecauseSameLine(AutoMerge):
     self.for_drawing = []
     self.names = dict(l1=l1, l2=l2, A=A, B=B)
 
-    super(AutoSamePointBecauseSameLine, self).__init__()
+    super(SamePointBecauseSameLine, self).__init__()
 
 
-class SamePointBecauseEqualSegments(FundamentalTheorem):
+class SamePointBecauseEqualSegments(MergeTheorem):
 
   def __init__(self):
     l, l1 = Line('l'), Line('l1')
@@ -430,7 +459,7 @@ class SamePointBecauseEqualSegments(FundamentalTheorem):
     super(SamePointBecauseEqualSegments, self).__init__()
 
 
-class SameLineBecauseSameDirection(FundamentalTheorem):
+class SameLineBecauseSameDirection(MergeTheorem):
 
   def __init__(self):
     l1, l2 = Line('l1'), Line('l2')
@@ -454,7 +483,7 @@ class SameLineBecauseSameDirection(FundamentalTheorem):
     return {}
 
 
-class SamePointBecauseSameMidpoint(FundamentalTheorem):
+class SamePointBecauseSameMidpoint(MergeTheorem):
 
   def __init__(self):
     l = Line('l')
@@ -1388,9 +1417,47 @@ class ASA(Congruences):
     return 'Equal Triangles: Angle-Side-Angle'
 
 
-all_theorems = {
+all_theorems = [
     # 'unq_line_dir': SameLineBecauseParallel(),
+    SamePointBecauseSameMidpoint(),
+    ConstructRightAngle(),
+    ConstructMidPoint(),  # 0.000365972518921
+    ConstructMirrorPoint(),
+    ConstructAngleBisector(),
+    ConstructIntersectSegmentLine(),
+    # UserConstructIntersectLineLine(),
+    ConstructParallelLine(),
+    ConstructPerpendicularLineFromPointOn(),
+    ConstructPerpendicularLineFromPointOut(),
+    ConstructThirdLine(),
+    EqualAnglesBecauseParallel(),  # 1.73088312149
+    SAS(),  # 0.251692056656
+    ASA(),  # 2.26002907753 3.96637487411
+    SSS(),
+    ParallelBecauseCorrespondingAngles(),
+    ParallelBecauseInteriorAngles(),
+    OppositeAnglesCheck(),
+    ThalesCheck(),
+    # For auto-mergings
+    SameAngleBecauseSameHalfPlane(),
+    SameHalfplaneBecauseSameLine(),
+    SameLineBecauseSameDirection(),
+    SameLineBecauseSamePoint(),
+    SamePointBecauseEqualSegments(),
+    SamePointBecauseSameLine(),
+    SamePointBecauseSameMidpoint(),
+    SameSegmentBecauseSamePoint()
+]
+
+theorem_from_name = {
+  theorem.__class__.__name__: theorem
+  for theorem in all_theorems
+}
+
+theorem_from_short_name = {
+    # 'unq_line_dir': SameLineBecauseParallel(){}
     'unq_mid_point': SamePointBecauseSameMidpoint(),
+    'unq_line_dir': SameLineBecauseSameDirection(),
     'right': ConstructRightAngle(),
     'mid': ConstructMidPoint(),  # 0.000365972518921
     'mirror': ConstructMirrorPoint(),
@@ -1410,12 +1477,39 @@ all_theorems = {
     'angle_check': OppositeAnglesCheck(),
     'thales_check': ThalesCheck(),
     # For auto-mergings
-    'auto_seg': AutoSameSegmentBecauseSamePoint(),
-    'auto_hp': AutoSameHalfplaneBecauseSameLine(),
-    'auto_angle': AutoSameAngleBecauseSameHalfPlane()
+    'auto_seg': SameSegmentBecauseSamePoint(),
+    'auto_hp': SameHalfplaneBecauseSameLine(),
+    'auto_angle': SameAngleBecauseSameHalfPlane()
 }
 
-theorem_from_name = {
-  theorem.__class__.__name__: theorem
-  for name, theorem in all_theorems.items()
-}
+
+"""
+Theorem set 1. Merge (=>)
+
+1. Point => Segment (Length)
+2. Line (LineDirection) => HP => Angle (Measure)
+3. Point <=> LineS
+"""
+
+
+def auto_merge_theorems_from_trigger_obj(obj):
+  if isinstance(obj, Point):
+    return [
+        theorem_from_name[name]
+        for name in ['SameSegmentBecauseSamePoint',
+                     'SameLineBecauseSamePoint']
+    ]
+  if isinstance(obj, Line):
+    return [
+        theorem_from_name[name]
+        for name in ['SameHalfplaneBecauseSameLine',
+                     'SamePointBecauseSameLine']
+    ]
+  if isinstance(obj, HalfPlane):
+    return [
+        theorem_from_name[name]
+        for name in ['SameAngleBecauseSameHalfPlane']
+    ]
+  return []
+  
+  

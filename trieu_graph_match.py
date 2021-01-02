@@ -268,10 +268,10 @@ def create_new_rels_from_merge(obj1, obj2,
     raise ValueError('Cannot merge {} ({}) and {} ({})'.format(
         obj1, type(obj1), obj2, type(obj2)))
 
-  if not isinstance(obj1, (Point, Segment, Line, Angle, Circle,
-                           SegmentLength, AngleMeasure, LineDirection)):
-    raise ValueError('Cannot merge {} and {} of type {}'.format(
-        obj1, obj2, type(obj1)))
+  # if not isinstance(obj1, (Point, Segment, Line, Angle, Circle,
+  #                          SegmentLength, AngleMeasure, LineDirection)):
+  #   raise ValueError('Cannot merge {} and {} of type {}'.format(
+  #       obj1, obj2, type(obj1)))
 
   obj_type = type(obj1)
 
@@ -382,25 +382,25 @@ def create_new_rels_from_merge(obj1, obj2,
   
   # Now filter obj2 out of state_relations to recursively
   # seek for consequently triggered merges.
-  filtered_state_relations = filter(
-      lambda x: isinstance(x, Merge) or obj2 not in x.init_list, state_relations)
+  # filtered_state_relations = filter(
+  #     lambda x: isinstance(x, Merge) or obj2 not in x.init_list, state_relations)
 
-  theorem = None
-  if isinstance(obj1, Point):
-    theorem = all_theorems['auto_seg']
-  elif isinstance(obj1, Line):
-    theorem = all_theorems['auto_hp']
-  elif isinstance(obj1, HalfPlane):
-    theorem = all_theorems['auto_angle']
+  # theorem = None
+  # if isinstance(obj1, Point):
+  #   theorem = all_theorems['auto_seg']
+  # elif isinstance(obj1, Line):
+  #   theorem = all_theorems['auto_hp']
+  # elif isinstance(obj1, HalfPlane):
+  #   theorem = all_theorems['auto_angle']
   
-  new_rels = add_new_rels_from_auto_merge(
-    trigger_obj=obj1,
-    theorem=theorem, 
-    filtered_state_relations=filtered_state_relations, 
-    new_rels=new_rels, 
-    critical=critical, 
-    conclusion_position=conclusion_position,
-    current_state=current_state)
+  # new_rels = add_new_rels_from_auto_merge(
+  #   trigger_obj=obj1,
+  #   theorem=theorem, 
+  #   filtered_state_relations=filtered_state_relations, 
+  #   new_rels=new_rels, 
+  #   critical=critical, 
+  #   conclusion_position=conclusion_position,
+  #   current_state=current_state)
   
   # Finally remove obj2.
   # But first remove obj2 in new_rels

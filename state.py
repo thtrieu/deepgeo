@@ -280,11 +280,12 @@ class State(object):
       line, hp = relation.init_list
       if line not in self.line2hps:
         self.line2hps[line] = []
+
       if hp not in self.line2hps[line]:
         if len(self.line2hps[line]) == 2:
           hp1, hp2 = self.line2hps[line]
           print(line.name, hp1.name, hp2.name, hp.name)
-          raise ValueError('More than 2 halfplanes.')
+          # raise ValueError('More than 2 halfplanes.')
         self.line2hps[line].append(hp)
 
     if isinstance(relation, HalfPlaneContainsPoint):

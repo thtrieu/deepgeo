@@ -261,6 +261,7 @@ class ExplorationBackoffDFSBase(object):
           db.save_chain('save.pkl')
           import pdb; pdb.set_trace()
           exit()
+        action_chain_lib.recursively_auto_merge(action, new_state, depth)
 
       # Now we use numerical tool to
       # draw what have been done by action, 

@@ -78,6 +78,24 @@ def mapping_from_command(command, theorem, state):
   return mapping
 
 
+def recursively_auto_merge(action, state, chain_position):
+  exhausted = False  # is all auto merges exhausted?
+  while not exhausted:
+    exhausted = True  # set to False immediately once a match is found.
+    for merge_rel in action.merges:
+      trigger_obj = merge_rel.to_obj
+      for theorem in theorems.auto_merge_theorems_from_trigger_obj(trigger_obj):
+        for next_merge_action in theorem.match_from_input_mapping(
+            state, {theorem.trigger_obj: trigger_obj}):
+          exhausted = False
+          next_merge_action.set_chain_position(chain_position)
+          state.add_relations(next_merge_action.new_objects)
+          recursively_auto_merge(next_merge_action, state, chain_position)
+          # append action with auto merged's matched_conclusion & new objects
+          action.update(next_merge_action)
+
+
+
 def execute_steps(steps, state, canvas, verbose=False, init_action_chain=None):
   init_action_chain = init_action_chain or []
   action_chain = []
@@ -108,6 +126,8 @@ def execute_steps(steps, state, canvas, verbose=False, init_action_chain=None):
     canvas = canvas.copy()
     
     state.add_relations(action.new_objects)
+    recursively_auto_merge(action, state, pos)
+
     line2pointgroups = action.draw(canvas)
     state.add_spatial_relations(line2pointgroups)
     canvas.update_hps(state.line2hps)

@@ -360,7 +360,7 @@ def triangle_seed():
   return init_state, init_canvas
 
 
-used_theorems = theorems.all_theorems
+used_theorems = theorems.theorem_from_short_name
 
 
 def test_thales():
@@ -1536,11 +1536,16 @@ def test_thales_merge_midpoint1():
       init_state, init_canvas, canvas)
 
   # Test if we have the correct proof steps
+  # Remember that in order to apply the last step 
+  # Equal Angles Because Parallel: l=l2 l1=ab l2=l6 => equal angles
+  # We need the fact that l2 is NOT parallel to either l1 and l2 
+  # (otherwise the angles aren't going to exist)
+  # And so, the existence of an intersection between l6 and l2 is needed
+  # Which is the merged P2, so that's why the whole proof of merging P2 & P3 is needed!
   chosen_proof_steps = [i for i, step in enumerate(proof_steps)
                         if step is not None]
   assert len(chosen_proof_steps) == 10, len(chosen_proof_steps)
   assert chosen_proof_steps == [3, 6, 8, 9, 11, 12, 14, 15, 17, 18]
-
 
 
   # TODO(thtrieu): why is this non-deterministic?
@@ -1584,49 +1589,173 @@ def test_thales_merge_midpoint1():
   #   print(count)
 
 
-def test_merge_line_direction():
+def test_thales_merge_lines1():
   geometry.reset()
   init_state, init_canvas = triangle_seed()
   state, canvas = init_state.copy(), init_canvas.copy()
 
   # Original thales + noises
   steps = [
-      (used_theorems['perp_out'], 'A=A l=bc'),  # l1
-      (used_theorems['perp_on'], 'A=A l=l1'),  # l1  noise
-      (used_theorems['parallel'], 'A=A l=bc'),  # l2
+      # Let P1 be the midpoint of AB
+      (used_theorems['mid'], 'A=A B=B'),  # P1
+      # Let P2 be the midpoint of AC
+      (used_theorems['mid'], 'A=A B=C'),  # P2
+      # Let P3 be the midpoint of BC
+      (used_theorems['mid'], 'A=B B=C'),  # P3  noise
+      # let l1 connects P1 and P2
+      (used_theorems['line'], 'A=P1 B=P2'),  # l1 
+      # Through P1 create l2 parallel to BC 
+      (used_theorems['parallel'], 'A=P1 l=bc'),  # l2
+      # Now we want to prove l1 and l2 coincides.
+      # -------------------------------------------------------
+      # Auxliary constructions:
+      (used_theorems['mirror'], 'A=P1 B=P2'),  # P4
+      (used_theorems['parallel'], 'A=P4 l=ca'),  # l3
+      (used_theorems['parallel'], 'A=P1 l=ca'),  # l4
+      (used_theorems['line'], 'A=P1 B=C'),  # l5
+      # -------------------------------------------------------
+      # Three steps to prove AP2P1 = CP2P4
+      (used_theorems['eq'], 'l=l1 l1=ca l2=l3'),
+      (used_theorems['eq'], 'l=l1 l1=ca l2=l4'),
+      (used_theorems['eq'], 'l=l1 l1=l3 l2=l4'),
+
+      (used_theorems['sas'], 'A=A B=P2 C=P1 D=C E=P2 F=P4'),  # l6
+      (used_theorems['.parallel2'], 'l=l1 l1=ab l2=l6'),
+      (used_theorems['eq'], 'l=l5 l1=ab l2=l6'),
+      (used_theorems['sas'], 'A=B B=P1 C=C D=P4 E=C F=P1'),
+      (used_theorems['.parallel2'], 'l=l5 l1=l1 l2=bc'),  # Now we have l1 // bc
+      (used_theorems['unq_line_dir'], 'l1=l1 l2=l2')
   ]
 
   print('\nRunning thales merge test:')
   state, canvas, action_chain = action_chain_lib.execute_steps(steps, state, canvas)
 
+  # Extract state queue & proof queue that prove P2 is mid AC
+  conclusion = action_chain[-1].matched_conclusion
+
+  goals = list(whittling.extract_all_proof_goals(action_chain, state))
+  
+  proof_queues = []
+  for _, proof_queue in goals:
+    if isinstance(proof_queue[0], tuple):
+      proof_queues.append(proof_queue[0][0])
+    else:
+      proof_queues.append(proof_queue[0])
+
+  proof_queues = state.name_map(proof_queues)
+  assert len(proof_queues) == 9, proof_queues
+
+  for rel_name in ['l1/l2_hp2', 'l1/l2_hp1', 'bc!=l1', 'l2[P2]', 'l2!=ab', 
+                   'l2[P4]', 'l2/l1_hp1', 'l2/l1_hp2', 'l2!=ca']:
+    assert rel_name in proof_queues, rel_name
+
+  return
+  # TODO(thtrieu): write the following remaining code.
+  state_queue, proof_queue = None, None
+  for state_queue, proof_queue in goals:
+    if proof_queue[0][0].name == 'l2[P3]':
+      break
+
+  s = time.time()
+  problem, problem_canvas, proof_steps = whittle(
+      state, state_queue, proof_queue, action_chain,
+      init_state, init_canvas, canvas)
+  print('thales whittle time ', time.time()-s)
+
+  # Test if we are having the correct problem statement
+  assert len(problem_canvas.points) == 5, len(problem_canvas.points)
+  assert len(problem_canvas.lines) == 4, len(problem_canvas.lines)
+  assert len(problem_canvas.circles) == 0, len(problem_canvas.circles)
+  assert len(problem.name2obj) == 27, len(problem.name2obj)
+
+  # Test if we have the correct proof steps
+  chosen_proof_steps = [i for i, step in enumerate(proof_steps)
+                        if step is not None]
+  assert len(chosen_proof_steps) == 10, len(chosen_proof_steps)
+  assert chosen_proof_steps == [3, 5, 6, 8, 9, 11, 12, 14, 15, 17]
+
+  steps = [
+      (used_theorems['seg_line'], 'A=A B=C l=l2'),  # P5
+      (used_theorems['parallel'], 'A=C l=ab'),  # l7
+      (used_theorems['line'], 'A=P1 B=C'),  # l8
+      # -------------------------------------------------------
+      (used_theorems['eq'], 'l=l8 l1=ab l2=l7'),
+      (used_theorems['eq'], 'l=l8 l1=l2 l2=bc'),
+      (used_theorems['asa'], 'A=P1 B=B C=C D=C F=P1 de=l7 ef=l2'),  # P6
+      (used_theorems['eq'], 'l=ca l1=ab l2=l7'),
+      (used_theorems['eq'], 'l=l2 l1=ab l2=l7'),
+      (used_theorems['asa'], 'A=A B=P5 C=P1 D=C F=P6 de=ca ef=l2'),
+      (used_theorems['unq_mid_point'], 'A=A B=C M=P5 N=P3')
+  ]
+
+  # Test if the correct proof step applied on the problem statement
+  # give the correct solution
+  print('Proof execution:')
+  proved_problem, proved_canvas, _ = action_chain_lib.execute_steps(
+      steps, problem, problem_canvas)
+
+  assert len(proved_canvas.points) == 7
+  assert len(proved_canvas.lines) == 6
+  assert len(proved_canvas.circles) == 0
+  assert len(proved_problem.name2obj) == 70, len(proved_problem.name2obj)
+
+  print('\nExtra steps')
+  steps = [
+    (used_theorems['eq'], 'l=l2 l1=ab l2=l6')
+  ]
+  state, canvas, action_chain = action_chain_lib.execute_steps(steps, state, canvas, init_action_chain=action_chain)
+
+  assert len(action_chain) == 19, len(action_chain)
+
+  goals = list(whittling.extract_all_proof_goals(action_chain, state))
+  problem_queue, proof_queue = goals[0]
+  print(state.name_map(problem_queue))
+  print(state.name_map(proof_queue))
+
+  problem, problem_canvas, proof_steps = whittle(
+      state, problem_queue, proof_queue, action_chain,
+      init_state, init_canvas, canvas)
+
+  # Test if we have the correct proof steps
+  # Remember that in order to apply the last step 
+  # Equal Angles Because Parallel: l=l2 l1=ab l2=l6 => equal angles
+  # We need the fact that l2 is NOT parallel to either l1 and l2 
+  # (otherwise the angles aren't going to exist)
+  # And so, the existence of an intersection between l6 and l2 is needed
+  # Which is the merged P2, so that's why the whole proof of merging P2 & P3 is needed!
+  chosen_proof_steps = [i for i, step in enumerate(proof_steps)
+                        if step is not None]
+  assert len(chosen_proof_steps) == 10, len(chosen_proof_steps)
+  assert chosen_proof_steps == [3, 6, 8, 9, 11, 12, 14, 15, 17, 18]
+
 
 if __name__ == '__main__':
   np.random.seed(1234)
   t = time.time()
-  # test_intersect_line_line()
-  # test_intersect_line_line2()
-  # test_thales()
-  # test_thales_whittle1()
-  # test_thales_whittle2()
-  # test_whittle0()
-  # test_whittle1()
-  # test_whittle2()
-  # test_whittle3()
-  # test_whittle4()
-  # test_whittle5()
-  # test_whittle6()
-  # sas_hp()
-  # conclusion_match()
-  # sas()
-  # time_sas()
-  # state_merge_and_copy()
-  # test_sss_isosceles()
-  # test_asa_isosceles()
-  # test_sas_isosceles()
-  # test_bisect_isosceles()
-  # test_bisect_sss_isosceles()
+  test_intersect_line_line()
+  test_intersect_line_line2()
+  test_thales()
+  test_thales_whittle1()
+  test_thales_whittle2()
+  test_whittle0()
+  test_whittle1()
+  test_whittle2()
+  test_whittle3()
+  test_whittle4()
+  test_whittle5()
+  test_whittle6()
+  sas_hp()
+  conclusion_match()
+  sas()
+  time_sas()
+  state_merge_and_copy()
+  test_sss_isosceles()
+  test_asa_isosceles()
+  test_sas_isosceles()
+  test_bisect_isosceles()
+  test_bisect_sss_isosceles()
   test_thales_merge_midpoint1()
-  # test_thales_merge_midpoint2()
+  test_thales_merge_lines1()
   # test_merge_line_direction()
   print('\n [OK!]')
   print('Total time = {}'.format(time.time()-t))
