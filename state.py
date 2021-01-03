@@ -280,11 +280,12 @@ class State(object):
       line, hp = relation.init_list
       if line not in self.line2hps:
         self.line2hps[line] = []
+
       if hp not in self.line2hps[line]:
         if len(self.line2hps[line]) == 2:
           hp1, hp2 = self.line2hps[line]
           print(line.name, hp1.name, hp2.name, hp.name)
-          raise ValueError('More than 2 halfplanes.')
+          # raise ValueError('More than 2 halfplanes.')
         self.line2hps[line].append(hp)
 
     if isinstance(relation, HalfPlaneContainsPoint):
@@ -418,19 +419,19 @@ class State(object):
 
   def add_relations(self, relations):
     for rel in relations:
-      if not isinstance(rel, Merge):
-        self.add_one(rel)
+      # if not isinstance(rel, Merge):
+      self.add_one(rel)
     
     # This is copied for extracting proof related to transitive values
     # But will not be copied to next state.
-    self.val2valrel_copy = {
-      key: list(value)
-      for key, value in self.val2valrel.items()
-    }
+    # self.val2valrel_copy = {
+    #   key: list(value)
+    #   for key, value in self.val2valrel.items()
+    # }
 
-    for rel in relations:
-      if isinstance(rel, Merge):
-        self.add_one(rel)
+    # for rel in relations:
+    #   if isinstance(rel, Merge):
+    #     self.add_one(rel)
 
   def add_spatial_relations(self, line2pointgroups):
     for line in line2pointgroups:

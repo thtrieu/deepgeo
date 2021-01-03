@@ -199,40 +199,40 @@ def create_new_obj_and_rels_for_conclusion(
   return new_objs_and_rels
 
 
-def add_new_rels_from_auto_merge(
-      trigger_obj,
-      theorem, 
-      filtered_state_relations, 
-      new_rels, 
-      critical, 
-      conclusion_position,
-      current_state):
-  if theorem is None:
-    return new_rels
+# def add_new_rels_from_auto_merge(
+#       trigger_obj,
+#       theorem, 
+#       filtered_state_relations, 
+#       new_rels, 
+#       critical, 
+#       conclusion_position,
+#       current_state):
+#   if theorem is None:
+#     return new_rels
 
-  while True:
-    found = False
+#   while True:
+#     found = False
 
-    state_candidates = {}
-    for rel in filtered_state_relations + new_rels:
-      state_candidates[type(rel)] = state_candidates.get(type(rel), []) + [rel]
+#     state_candidates = {}
+#     for rel in filtered_state_relations + new_rels:
+#       state_candidates[type(rel)] = state_candidates.get(type(rel), []) + [rel]
 
-    auto_merges = theorem.find_auto_merge_from_trigger(
-        state_candidates, {theorem.trigger_obj: trigger_obj})
-    # import pdb; pdb.set_trace()
-    for (obj1, obj2) in auto_merges:
-      # print('because {}, merging {} and {}'.format(trigger_obj.name, obj1.name, obj2.name))
-      # import pdb; pdb.set_trace()
-      new_rels += create_new_rels_from_merge(
-          obj1, obj2, 
-          filtered_state_relations + new_rels,
-          critical,
-          conclusion_position,
-          current_state)
-      found = False
-    if not found:
-      break
-  return new_rels
+#     auto_merges = theorem.find_auto_merge_from_trigger(
+#         state_candidates, {theorem.trigger_obj: trigger_obj})
+#     # import pdb; pdb.set_trace()
+#     for (obj1, obj2) in auto_merges:
+#       # print('because {}, merging {} and {}'.format(trigger_obj.name, obj1.name, obj2.name))
+#       # import pdb; pdb.set_trace()
+#       new_rels += create_new_rels_from_merge(
+#           obj1, obj2, 
+#           filtered_state_relations + new_rels,
+#           critical,
+#           conclusion_position,
+#           current_state)
+#       found = False
+#     if not found:
+#       break
+#   return new_rels
 
 
 def other_obj(rel, obj):
@@ -268,10 +268,10 @@ def create_new_rels_from_merge(obj1, obj2,
     raise ValueError('Cannot merge {} ({}) and {} ({})'.format(
         obj1, type(obj1), obj2, type(obj2)))
 
-  if not isinstance(obj1, (Point, Segment, Line, Angle, Circle,
-                           SegmentLength, AngleMeasure, LineDirection)):
-    raise ValueError('Cannot merge {} and {} of type {}'.format(
-        obj1, obj2, type(obj1)))
+  # if not isinstance(obj1, (Point, Segment, Line, Angle, Circle,
+  #                          SegmentLength, AngleMeasure, LineDirection)):
+  #   raise ValueError('Cannot merge {} and {} of type {}'.format(
+  #       obj1, obj2, type(obj1)))
 
   obj_type = type(obj1)
 
@@ -350,7 +350,7 @@ def create_new_rels_from_merge(obj1, obj2,
     pass  # nothing to do.
 
   elif val_rels[obj1] and val_rels[obj2] is None:
-    pass
+    pass  # nothing to do.
 
   elif val_rels[obj1] is None and val_rels[obj2]:
     # If obj1 has no val, but obj2 has val
@@ -379,28 +379,31 @@ def create_new_rels_from_merge(obj1, obj2,
       new_rel.set_critical(critical)
       new_rel.set_conclusion_position(conclusion_position)
       new_rels.append(new_rel)
+
+      # This is for triggering subsequent auto merges:
+      new_rels.append(Merge(val1, val2))
   
   # Now filter obj2 out of state_relations to recursively
   # seek for consequently triggered merges.
-  filtered_state_relations = filter(
-      lambda x: isinstance(x, Merge) or obj2 not in x.init_list, state_relations)
+  # filtered_state_relations = filter(
+  #     lambda x: isinstance(x, Merge) or obj2 not in x.init_list, state_relations)
 
-  theorem = None
-  if isinstance(obj1, Point):
-    theorem = all_theorems['auto_seg']
-  elif isinstance(obj1, Line):
-    theorem = all_theorems['auto_hp']
-  elif isinstance(obj1, HalfPlane):
-    theorem = all_theorems['auto_angle']
+  # theorem = None
+  # if isinstance(obj1, Point):
+  #   theorem = all_theorems['auto_seg']
+  # elif isinstance(obj1, Line):
+  #   theorem = all_theorems['auto_hp']
+  # elif isinstance(obj1, HalfPlane):
+  #   theorem = all_theorems['auto_angle']
   
-  new_rels = add_new_rels_from_auto_merge(
-    trigger_obj=obj1,
-    theorem=theorem, 
-    filtered_state_relations=filtered_state_relations, 
-    new_rels=new_rels, 
-    critical=critical, 
-    conclusion_position=conclusion_position,
-    current_state=current_state)
+  # new_rels = add_new_rels_from_auto_merge(
+  #   trigger_obj=obj1,
+  #   theorem=theorem, 
+  #   filtered_state_relations=filtered_state_relations, 
+  #   new_rels=new_rels, 
+  #   critical=critical, 
+  #   conclusion_position=conclusion_position,
+  #   current_state=current_state)
   
   # Finally remove obj2.
   # But first remove obj2 in new_rels
@@ -495,7 +498,7 @@ def match_conclusions(conclusion, state_candidates,
           rel.from_obj for rel in new_objs_and_rels 
           if isinstance(rel, Merge)]
 
-      # Filter them out, except TransitiveRelations
+      # Filter merged objs out, except TransitiveRelations
       new_objs_and_rels = filter(
           lambda rel: (isinstance(rel, Merge) or
                        isinstance(rel, TransitiveRelation) or

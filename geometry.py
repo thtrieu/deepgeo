@@ -7,6 +7,8 @@ from collections import defaultdict as ddict
 import traceback
 import os
 
+from numpy.lib.arraysetops import isin
+
 
 def print_tb():
   for line in traceback.format_stack()[:-2]:
@@ -75,6 +77,10 @@ class GeometryEntity(object):
     self.name = name
     name_to_obj[self.name] = self
 
+  @classmethod
+  def factory(cls, *names):
+    return [cls(name) for name in list(names)]
+
   def get_merge_graph(self, state, default={}):
     if not hasattr(self, 'merge_graph'):
       self.merge_graph = {}
@@ -97,6 +103,10 @@ class GeometryEntity(object):
     elif isinstance(self, Angle):
       _name_bank[Angle] += 1
       return '^' + str(_name_bank[Angle])
+
+    elif isinstance(self, Ratio):
+      _name_bank[Angle] += 1
+      return ':' + str(_name_bank[Angle])
 
     elif isinstance(self, Segment):
       _name_bank[Segment] += 1
@@ -323,6 +333,10 @@ class AngleMeasure(CausalValue):
   pass
 
 
+class RatioValue(CausalValue):
+  pass
+
+
 class Point(GeometryEntity):
   pass
 
@@ -335,7 +349,17 @@ class Angle(GeometryEntity):
   pass
 
 
+class Ratio(GeometryEntity):
+  pass
+
+
+class Vector(GeometryEntity):
+  pass
+
+
 halfpi = None
+
+minus_one = None
 
 
 def get_halfpi():
@@ -343,6 +367,13 @@ def get_halfpi():
   if halfpi is None:
     halfpi = Angle('halfpi')
   return halfpi
+
+
+def get_minus_one():
+  global minus_one
+  if minus_one is None:
+    minus_one = Ratio('-1')
+  return minus_one
 
 
 class HalfPlane(GeometryEntity):
@@ -364,6 +395,7 @@ _name_bank = {
     Line: 0,
     Segment: 0,
     Angle: 0,
+    Ratio: 0,
     HalfPlane: 0,
     Circle: 0,
     LineDirection: 0,
@@ -443,7 +475,33 @@ class Distinct(Relation):
     assert isinstance(obj1, type(obj2))
     self.name = '{}!={}'.format(obj1.name, obj2.name)
     self._init_list = obj1, obj2
-    
+
+
+class OppositeAngles(Relation):
+
+  def __init__(self, angle1, angle2):
+    assert isinstance(angle1, Angle) and isinstance(angle2, Angle)
+    self.name = '{}<>{}'.format(angle1.name, angle2.name)
+    self._init_list = angle1, angle2
+
+
+
+class OppositeRatios(Relation):
+
+  def __init__(self, ratio1, ratio2):
+    assert isinstance(ratio1, Ratio) and isinstance(ratio2, Ratio)
+    self.name = '{}<>{}'.format(ratio1.name, ratio2.name)
+    self._init_list = ratio1, ratio2
+
+
+
+class OppositeVector(Relation):
+
+  def __init__(self, vec1, vec2):
+    assert isinstance(vec1, Vector) and isinstance(vec2, Vector)
+    self.name = '{}<>{}'.format(vec1.name, vec2.name)
+    self._init_list = vec1, vec2
+
 
 class PointEndsSegment(Relation):
 
@@ -453,14 +511,33 @@ class PointEndsSegment(Relation):
     self._init_list = point, segment
 
 
-class HalfplaneCoversAngle(Relation):
+# class HalfplaneCoversAngle(Relation):
 
-  def __init__(self, halfplane, angle):
-    assert (isinstance(halfplane, HalfPlane) and 
+#   def __init__(self, halfplane, angle):
+#     assert (isinstance(halfplane, HalfPlane) and 
+#             isinstance(angle, Angle))
+
+#     self.name = '{}/{}'.format(halfplane.name, angle.name)
+#     self._init_list = halfplane, angle
+
+
+class LinedirectionOfAngle(Relation):
+
+  def __init__(self, line_direction, angle):
+    assert (isinstance(line_direction, LineDirection) and
             isinstance(angle, Angle))
 
-    self.name = '{}/{}'.format(halfplane.name, angle.name)
-    self._init_list = halfplane, angle
+    self.name = '{}/{}'.format(line_direction.name, angle.name)
+    self._init_list = line_direction, angle
+
+
+class SegmentlengthInRatio(Relation):
+
+  def __init__(self, length, ratio):
+    assert isinstance(length, SegmentLength) and isinstance(ratio, RatioValue)
+
+    self.name = '{}*{}'.format(length.name, ratio.name)
+    self._init_list = length, ratio
 
 
 class TransitiveRelation(Relation):
@@ -496,6 +573,14 @@ class LineHasDirection(TransitiveRelation):
     self._init_list = line, direction
 
 
+class RatioHasValue(TransitiveRelation):
+
+  def __init__(self, ratio, ratio_value):
+    assert isinstance(ratio, Ratio) and isinstance(ratio_value, RatioValue)
+    self.name = '{}={}'.format(ratio.name, ratio_value.name)
+    self._init_list = ratio, ratio_value
+
+
 class LineContainsPoint(Relation):
 
   def __init__(self, line, point):
@@ -524,12 +609,12 @@ class HalfPlaneContainsPoint(Relation):
     self._init_list = halfplane, point
 
 
-class PointCentersCircle(Relation):
+# class PointCentersCircle(Relation):
 
-  def __init__(self, point, circle):
-    assert isinstance(point, Point) and isinstance(circle, Circle)
-    self.name = '{}@{}'.format(point.name, circle.name)
-    self._init_list = point, circle
+#   def __init__(self, point, circle):
+#     assert isinstance(point, Point) and isinstance(circle, Circle)
+#     self.name = '{}@{}'.format(point.name, circle.name)
+#     self._init_list = point, circle
 
 
 class LineBordersHalfplane(Relation):

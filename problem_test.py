@@ -12,6 +12,7 @@ import geometry
 import theorems
 import numpy as np
 import data_gen_lib
+import action_chain_lib
 
 from tensor2tensor.bin import t2t_trainer
 
@@ -70,6 +71,7 @@ def check(sequence, attention_mask, theorem, target, depth):
     obj1, obj2 = [sequence[i] for i, x in enumerate(conclusion) 
                   if x == 1 and i > 0]
     state.add_relations(action.new_objects)
+    action_chain_lib.recursively_auto_merge(action, state, None)
     found = False
     for val, rels in state.val2valrel.items():
       objs = [rel.init_list[0] for rel in rels]

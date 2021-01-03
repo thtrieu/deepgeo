@@ -328,7 +328,6 @@ def execute_user_steps(steps, new_obj_names, state, canvas, verbose=False):
       raise ValueError('Matching not found {} {}'.format(theorem, command))
 
     action.set_chain_position(i)
-    action_chain.append(action)
 
     new_obj = action.theorem.for_drawing[0]
     state_obj = action.mapping[new_obj]
@@ -337,7 +336,14 @@ def execute_user_steps(steps, new_obj_names, state, canvas, verbose=False):
 
     if verbose:
       print('\tAdd : {}'.format([obj.name for obj in action.new_objects]))
+
+    state = state.copy()
+    canvas = canvas.copy()
+
     state.add_relations(action.new_objects)
+    action_chain_lib.recursively_auto_merge(action, state, i)
+    action_chain.append(action)
+
     line2pointgroups = action.draw(canvas)
     state.add_spatial_relations(line2pointgroups)
 
@@ -710,6 +716,8 @@ class StepLoop(object):
 
     new_canvas = old_canvas.copy()
     self.state.add_relations(action.new_objects)
+    action_chain_lib.recursively_auto_merge(action, self.state, None)
+
     self.state.add_spatial_relations(action.draw(new_canvas))
     self.canvas_chain.append((new_canvas, self.state, None, None, None))
     self.state = self.state.copy()

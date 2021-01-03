@@ -240,7 +240,6 @@ class ExplorationBackoffDFSBase(object):
       verbose(' ' * depth, depth, action.to_str())
       db.update(depth, action)  # log for debugging
 
-      action_chain.append(action)
 
       # The position in the chain, i.e. depth, is needed
       # for whittling proof.
@@ -261,7 +260,12 @@ class ExplorationBackoffDFSBase(object):
           db.save_chain('save.pkl')
           import pdb; pdb.set_trace()
           exit()
+        action_chain_lib.recursively_auto_merge(action, new_state, depth)
 
+        if isinstance(action.theorem, theorems.MergeTheorem):
+          action_chain_lib.recursively_auto_merge(action, new_state, depth)
+
+      action_chain.append(action)
       # Now we use numerical tool to
       # draw what have been done by action, 
       # which results in new topological relations (point in halfplanes)
