@@ -6,11 +6,11 @@ from __future__ import print_function
 import time
 import geometry
 
-from geometry import Distinct
+from geometry import AngleOfFullAngle, HalfAngleOfAngle, DirectionOfFullAngle, Distinct
 from geometry import Point, Line, Segment, Angle, HalfPlane, Circle
 from geometry import SegmentLength, AngleMeasure, LineDirection
 from geometry import SegmentHasLength, AngleHasMeasure, LineHasDirection
-from geometry import PointEndsSegment, HalfplaneCoversAngle, LineBordersHalfplane
+from geometry import PointEndsSegment, HalfplaneCoversHalfAngle, LineBordersHalfplane
 from geometry import PointCentersCircle, Merge
 from geometry import LineContainsPoint, CircleContainsPoint, HalfPlaneContainsPoint
 
@@ -87,8 +87,21 @@ def segment_def(seg, p1, p2):
   return [PointEndsSegment(p1, seg), PointEndsSegment(p2, seg)]
 
 
-def angle_def(angle, hp1, hp2):
-  return [HalfplaneCoversAngle(hp1, angle), HalfplaneCoversAngle(hp2, angle)]
+def hangle_def(hangle, hp1, hp2):
+  return [HalfplaneCoversHalfAngle(hp1, hangle), HalfplaneCoversHalfAngle(hp2, hangle)]
+
+
+def fangle_def(fangle, direction1=None, direction2=None, angle1=None, angle2=None):
+  result = []
+  if direction1:
+    result.append(DirectionOfFullAngle(direction1, fangle))
+  if direction2:
+    result.append(DirectionOfFullAngle(direction2, fangle))
+  if angle1:
+    result.append(AngleOfFullAngle(angle1, fangle))
+  if angle2:
+    result.append(AngleOfFullAngle(angle2, fangle))
+  return result
 
 
 def diff_side(line, point1, point2, h1=None, h2=None):

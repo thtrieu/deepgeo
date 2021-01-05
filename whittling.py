@@ -240,8 +240,8 @@ def whittle_from(final_state, queue, action_chain,
       critical = True
       pos = query
     else:  # not an integer but an obj or rel.
-      if isinstance(query, list):
-        import pdb; pdb.set_trace()
+      # if isinstance(query, list):
+      #   import pdb; pdb.set_trace()
       pos = query.chain_position
       if pos is None:    # at init state already
         continue

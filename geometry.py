@@ -331,11 +331,21 @@ class Segment(GeometryEntity):
   pass
 
 
+class HalfAngle(GeometryEntity):
+  pass
+
+
 class Angle(GeometryEntity):
   pass
 
 
+class FullAngle(GeometryEntity):
+  pass
+
+
+
 halfpi = None
+
 
 
 def get_halfpi():
@@ -453,14 +463,44 @@ class PointEndsSegment(Relation):
     self._init_list = point, segment
 
 
-class HalfplaneCoversAngle(Relation):
+class HalfplaneCoversHalfAngle(Relation):
 
-  def __init__(self, halfplane, angle):
+  def __init__(self, halfplane, hangle):
     assert (isinstance(halfplane, HalfPlane) and 
+            isinstance(hangle, HalfAngle))
+
+    self.name = '{}/{}'.format(halfplane.name, hangle.name)
+    self._init_list = halfplane, hangle
+
+
+class HalfAngleOfAngle(Relation):
+
+  def __init__(self, hangle, angle):
+    assert (isinstance(hangle, HalfAngle) and 
             isinstance(angle, Angle))
 
-    self.name = '{}/{}'.format(halfplane.name, angle.name)
-    self._init_list = halfplane, angle
+    self.name = '{}/{}'.format(hangle.name, angle.name)
+    self._init_list = hangle, angle
+
+
+class AngleOfFullAngle(Relation):
+
+  def __init__(self, angle, fangle):
+    assert (isinstance(angle, Angle) and 
+            isinstance(fangle, FullAngle))
+
+    self.name = '{}-{}'.format(angle.name, fangle.name)
+    self._init_list = angle, fangle
+
+
+class DirectionOfFullAngle(Relation):
+
+  def __init__(self, direction, fangle):
+    assert (isinstance(direction, LineDirection) and 
+            isinstance(fangle, FullAngle))
+
+    self.name = '{}//{}'.format(direction.name, fangle.name)
+    self._init_list = direction, fangle
 
 
 class TransitiveRelation(Relation):
