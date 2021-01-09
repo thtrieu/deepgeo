@@ -65,6 +65,17 @@ class Line(object):
       self.coefficients = (p1.y - p2.y,
                            p2.x - p1.x,
                            p1.x * p2.y - p2.x * p1.y)
+    a, b, c = self.coefficients
+    # Make sure a is always positive (or always negative for that matter)
+    if a < 0:
+      self.coefficients = (-a, -b, -c)
+
+    if a == 0:
+      # With a being always positive,
+      # Assuming a = +epsilon > 0
+      # Then b such that ax + by = 0 should be negative. 
+      if b > 0:
+        self.coefficients = (-a, -b, -c)
 
   def parallel_line(self, p):
     a, b, _ = self.coefficients
@@ -73,6 +84,25 @@ class Line(object):
   def perpendicular_line(self, p):
     a, b, _ = self.coefficients
     return Line(p, p + Point(a, b))
+
+  def greater_than(self, other):
+    a, b, _ = self.coefficients
+    x, y, _ = other.coefficients
+    # b/a > y/x
+    return b*x > a*y
+  
+  def equal(self, other):
+    a, b, _ = self.coefficients
+    x, y, _ = other.coefficients
+    # b/a > y/x
+    return b*x == a*y
+  
+  def less_than(self, other):
+    a, b, _ = self.coefficients
+    x, y, _ = other.coefficients
+    # b/a > y/x
+    return b*x < a*y
+
 
 
 class Segment(object):
@@ -100,12 +130,14 @@ def circle_intersection(o1, o2):
 
 def solve_quad(a, b, c):
   a = 2 * a
-  x = - b
-  try:
-    y = math.sqrt(b * b - 2 * a * c)
-  except:
+
+  d = b*b - 2*a*c
+  
+  if d < 0:
     import pdb; pdb.set_trace()
-  return (x - y)/a, (x + y)/a
+
+  y = math.sqrt(b * b - 2 * a * c)
+  return (-b - y)/a, (-b + y)/a
 
 
 def line_circle_intersection(line, circle):
@@ -401,7 +433,9 @@ class Canvas(object):
       return
 
     self.lines[line] = sym_line
-    a, b, c = sym_line.coefficients
+    a, b, c = sym_line.coefficients 
+    line.sym_line = sym_line
+
     line_vector = [[a, b, c]]
     self.line_matrix = np.concatenate(
         [self.line_matrix, line_vector], 0)

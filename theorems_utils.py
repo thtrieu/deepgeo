@@ -6,11 +6,11 @@ from __future__ import print_function
 import time
 import geometry
 
-from geometry import AngleOfFullAngle, HalfAngleOfAngle, DirectionOfFullAngle, Distinct
-from geometry import Point, Line, Segment, Angle, HalfPlane, Circle
+from geometry import AngleOfFullAngle, FullAngle, DirectionOfFullAngle, Distinct, DistinctLine, DistinctPoint
+from geometry import Point, Line, Segment, Angle, HalfPlane, Circle, AngleXX, AngleXO
 from geometry import SegmentLength, AngleMeasure, LineDirection
 from geometry import SegmentHasLength, AngleHasMeasure, LineHasDirection
-from geometry import PointEndsSegment, HalfplaneCoversHalfAngle, LineBordersHalfplane
+from geometry import PointEndsSegment, LineBordersHalfplane
 from geometry import PointCentersCircle, Merge
 from geometry import LineContainsPoint, CircleContainsPoint, HalfPlaneContainsPoint
 
@@ -34,7 +34,11 @@ def distinct(*obj_list):
   result = []
   for i, obj1 in enumerate(obj_list[:-1]):
     for obj2 in obj_list[i+1:]:
-      result.append(Distinct(obj1, obj2))
+      if isinstance(obj1, Point):
+        rel = DistinctPoint(obj1, obj2)
+      else:
+        rel = DistinctLine(obj1, obj2)
+      result.append(rel)
   return result
 
 
@@ -87,26 +91,35 @@ def segment_def(seg, p1, p2):
   return [PointEndsSegment(p1, seg), PointEndsSegment(p2, seg)]
 
 
-def hangle_def(hangle, hp1, hp2):
-  return [HalfplaneCoversHalfAngle(hp1, hangle), HalfplaneCoversHalfAngle(hp2, hangle)]
-
-
-def fangle_def(fangle, direction1=None, direction2=None, angle1=None, angle2=None):
+def fangle_def(direction1, direction2, 
+               angle_xx=None, angle_xo=None,
+               measure_xx=None, measure_xo=None):
+  fangle = FullAngle(direction1.name+'^'+direction2.name)
   result = []
   if direction1:
     result.append(DirectionOfFullAngle(direction1, fangle))
   if direction2:
     result.append(DirectionOfFullAngle(direction2, fangle))
-  if angle1:
-    result.append(AngleOfFullAngle(angle1, fangle))
-  if angle2:
-    result.append(AngleOfFullAngle(angle2, fangle))
-  return result
+
+  if angle_xx is None:
+    angle_xx = AngleXX(fangle.name + '_xx')
+  result.append(AngleOfFullAngle(angle_xx, fangle))
+
+  if measure_xx:
+    result.append(AngleHasMeasure(angle_xx, measure_xx))
+
+  if angle_xo is None:
+    angle_xo = AngleXO(fangle.name + '_xo')
+  result.append(AngleOfFullAngle(angle_xo, fangle))
+
+  if measure_xo:
+    result.append(AngleHasMeasure(angle_xo, measure_xo))
+  return angle_xx, angle_xo, result
 
 
 def diff_side(line, point1, point2, h1=None, h2=None):
-  h1 = h1 or HalfPlane(line.name + '_some_hp1')
-  h2 = h2 or HalfPlane(line.name + '_some_hp2')
+  h1 = h1 or HalfPlane(line.name + '_hp1')
+  h2 = h2 or HalfPlane(line.name + '_hp2')
   return [
       LineBordersHalfplane(line, h1),
       LineBordersHalfplane(line, h2),
@@ -116,7 +129,7 @@ def diff_side(line, point1, point2, h1=None, h2=None):
 
 
 def same_side(l, p1, p2, hp=None):
-  hp = hp or HalfPlane(l.name + '_some_hp1')
+  hp = hp or HalfPlane(l.name + '_hp1')
   return [
       LineBordersHalfplane(l, hp),
       HalfPlaneContainsPoint(hp, p1),

@@ -659,7 +659,7 @@ class ProofExtractor(object):
     example = self.serialize(state, goal_objects, action)
 
     if example is None:
-      # [r.name for r in action.premise_objects if r not in state.relations and r.name not in state.name2obj]
+      # [r.name for r in action.premise _ objects if r not in state.relations and r.name not in state.name2obj]
       # {l.name: (h1.name, h2.name) for l, (h1, h2) in state.line2hps.items()}
       # {hp.name: [p.name for p in ps] for hp, ps in state.hp2points.items()}
       # {l.name: ([p.name for p in p1], [p.name for p in p2]) for l, (p1, p2) in canvas.line2hps.items()}

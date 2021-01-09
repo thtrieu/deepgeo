@@ -275,7 +275,7 @@ def whittle_from(final_state, queue, action_chain,
       valrels = {}
       merges = ddict(lambda: [])
 
-      for obj in action.theorem.premise_objects:
+      for obj in action.premise_objects:
         if not isinstance(obj, VALUE_ENTITIES + VALUE_RELATIONS):
           rel = action.mapping[obj]
           # dependents.append(rel)

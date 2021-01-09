@@ -17,3 +17,4 @@ build/*
 .vscode/settings.json
 *.pkl
 *sbatch*
+try.py

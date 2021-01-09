@@ -35,13 +35,16 @@ from cython.parallel import prange
 cimport numpy as np
 cimport cython
 
+from theorems import SamePairSkip
+
+from geometry import SelectAngle
 from geometry import GeometryEntity
 from geometry import Point, Line, Segment, Angle, HalfPlane, Circle 
 from geometry import SegmentLength, AngleMeasure, LineDirection
 from geometry import SegmentHasLength, AngleHasMeasure, LineHasDirection
-from geometry import PointEndsSegment, HalfplaneCoversAngle, LineBordersHalfplane
+from geometry import PointEndsSegment, LineBordersHalfplane
 from geometry import PointCentersCircle
-from geometry import Merge, Distinct
+from geometry import Merge, DistinctPoint, DistinctLine
 from geometry import LineContainsPoint, CircleContainsPoint, HalfPlaneContainsPoint
 
 
@@ -75,6 +78,36 @@ from geometry import LineContainsPoint, CircleContainsPoint, HalfPlaneContainsPo
 # test()
 
 
+def can_be_same(x, y, object_mappings):
+  x_in = x in object_mappings
+  y_in = y in object_mappings
+  if x_in and y_in:
+    if object_mappings[x] != object_mappings[y]:
+      return False, {}, []
+    else:
+      # already same, move on
+      return True, {}, []
+  elif not x_in and not y_in:
+    return True, {}, [(x, y)]
+  elif x_in:
+    return True, {y: object_mappings[x]}, []
+  else:  # y_in
+    return True, {x: object_mappings[y]}, []
+
+
+def maybe_skip(a, b, c, d, object_mappings):
+  can_be_same_ac, update_ac, same_ac = can_be_same(a, c, object_mappings)
+  can_be_same_bd, update_bd, same_bd = can_be_same(a, c, object_mappings)
+  
+  if can_be_same_ac and can_be_same_bd:
+    update_ac.update(update_bd)
+    return update_ac, same_ac + same_bd
+  else:
+    return None, None
+
+  
+
+
 @cython.boundscheck(False)
 @cython.wraparound(False)
 cpdef list recursively_match(
@@ -82,6 +115,7 @@ cpdef list recursively_match(
     dict state_candidates,
     dict object_mappings,
     list distinct=[],
+    list same=[],
     int return_all=0,
     int depth=0):  # ,
     # list counter=[0]):
@@ -139,23 +173,112 @@ cpdef list recursively_match(
     # There is not any premise edge to match:
     return [object_mappings]
 
-  cdef object a, b, c, d, query0, candidate, x, y, rel_type
+  cdef object a, b, c, d, query0, candidate, x, y, x_map, y_map, rel_type
 
   query0 = query_relations[0]
+  cdef list all_matches = []
+  cdef list appended_same = []
+  cdef dict new_mappings
+  cdef list match
+  cdef tuple distinct_pair, same_pair
+
+  if isinstance(query0, SamePairSkip):
+    a, b, c, d = query0.pairs
+    # try a -> x, c -> x, b -> y, d -> y
+    new_mappings, appended_same = maybe_skip(a, b, c, d, object_mappings)
+
+    if new_mappings is not None and appended_same is not None:
+      query_relations_skip = [q for q in query_relations[1:]
+                              if getattr(q, 'skip', None) != query0]
+      match = recursively_match(
+          query_relations=query_relations_skip, 
+          state_candidates=state_candidates,
+          object_mappings=dict(object_mappings, **new_mappings),
+          distinct=distinct,
+          same=same + appended_same,
+          return_all=return_all,
+          depth=depth+1)
+
+      if not return_all:
+        if match:
+          return match
+      else:
+        all_matches.extend(match)
+    
+    # try a -> x, d -> x, b -> y, c -> y
+    new_mappings, appended_same = maybe_skip(a, b, d, c, object_mappings)
+    if new_mappings is not None and appended_same is not None:
+      query_relations_skip = [q for q in query_relations[1:]
+                              if getattr(q, 'skip', None) != query0]
+      match = recursively_match(
+          query_relations=query_relations_skip, 
+          state_candidates=state_candidates,
+          object_mappings=dict(object_mappings, **new_mappings),
+          distinct=distinct,
+          same=same + appended_same,
+          return_all=return_all,
+          depth=depth+1)
+
+      if not return_all:
+        if match:
+          return match
+      else:
+        all_matches.extend(match)
+
+    # Finally without trying to skip anything (simply skip the skip)
+    match = recursively_match(
+        query_relations=query_relations[1:], 
+        state_candidates=state_candidates,
+        object_mappings=object_mappings,
+        distinct=distinct,
+        same=same,
+        return_all=return_all,
+        depth=depth+1)
+
+    if not return_all:
+      if match:
+        return match
+    else:
+      all_matches.extend(match)
+    
+    return all_matches
+    
+  # If query0 is not a Skip, do as normal.
   a, b = query0.init_list
+
+  cdef int available = 1 
+
+  if isinstance(a, SelectAngle):
+    if a.is_available(object_mappings):
+      a = a.select(object_mappings)
+    else:
+      available = 0
+  
+  if isinstance(b, SelectAngle):
+    if b.is_available(object_mappings):
+      b = b.select(object_mappings)
+    else:
+      available = 0
+  
+  if available == 0:
+    # If query0 is not available, then it is guaranteed that len(query_relations) >= 2
+    # print(query_relations)
+    return recursively_match(
+        query_relations=query_relations[1:]+[query0], 
+        state_candidates=state_candidates,
+        object_mappings=object_mappings,
+        distinct=distinct,
+        same=same,
+        return_all=return_all,
+        depth=depth)
+
 
   # At this recursion level we try to match premise_rel0
   rel_type = type(query0)
 
-  cdef list all_matches = []
-  cdef dict new_mappings
   cdef int conflict
   cdef dict appended_mappings
-  cdef list match
   cdef list match_ab_to
-
-  # for i in prange(100, nogil=True):
-  #   numpy.random.rand(50, 50).dot(numpy.random.rand(50, 50))
 
   # Enumerate through possible edge match:
   for candidate in state_candidates.get(rel_type, []):
@@ -169,13 +292,13 @@ cpdef list recursively_match(
     c = candidate.init_list[0]
     d = candidate.init_list[1]
 
-    if rel_type is Distinct:
+    if rel_type in [DistinctPoint, DistinctLine]:
       match_ab_to = [(c, d), (d, c)]
     else:
       match_ab_to = [(c, d)]
     
     for c, d in match_ab_to:
-      # Special treatment for half pi:
+      # Special treatment for half-pi:
       if a == geometry.halfpi and c != a:
         continue
       if b == geometry.halfpi and d != b:
@@ -195,6 +318,22 @@ cpdef list recursively_match(
         continue  # move on to the next candidate.
 
       new_mappings = {a: c, b: d}
+
+      # First, we check for sameness enforcement:
+      conflict = 0
+      for same_pair in same:
+        x, y = same_pair[0], same_pair[1]
+        x_map = object_mappings.get(x, new_mappings.get(x, None))
+        y_map = object_mappings.get(y, new_mappings.get(y, None))
+        # if either x or y has not been map, then its fine
+        # but if both is mapped, but to different guys, then conflict
+        if x_map and y_map and x_map != y_map:
+          conflict = 1
+          break
+      
+      if conflict:
+        continue
+
       # Check for distinctiveness:
       if not distinct:  # Everything is distinct except numeric values.
         # Add the inverse mappings, so that now a <-> c and b <-> d,
@@ -241,6 +380,7 @@ cpdef list recursively_match(
           state_candidates=state_candidates,
           object_mappings=appended_mappings,
           distinct=distinct,
+          same=same,
           return_all=return_all,
           depth=depth+1)  #,
           # counter=counter)

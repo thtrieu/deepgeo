@@ -21,10 +21,10 @@ import cython_graph_match
 
 from theorems import all_theorems
 
-from geometry import Point, Line, Segment, Angle, HalfPlane, Circle, TransitiveRelation 
+from geometry import Point, Line, Segment, Angle, HalfPlane, Circle, SelectAngle, TransitiveRelation 
 from geometry import SegmentLength, AngleMeasure, LineDirection
 from geometry import SegmentHasLength, AngleHasMeasure, LineHasDirection
-from geometry import PointEndsSegment, HalfplaneCoversAngle, LineBordersHalfplane
+from geometry import PointEndsSegment, LineBordersHalfplane
 from geometry import PointCentersCircle
 from geometry import Merge, Distinct
 from geometry import LineContainsPoint, CircleContainsPoint, HalfPlaneContainsPoint
@@ -32,35 +32,46 @@ from geometry import LineContainsPoint, CircleContainsPoint, HalfPlaneContainsPo
 
 def strip_match_relations(premise_relations, conclusion_relations, state_relations):
   """Strip unrelated relations in state_relation and sort the relations."""
-
   # Sort according to number of relations, in order to minimize
   # the branching factor early on when match recursively.
   # This also help with early pruning during recursive calls.
-  state_candidates = {}
+  relevant_state_candidates = {}
 
   if premise_relations == []:
-    return premise_relations, state_candidates
+    return premise_relations, relevant_state_candidates
 
   for rel in premise_relations + conclusion_relations:
     rel_type = type(rel)
-    if rel_type not in state_candidates:
-      state_candidates[rel_type] = []
+    if rel_type not in relevant_state_candidates:
+      relevant_state_candidates[rel_type] = []
 
   for state_rel in state_relations:
-    if type(state_rel) in state_candidates:
-      state_candidates[type(state_rel)].append(state_rel)
+    if type(state_rel) in relevant_state_candidates:
+      relevant_state_candidates[type(state_rel)].append(state_rel)
 
   rel_branch_count = []
   for rel in premise_relations:
-    branch_count = len(state_candidates[rel_type])
+    branch_count = len(relevant_state_candidates[type(rel)])
+    if isinstance(rel, Distinct):
+      branch_count *= 2
     rel_branch_count.append(branch_count)
 
-  # sort according to branch_count
+  # Sort according to branch_count
   premise_relations, _ = zip(*sorted(
       zip(premise_relations, rel_branch_count), 
       reverse=True))  # very important speedup!
 
-  return list(premise_relations), state_candidates
+  # Finally, we insert SamePairSkip before the first member of its group:
+  optimized_order_premise_relations = []  # return this.
+  all_skips = set()
+  for p in premise_relations:
+    skip = getattr(p, 'skip', None)
+    if skip and skip not in all_skips:
+      all_skips.add(skip)
+      optimized_order_premise_relations.append(skip)
+    optimized_order_premise_relations.append(p)
+
+  return optimized_order_premise_relations, relevant_state_candidates
 
 
 def _print_match(m, s):
@@ -145,11 +156,13 @@ def create_new_obj_and_rels_for_conclusion(
   """
 
   new_objs_and_rels = []  # return this
-  # Loop through the relation and create new objects on demand:
+  # Loop through the relation (in the conclusion) and create new objects on demand:
   for rel in relations:
     new_init_list = []
 
     for obj in rel.init_list:
+      if isinstance(obj, SelectAngle):
+        obj = obj.select(premise_match)
       if obj not in premise_match:
         # A new object is needed to be created.
         # For example in EqualAnglesBecauseIntersectingCords,
@@ -531,7 +544,6 @@ def match_conclusions(conclusion, state_candidates,
 
 def match_relations(premise_relations, 
                     state,
-                    augmented_relations=None,
                     # reverse_premise=True,
                     conclusion=None,
                     randomize=False,
@@ -560,12 +572,11 @@ def match_relations(premise_relations,
   else:
     conclusion_relations = []
 
-  augmented_relations = augmented_relations or []
   # Rearrage relations to optimize recursion branching
   with Timer('action/prepare'):
     sorted_premise_relations, state_candidates = strip_match_relations(
         premise_relations, conclusion_relations, 
-        state_relations + augmented_relations)
+        state_relations + state.distinct_relations())
 
     if randomize:
       for rel_type in state_candidates:
@@ -579,16 +590,6 @@ def match_relations(premise_relations,
         distinct=distinct,
         timeout=timeout,
         match_all=match_all)
-
-  if augmented_relations:
-    # We build state candidates *without* the augmented relations.
-    conclusion_state_candidates = {rel_type: [] for rel_type in state_candidates}
-    for relation in state_relations:
-      rel_type = type(relation)
-      if not rel_type in state_candidates:
-        continue 
-      conclusion_state_candidates[rel_type].append(relation)
-    state_candidates = conclusion_state_candidates
 
   for premise_match in premise_matches:
     if not conclusion:

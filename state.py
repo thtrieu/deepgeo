@@ -2,10 +2,11 @@ from collections import defaultdict as ddict
 
 import geometry 
 
-from geometry import Point, Line, Segment, Angle, HalfPlane, Circle
+from geometry import AngleOfFullAngle, DirectionOfFullAngle, Point, Line, Segment, Angle, HalfPlane, Circle
+from geometry import Distinct, DistinctLine, DistinctPoint
 from geometry import SegmentLength, AngleMeasure, LineDirection
 from geometry import SegmentHasLength, AngleHasMeasure, LineHasDirection
-from geometry import PointEndsSegment, HalfplaneCoversAngle, LineBordersHalfplane
+from geometry import PointEndsSegment, LineBordersHalfplane
 from geometry import PointCentersCircle, Merge
 from geometry import LineContainsPoint, CircleContainsPoint, HalfPlaneContainsPoint
 
@@ -38,12 +39,25 @@ class State(object):
     self.obj2valrel = {}
     self.val2valrel = {}
     self.name2obj = {}
+    self.old2newvals = {}
+
     self.all_points = []
     self.all_hps = []
-    self.old2newvals = {}
+
+    # distinct relations does not go to self.relations
+    # but goes here instead, for easy removal
+    # proof_distincts are for distinct in conclusions
+    self.proof_distincts = {}
+    # spatial_distincts are for distinct in spatial relations
+    self.spatial_distincts = {}
+    # everytime a distinct is added to spatial_distinct
+    # its duplicate in proof_distinct (if any) is removed.
 
     self.line2hps = {}
     self.hp2points = {}
+
+  def distinct_relations(self):
+    return self.proof_distincts.values() + self.spatial_distincts.values()
 
   def pop(self):
     for val in self.val2valrel:
@@ -74,6 +88,8 @@ class State(object):
 
     copied.all_points = _copy(self.all_points)
     copied.all_hps = _copy(self.all_hps)
+    copied.proof_distincts = _copy(self.proof_distincts)
+    copied.spatial_distincts = _copy(self.spatial_distincts)
 
     # For identifying halfplanes
     copied.line2hps = _copy(self.line2hps)
@@ -101,9 +117,9 @@ class State(object):
       elif isinstance(struct, SegmentHasLength):
         s, l = struct.init_list
         return self.segment_name(s) + '=' + l.name
-      elif isinstance(struct, HalfplaneCoversAngle):
-        hp, a = struct.init_list
-        return self.hp_name(hp) + '/' + self.angle_name(a)
+      # elif isinstance(struct, HalfplaneCoversAngle):
+      #   hp, a = struct.init_list
+      #   return self.hp_name(hp) + '/' + self.angle_name(a)
       elif isinstance(struct, Merge):
         return 'merge({}=>{})'.format(
             self.name_map(struct.from_obj), 
@@ -138,54 +154,57 @@ class State(object):
   def angle_name(self, angle):
     if angle == geometry.halfpi:
       return angle.name
-    
-    [hp1, hp2], [l1, l2] = self.hp_and_line_of_angle(angle)
-    line2points = {l1: [], l2: []}
-    for rel in self.type2rel[LineContainsPoint]:
-      line, point = rel.init_list
-      if line in line2points:
-        line2points[line].append(point)
-    
-    intersection = None
-    for p in line2points[l1]:
-      if p in line2points[l2]:
-        intersection = p.name
-        break 
-    
-    if not intersection:
-      import pdb; pdb.set_trace()
-      raise ValueError(
-          'Not found intersection of {} and {}'.format(l1.name, l2.name))
 
-    def _find_point_on_line_in_hp(line, other_line, hp_idx):
-      hp = self.line2hps[other_line][hp_idx]
-      hp_ = self.line2hps[other_line][1-hp_idx]
+    result = []
+
+    for [hp1, hp2], [l1, l2] in self.hp_and_line_of_angle(angle):
+      line2points = {l1: [], l2: []}
+      for rel in self.type2rel[LineContainsPoint]:
+        line, point = rel.init_list
+        if line in line2points:
+          line2points[line].append(point)
       
-      p_name = None
-      for p in line2points[line]:
-        if p in self.hp2points.get(hp, {}):
-          p_name = p.name
+      intersection = None
+      for p in line2points[l1]:
+        if p in line2points[l2]:
+          intersection = p.name
           break 
-      if p_name is None:
-        for p in line2points[line]:
-          if p in self.hp2points.get(hp_, {}):
-            p_name = '!' + p.name
-            break 
-      if p_name is None:
-        return '?{}'.format(line.name)
-      return p_name
       
-    p1 = _find_point_on_line_in_hp(l1, l2, hp2)
-    p2 = _find_point_on_line_in_hp(l2, l1, hp1)
+      if not intersection:
+        import pdb; pdb.set_trace()
+        raise ValueError(
+            'Not found intersection of {} and {}'.format(l1.name, l2.name))
+
+      def _find_point_on_line_in_hp(line, other_line, hp_idx):
+        hp = self.line2hps[other_line][hp_idx]
+        hp_ = self.line2hps[other_line][1-hp_idx]
+        
+        p_name = None
+        for p in line2points[line]:
+          if p in self.hp2points.get(hp, {}):
+            p_name = p.name
+            break 
+        if p_name is None:
+          for p in line2points[line]:
+            if p in self.hp2points.get(hp_, {}):
+              p_name = '!' + p.name
+              break 
+        if p_name is None:
+          return '?{}'.format(line.name)
+        return p_name
+        
+      p1 = _find_point_on_line_in_hp(l1, l2, hp2)
+      p2 = _find_point_on_line_in_hp(l2, l1, hp1)
+      result.append('|{} {} {} {}|'.format(angle.name, p1, intersection, p2))
     
-    return '|{} {} {} {}|'.format(angle.name, p1, intersection, p2)
+    return result
 
   def print_all_equal_angles(self):
     val2valrels = ddict(lambda: [])
     for rel in self.relations:
       if isinstance(rel, AngleHasMeasure):
         angle, measure = rel.init_list
-        val2valrels[measure].append(self.angle_name(angle))
+        val2valrels[measure].extend(self.angle_name(angle))
 
     for measure, equal_angles in val2valrels.items():
       print('>> ' + measure.name + ' = ' + ' = '.join(equal_angles))
@@ -208,15 +227,42 @@ class State(object):
     return points
 
   def hp_and_line_of_angle(self, angle):
-    hps = []
-    lines = []
-    for hp_a in self.type2rel.get(HalfplaneCoversAngle, []):
-      if angle == hp_a.init_list[1]:
-        hp = hp_a.init_list[0]
-        l = self.line_of_hp(hp)
-        lines.append(l)
-        hps.append(self.line2hps[l].index(hp))  # 0: neg, 1: pos
-    return hps, lines
+
+    fangle = None
+    for rel in self.type2rel[AngleOfFullAngle]:
+      if angle == rel.init_list[0]:
+        fangle = rel.init_list[1]
+
+    if fangle is None:
+      raise ValueError('fangle of angle {} is None'.format(angle.name))
+
+    ds = []
+    for rel in self.type2rel[DirectionOfFullAngle]:
+      if fangle == rel.init_list[1]:
+        ds.append(rel.init_list[0])
+
+    if len(ds) != 2:
+      raise ValueError('len(ds) must = 2 but is {}'.format(len(ds)))
+    d1, d2 = ds
+
+    l1s, l2s = [], []
+    for rel in self.val2valrel[d1]:
+      l1s.append(rel.init_list[0])
+
+    for rel in self.val2valrel[d2]:
+      l2s.append(rel.init_list[0])
+
+    same_sign = isinstance(angle, geometry.AngleXX) 
+    for l1 in l1s:
+      for l2 in l2s:
+        hp1_neg, hp1_pos = self.line2hps[l1]
+        hp2_neg, hp2_pos = self.line2hps[l2]
+        if same_sign:
+          yield [0, 0], [l1, l2]
+          yield [1, 1], [l1, l2]
+        else:
+          yield [0, 1], [l1, l2]
+          yield [1, 0], [l1, l2]
 
   def line_of_hp(self, hp):
     for l, l_hps in self.line2hps.items():
@@ -237,7 +283,7 @@ class State(object):
     return '[{}]'.format(result)
 
   def add_one(self, entity):
-    if isinstance(entity, tuple(non_relations)):
+    if not isinstance(entity, geometry.Relation):
       # if isinstance(entity, Point):
       #   self.all_points.append(entity)
       # elif isinstance(entity, HalfPlane):
@@ -265,6 +311,22 @@ class State(object):
                   (AngleHasMeasure, SegmentHasLength, LineHasDirection)):
       self.add_transitive_relation(relation)
       return
+
+    # Special treatments for distinct stuff.
+    if isinstance(relation, Distinct):
+      obj1, obj2 = relation.init_list
+      if (obj1, obj2) in self.spatial_distincts or (obj2, obj1) in self.spatial_distincts:
+        return
+      if (obj1, obj2) in self.proof_distincts or (obj2, obj1) in self.proof_distincts:
+        return
+
+      if isinstance(obj1, Line):
+        rel = DistinctLine(obj1, obj2)
+      else:
+        rel = DistinctPoint(obj1, obj2)
+
+      self.proof_distincts[(obj1, obj2)] = rel
+      return  # distinct relations does not go to self.relations or type2rel
 
     # Check for existing relations
     rel_type = type(relation)
@@ -342,13 +404,7 @@ class State(object):
         ps.remove(obj)
 
   def augmented_relations(self):
-    augment = []
-    for obj in self.name2obj.values():
-      if isinstance(obj, Segment) and obj not in self.obj2valrel:
-        augment.append(SegmentHasLength(obj, SegmentLength()))
-      if isinstance(obj, Angle) and obj not in self.obj2valrel:
-        augment.append(AngleHasMeasure(obj, AngleMeasure()))
-    return augment
+    return []
 
   def add_transitive_relation(self, relation):
     obj, new_value = relation.init_list
@@ -437,6 +493,8 @@ class State(object):
     for line in line2pointgroups:
       points_neg, points_pos = line2pointgroups[line]
 
+      # Now for `line`, we check to see if it already has 2 hps in self.
+      # if not, create on demand.
       hps = self.line2hps.get(line, [])
       if not hps:  # no halfplane in state, create them:
         hp1 = HalfPlane(line.name + '_hp1')
@@ -453,6 +511,7 @@ class State(object):
         self.add_one(LineBordersHalfplane(line, hp2))
         self.hp2points[hp1] = []
         self.hp2points[hp2] = []
+
       elif len(hps) == 1:
         hp = HalfPlane(line.name + '_hp')
         hp.set_chain_position(line.chain_position)
@@ -461,32 +520,71 @@ class State(object):
         self.add_one(LineBordersHalfplane(line, hp))
         self.hp2points[hp] = []
 
-      # print(len(self.line2hps[line]), line.name)
       hp1, hp2 = self.line2hps[line]
       points_hp1 = self.hp2points.get(hp1, [])
       points_hp2 = self.hp2points.get(hp2, [])
 
+      # Make sure that self.line2hps is also in order (neg, pos)
       if (any(p in points_neg for p in points_hp2) or
           any(p in points_pos for p in points_hp1)):
         points_hp1, points_hp2 = points_hp2, points_hp1
         hp1, hp2 = hp2, hp1
 
-      # Make sure that self.line2hps is also in order (neg, pos)
       self.line2hps[line] = [hp1, hp2]
+      hp1.sign = -1
+      hp2.sign = +1
 
-      # if points_neg:
-        # if hp1.name not in self.name2obj:
-          # self.add_one(hp1)
-      for p in points_neg:
-        if p not in points_hp1:
-          self.add_one(HalfPlaneContainsPoint(hp1, p))
+      for p1 in points_neg:
+        if p1 in points_hp1:
+          continue
 
-      # if points_pos:
-        # if hp2 not in self.hp2points:
-        #   self.add_one(hp2)
-      for p in points_pos:
-        if p not in points_hp2:
-          self.add_one(HalfPlaneContainsPoint(hp2, p))
+        self.add_one(HalfPlaneContainsPoint(hp1, p1))
+        # Add to distincts
+        for p2 in points_hp2:
+          self.add_spatial_distincts(p1, p2)  # p1 and p2 on diff hps
+        
+        for rel in self.type2rel[LineContainsPoint]:
+          l0, p0 = rel.init_list
+          if l0 == line:  # l0 goes through p0 but not p1.
+            self.add_spatial_distincts(p1, p0)
+          elif p0 == p1:  # l0 goes through p1 but line does not.
+            self.add_spatial_distincts(line, l0)
+              
+      # Update the value of points_hp1 after new stuff being added above.
+      points_hp1 = self.hp2points.get(hp1, [])
+
+      # Repeat the same steps for points_pos:
+      for p2 in points_pos:
+        if p2 in points_hp2:
+          continue
+        self.add_one(HalfPlaneContainsPoint(hp2, p2))
+
+        # Add to distincts
+        for p1 in points_hp1:
+          self.add_spatial_distincts(p2, p1)
+
+        for rel in self.type2rel[LineContainsPoint]:
+          l0, p0 = rel.init_list
+          if l0 == line:
+            self.add_spatial_distincts(p2, p0)
+          elif p0 == p2:
+            self.add_spatial_distincts(line, l0)
+  
+  def add_spatial_distincts(self, x, y):
+    if (x, y) in self.proof_distincts:
+      self.proof_distincts.pop((x, y))
+    elif (y, x) in self.proof_distincts:
+      self.proof_distincts.pop((y, x))
+    
+    if (x, y) in self.spatial_distincts or (y, x) in self.spatial_distincts:
+      return
+
+    if isinstance(x, Line):
+      rel = DistinctLine(x, y)
+    else:
+      rel = DistinctPoint(x, y)
+
+    self.spatial_distincts[(x, y)] = rel
 
 
 class Conclusion(object):

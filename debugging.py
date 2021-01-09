@@ -19,7 +19,7 @@ import geometry
 from geometry import Point, Line, Segment, Angle, HalfPlane, Circle
 from geometry import SegmentLength, AngleMeasure, LineDirection
 from geometry import SegmentHasLength, AngleHasMeasure, LineHasDirection
-from geometry import PointEndsSegment, HalfplaneCoversAngle, LineBordersHalfplane
+from geometry import PointEndsSegment, LineBordersHalfplane
 from geometry import PointCentersCircle, Merge, Distinct
 from geometry import LineContainsPoint, CircleContainsPoint, HalfPlaneContainsPoint
 

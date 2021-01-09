@@ -7,7 +7,7 @@ import debugging
 from theorems_utils import collinear, concyclic, in_halfplane
 from theorems_utils import divides_halfplanes, line_and_halfplanes
 from theorems_utils import have_length, have_measure, have_direction
-from theorems_utils import segment_def, angle_def
+from theorems_utils import segment_def, fangle_def
 from theorems_utils import diff_side, same_side
 from theorems_utils import distinct
 
@@ -16,7 +16,7 @@ from state import State, Conclusion
 from geometry import Point, Line, Segment, Angle, HalfPlane, Circle
 from geometry import SegmentLength, AngleMeasure, LineDirection
 from geometry import SegmentHasLength, AngleHasMeasure, LineHasDirection
-from geometry import PointEndsSegment, HalfplaneCoversAngle, LineBordersHalfplane
+from geometry import PointEndsSegment, LineBordersHalfplane
 from geometry import LineContainsPoint, CircleContainsPoint, HalfPlaneContainsPoint
 
 

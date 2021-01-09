@@ -21,6 +21,19 @@ def print_tb():
 name_to_obj = {}
 
 
+name_scope = ''
+
+
+def start_name_scope(name):
+  global name_scope
+  name_scope = name
+
+
+def reset_name_scope():
+  global name_scope
+  name_scope = ''
+
+
 def get_obj(name):
   global name_to_obj
   return name_to_obj.get(name, None)
@@ -64,6 +77,9 @@ class GeometryEntity(object):
 
   def __init__(self, name=None):
     self.name = name or self.get_name()
+    # global name_scope
+    # self.name = name_scope + '/' + self.name
+
     global name_to_obj
 
     count = 0
@@ -94,9 +110,21 @@ class GeometryEntity(object):
       _name_bank[Line] += 1
       return 'l' + str(_name_bank[Line])
 
-    elif isinstance(self, Angle):
-      _name_bank[Angle] += 1
-      return '^' + str(_name_bank[Angle])
+    # elif isinstance(self, Angle):
+    #   _name_bank[Angle] += 1
+    #   return '^' + str(_name_bank[Angle])
+
+    elif isinstance(self, AngleXX):
+      _name_bank[AngleXX] += 1
+      return '^xx' + str(_name_bank[AngleXX])
+
+    elif isinstance(self, AngleXO):
+      _name_bank[AngleXO] += 1
+      return '^xo' + str(_name_bank[AngleXO])
+
+    elif isinstance(self, FullAngle):
+      _name_bank[FullAngle] += 1
+      return '^' + str(_name_bank[FullAngle])
 
     elif isinstance(self, Segment):
       _name_bank[Segment] += 1
@@ -339,6 +367,42 @@ class Angle(GeometryEntity):
   pass
 
 
+class AngleXX(Angle):
+  pass
+
+
+class AngleXO(Angle):
+  pass
+
+
+class SelectAngle(Angle):
+
+  def __init__(self, angle_xx, angle_xo, hp1, hp2):
+    assert isinstance(angle_xx, Angle) and isinstance(angle_xo, Angle)
+    assert isinstance(hp1, HalfPlane) and isinstance(hp2, HalfPlane)
+
+    self.choices = angle_xx, angle_xo
+    self.hps = hp1, hp2
+    self.name = '{}=={}?{}:{}'.format(hp1.name, hp2.name, angle_xx.name, angle_xo.name)
+
+  def is_available(self, mapping):
+    return all([hp in mapping for hp in self.hps])
+
+  def select(self, mapping):
+    angle_xx, angle_xo = self.choices
+    hp1, hp2 = map(mapping.get, self.hps)
+    if hp1.sign == hp2.sign:
+      return angle_xx
+    else:
+      return angle_xo
+
+  def supplement(self):
+    angle_xx, angle_xo = self.choices
+    hp1, hp2 = self.hps
+    return SelectAngle(angle_xo, angle_xx, hp1, hp2)
+
+
+
 class FullAngle(GeometryEntity):
   pass
 
@@ -373,7 +437,9 @@ _name_bank = {
     Point: 0,
     Line: 0,
     Segment: 0,
-    Angle: 0,
+    FullAngle: 0,
+    AngleXX: 0,
+    AngleXO: 0,
     HalfPlane: 0,
     Circle: 0,
     LineDirection: 0,
@@ -402,6 +468,9 @@ def reset_auto_name_bank():
 
 
 class Relation(GeometryEntity):
+
+  def __init__(self, obj1, obj2):
+    raise NotImplementedError('Abstract class Relation.')
 
   @property
   def init_list(self):
@@ -447,13 +516,24 @@ class Merge(Relation):
 
 
 class Distinct(Relation):
+  pass
+
+
+class DistinctLine(Distinct):
 
   def __init__(self, obj1, obj2):
-    assert isinstance(obj1, GeometryEntity) and isinstance(obj2, GeometryEntity)
-    assert isinstance(obj1, type(obj2))
+    assert isinstance(obj1, Line) and isinstance(obj2, Line)
     self.name = '{}!={}'.format(obj1.name, obj2.name)
     self._init_list = obj1, obj2
-    
+
+
+class DistinctPoint(Distinct):
+
+  def __init__(self, obj1, obj2):
+    assert isinstance(obj1, Point) and isinstance(obj2, Point)
+    self.name = '{}!={}'.format(obj1.name, obj2.name)
+    self._init_list = obj1, obj2
+
 
 class PointEndsSegment(Relation):
 
@@ -463,31 +543,11 @@ class PointEndsSegment(Relation):
     self._init_list = point, segment
 
 
-class HalfplaneCoversHalfAngle(Relation):
-
-  def __init__(self, halfplane, hangle):
-    assert (isinstance(halfplane, HalfPlane) and 
-            isinstance(hangle, HalfAngle))
-
-    self.name = '{}/{}'.format(halfplane.name, hangle.name)
-    self._init_list = halfplane, hangle
-
-
-class HalfAngleOfAngle(Relation):
-
-  def __init__(self, hangle, angle):
-    assert (isinstance(hangle, HalfAngle) and 
-            isinstance(angle, Angle))
-
-    self.name = '{}/{}'.format(hangle.name, angle.name)
-    self._init_list = hangle, angle
-
-
 class AngleOfFullAngle(Relation):
 
   def __init__(self, angle, fangle):
-    assert (isinstance(angle, Angle) and 
-            isinstance(fangle, FullAngle))
+    assert isinstance(angle, Angle)
+    assert isinstance(fangle, FullAngle)
 
     self.name = '{}-{}'.format(angle.name, fangle.name)
     self._init_list = angle, fangle
