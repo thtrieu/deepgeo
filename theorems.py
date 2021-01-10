@@ -1,4 +1,92 @@
-"""Implement the environment."""
+"""Implement the environment.
+
+Fundamental theorems of Geometry:
+
+I. Construction.
+
+  1. Construct a Free Point
+    a. In N>=1 halfplane
+    c. On a line
+    d. On a line & In N>=1 halfplane
+    e. On a segment
+    f. On a segment & In N>=1 halfplane
+
+  2. Construct a Free Line 
+    a. Through a Point
+    b. Through a Point and a Segment
+    c. Through a Point on a Circle
+    d. Through a Point and a Angle.
+    e. Through two segments
+
+  3. Construct a Point 
+    a. as intersection of 2 distinct Lines
+    b. as intersection of Line & Segment
+    c. as intersection of Line & Circle
+    d. as intersection of Circle & Circle
+
+  4. Construct a Line through 2 distinct Points
+
+  5. Construct a Circle
+    a. Center at X & go through Y
+    b. touches two segments (outer circles)
+    c. Touches two angles (inner circles)
+
+  
+Ia. Canned construction for initializations.
+
+  6. Construct a Triangle
+    a. Normal
+    b. Isoseles 
+    c. Right
+    d. Equilateral
+  
+  7. Construct a Square
+
+  8. Construct a Parallelogram
+
+  9. Construct a Rectangle
+
+
+II. Create new equalities.
+  1. Mid Point
+  2. Mirror Point
+  3. Copy segment
+  4. Angle Bisector
+  5. Mirror angle
+  6. Copy angle.
+  7. Parallel line through a point.
+  8. Perpendicular line
+  9. Perpendicular bisector
+  10. Segment bisector
+  11. Rotate about Point A such that X -> Y (Given AX = AY)
+  12. Mirror about line l.
+
+III. Deductions of new equalities
+  1. Equal ratio & length => equal length
+  1. ASA
+  2. SAS
+  3. SSS
+  4. ratio + angle -> congruences.
+  5. SimTriangles angle -> ratio
+  6. SimTriangles ratio -> angle
+  7. eq triangles -> circles
+
+IV. Merges
+  1. Line <=> Point (with Distinct)
+  2. Circle <=> Point (with Distinct)
+  2. Length => Point (2d & 3d)
+  3. Measure => Line
+  4. Point => Segment -> Length => Ratio
+  5. Line => Halfplanes
+  6. Line -> Directions => FullAngles => Angles.
+  7. Cirlce => Halfplanes
+
+V. High level theorems
+  1. Thales
+  2. Intersecting height, angle/side/perp bisector
+  3. Butterfly, Simsons, etc.
+"""
+
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -52,9 +140,15 @@ class Action(object):
     if any([isinstance(x, Merge) for x in theorem.conclusion_objects]):
       self.conclusion_objects = self.new_objects
     else:
-      self.conclusion_objects = [
-          mapping[x.select(mapping)] if isinstance(x, SelectAngle) 
-          else mapping[x] for x in theorem.conclusion_objects]
+      self.conclusion_objects = []
+      for x in theorem.conclusion_objects:
+        if isinstance(x, SelectAngle):
+          x = x.select(mapping)
+        if x in mapping:
+          self.conclusion_objects.append(mapping[x])
+      # self.conclusion_objects = [
+      #     mapping[x.select(mapping)] if isinstance(x, SelectAngle) 
+      #     else mapping[x] for x in theorem.conclusion_objects]
     self.duration = None
 
   def update(self, other):
@@ -132,10 +226,12 @@ class FundamentalTheorem(object):
     self.conclusion_objects = set()
     for constructions in self.conclusion.topological_list:
       for rel in constructions:
+        if isinstance(rel, SamePairSkip):
+          continue
         obj1, obj2 = rel.init_list
         self.conclusion_objects.update([rel, obj1, obj2])
 
-  def match_premise(self, state, mapping=None):
+  def match_premise(self, state, mapping=None, canvas=None):
     try:
       constructions, mapping = trieu_graph_match.match_relations(
           premise_relations=self.premise, 
@@ -143,28 +239,30 @@ class FundamentalTheorem(object):
           conclusion=None,
           randomize=False,
           mapping=None,
-          distinct=self.distinct
+          distinct=self.distinct,
+          canvas=canvas
       ).next()
     except StopIteration:
       return None
 
     return Action(constructions, mapping, state, self)
 
-  def match_one_random(self, state):
+  def match_one_random(self, state, canvas=None):
     try:
       constructions, mapping = trieu_graph_match.match_relations(
           premise_relations=self.premise, 
           state=state,
           conclusion=self.conclusion,
           randomize=True,
-          distinct=self.distinct
+          distinct=self.distinct,
+          canvas=canvas
       ).next()
     except StopIteration:
       return None
 
     return Action(constructions, mapping, state, self)
 
-  def match_all(self, state, randomize=True):
+  def match_all(self, state, randomize=True, canvas=None):
     timeout = []
     matches = trieu_graph_match.match_relations(
         premise_relations=self.premise, 
@@ -172,7 +270,8 @@ class FundamentalTheorem(object):
         conclusion=self.conclusion,
         randomize=randomize,
         distinct=self.distinct,
-        timeout=timeout
+        timeout=timeout,
+        canvas=canvas
     )
 
     try:
@@ -183,7 +282,7 @@ class FundamentalTheorem(object):
     except trieu_graph_match.Timeout:
       return
 
-  def match_from_input_mapping(self, state, mapping, randomize=False):
+  def match_from_input_mapping(self, state, mapping, randomize=False, canvas=None):
     # Check if there is a unique match that does not conflict with mapping.
     timeout = []
     matches = trieu_graph_match.match_relations(
@@ -194,6 +293,7 @@ class FundamentalTheorem(object):
         randomize=randomize,
         mapping=mapping,
         timeout=None,
+        canvas=canvas
     )
     timeout.append(time.time() + self.timeout)
     for matched_conclusion, mapping in matches:
@@ -925,14 +1025,16 @@ class ConstructAngleBisector(FundamentalTheorem):
     self.conclusion = Conclusion()
 
     d1, d2, d3 = LineDirection('d1'), LineDirection('d2'), LineDirection('d3')
+    d1.name_def = l1
+    d2.name_def = l2
 
     self.conclusion.add(LineHasDirection(l1, d1))
     self.conclusion.add(LineHasDirection(l2, d2))
 
     # Angle 1->3 == Angle 3->2
-    m1 = AngleMeasure('0.5{}^{}_1'.format(l1.name, l2.name))
-    m2 = AngleMeasure('0.5{}^{}_2'.format(l1.name, l2.name))
-    angle13_xx, angle13_xo, fangle13_def = fangle_def(d1, d3)
+    m1 = AngleMeasure('m1')
+    m2 = AngleMeasure('m2')
+    angle13_xx, angle13_xo, fangle13_def = fangle_def(d3, d1)
     angle32_xx, angle32_xo, fangle32_def = fangle_def(d3, d2)
     # Unfortunately, there are two satisfying d3: inner bisector & outer.
     # So we have to numerically check using SelectAngle()
@@ -1075,7 +1177,6 @@ class ConstructLine(FundamentalTheorem):
     self.conclusion = Conclusion()
     self.conclusion.add_critical(*  # ab related.
         collinear(ab, A, B))
-    self.conclusion.add(*segment_def(AB, A, B))
 
     self.for_drawing = [ab, A, B]
     self.names = dict(A=A, B=B)
@@ -1259,21 +1360,304 @@ class EqualAnglesBecauseParallel(FundamentalTheorem):
     super(EqualAnglesBecauseParallel, self).__init__()
 
 
+class ConstructNormalTriangle(FundamentalTheorem):
+  
+  def __init__(self):
+
+    self.premise = []
+
+    A, B, C = Point('A'), Point('B'), Point('C')
+    ab, ab_hp = line_and_halfplanes('ab')
+    bc, bc_hp = line_and_halfplanes('bc')
+    ca, ca_hp = line_and_halfplanes('ca')
+
+    conclusion = Conclusion()
+
+    conclusion.add_critical(*
+        collinear(ab, A, B) +
+        divides_halfplanes(ab, ab_hp, p1=C) +
+        collinear(bc, B, C) +
+        divides_halfplanes(bc, bc_hp, p1=A) +
+        collinear(ca, C, A) +
+        divides_halfplanes(ca, ca_hp, p1=B)
+    )
+
+    self.conclusion = conclusion
+    self.for_drawing = [A, B, C, ab, bc, ca]
+    self.names = {}
+
+    super(ConstructNormalTriangle, self).__init__()
+
+  def draw(self, mapping, canvas):
+    A, B, C, ab, bc, ca = map(mapping.get, self.for_drawing)
+    return canvas.add_normal_triangle(A, B, C, ab, bc, ca)
+
+
+class ConstructIsoscelesTriangle(FundamentalTheorem):
+
+  def __init__(self):
+
+    self.premise = []
+
+    A, B, C = Point('A'), Point('B'), Point('C')
+    ab, ab_hp = line_and_halfplanes('ab')
+    bc, bc_hp = line_and_halfplanes('bc')
+    ca, ca_hp = line_and_halfplanes('ca')
+
+    AB, CA = Segment('AB'), Segment('CA')
+
+    conclusion = Conclusion()
+
+    conclusion.add_critical(*
+        collinear(ab, A, B) +
+        divides_halfplanes(ab, ab_hp, p1=C) +
+        collinear(bc, B, C) +
+        divides_halfplanes(bc, bc_hp, p1=A) +
+        collinear(ca, C, A) +
+        divides_halfplanes(ca, ca_hp, p1=B) +
+        have_length('lAB', AB, CA)
+    )
+
+    conclusion_add_equal_segments(conclusion, A, B, A, C)
+
+    self.conclusion = conclusion
+    self.for_drawing = [A, B, C, ab, bc, ca]
+    self.names = {}
+
+    super(ConstructNormalTriangle, self).__init__()
+  
+  def draw(self, mapping, canvas):
+    A, B, C, ab, bc, ca = map(mapping.get, self.for_drawing)
+    return canvas.add_isosceles_triangle(A, B, C, ab, bc, ca)
+
+
+class ConstructEquilateralTriangle(FundamentalTheorem):
+  
+  def __init__(self):
+
+    self.premise = []
+
+    A, B, C = Point('A'), Point('B'), Point('C')
+    ab, ab_hp = line_and_halfplanes('ab')
+    bc, bc_hp = line_and_halfplanes('bc')
+    ca, ca_hp = line_and_halfplanes('ca')
+
+    AB, BC, CA = Segment('AB'), Segment('BC'), Segment('CA')
+
+    conclusion = Conclusion()
+
+    conclusion.add_critical(*
+        collinear(ab, A, B) +
+        divides_halfplanes(ab, ab_hp, p1=C) +
+        collinear(bc, B, C) +
+        divides_halfplanes(bc, bc_hp, p1=A) +
+        collinear(ca, C, A) +
+        divides_halfplanes(ca, ca_hp, p1=B) +
+        have_length('lAB', AB, BC, CA)
+    )
+
+    self.conclusion = conclusion
+    self.for_drawing = [A, B, C, ab, bc, ca]
+    self.names = {}
+
+    super(ConstructNormalTriangle, self).__init__()
+
+  def draw(self, mapping, canvas):
+    A, B, C, ab, bc, ca = map(mapping.get, self.for_drawing)
+    return canvas.add_equilateral_triangle(A, B, C, ab, bc, ca)
+
+
+class Congruences(FundamentalTheorem):
+  pass
+
+
 class SamePairSkip(object):
 
   def __init__(self, a, b, x, y):
     self.pairs = a, b, x, y
 
 
-def same_pair_skip(a, b, x, y, premise):
+def same_pair_skip(a, b, x, y, relations, add_skip=False):
   skip = SamePairSkip(a, b, x, y)
-  for p in premise:
-    p.skip = skip
-  return premise
+  for rel in relations:
+    rel.skip = skip
+  if add_skip:
+    relations = [skip] + relations
+  return relations
 
 
-class Congruences(FundamentalTheorem):
-  pass
+def premise_equal_segments(A, B, X, Y):
+  AB = Segment(A.name + B.name)
+  XY = Segment(X.name + Y.name)
+  return same_pair_skip(A, B, X, Y,
+                        have_length('lAB', AB, XY))
+
+
+def premise_equal_angles(name, 
+                         ab, bc, ab_hp, bc_hp, 
+                         de, ef, de_hp, ef_hp):
+  dAB = LineDirection('d' + ab.name)
+  dBC = LineDirection('d' + bc.name)
+  dDE = LineDirection('d' + de.name)
+  dEF = LineDirection('d' + ef.name)
+
+  B_xx, B_xo, B_def = fangle_def(dAB, dBC)
+  E_xx, E_xo, E_def = fangle_def(dDE, dEF)
+  
+  return same_pair_skip(
+      ab_hp, bc_hp, de_hp, ef_hp,
+      # If set(ab_hp, bc_hp) == set(de_hp, ef_hp), skip:
+      have_direction(dAB, ab) +
+      have_direction(dBC, bc) +
+      have_direction(dDE, de) +
+      have_direction(dEF, ef) +
+      B_def + E_def +
+      have_measure('m' + name, 
+                   SelectAngle(B_xx, B_xo, ab_hp, bc_hp), 
+                   SelectAngle(E_xx, E_xo, de_hp, ef_hp))
+  )
+
+
+def conclusion_add_equal_segments(conclusion, A, B, X, Y):
+
+  AB, XY = Segment(A.name + B.name), Segment(X.name + Y.name)
+
+  AB.name_def = A, B
+  XY.name_def = X, Y
+
+  conclusion.add(*
+      same_pair_skip(
+          A, B, X, Y,
+          segment_def(AB, A, B),
+          add_skip=True))
+  conclusion.add(*
+      same_pair_skip(
+          A, B, X, Y,
+          segment_def(XY, X, Y),
+          add_skip=True))
+
+  lAB = SegmentLength('l' + AB.name)
+  lAB.name_def = AB
+
+  conclusion.add(*
+      same_pair_skip(
+          A, B, X, Y,
+          have_length(lAB, AB),
+          add_skip=True))
+  conclusion.add_critical(*
+      same_pair_skip(
+          A, B, X, Y,
+          have_length(lAB, XY),
+          add_skip=True))
+
+
+def conclusion_add_line_and_hp(conclusion, A, B, P):
+  ab = Line(A.name.lower() + B.name.lower())
+
+  ab_hp = HalfPlane(ab.name + '_hp')
+  ab.name_def = A, B
+
+  conclusion.add(*collinear(ab, A, B))
+  conclusion.add(*divides_halfplanes(ab, ab_hp, p1=P))
+  ab_hp.def_points = A, B, P
+  ab_hp.name_def = A, B, P
+  return ab, ab_hp
+
+
+def name_def(hp1, hp2):
+  p1, p2, _ = hp1.name_def
+  p3, p4, _ = hp2.name_def
+
+  if p1 == p3:
+    return p2, p1, p4
+  elif p1 == p4:
+    return p2, p1, p3
+  elif p2 == p3:
+    return p1, p2, p4
+  else:
+    return p1, p2, p3
+
+
+def conclusion_add_equal_angles(
+    conclusion, 
+    name,
+    l1, l2, x_hp1, x_hp2,
+    l3, l4, y_hp1, y_hp2):
+  
+  dX1, dX2 = LineDirection('d' + l1.name), LineDirection('d' + l2.name)
+  dX1.name_def = l1
+  dX2.name_def = l2
+  dY1, dY2 = LineDirection('d' + l3.name), LineDirection('d' + l4.name)
+  dY1.name_def = l3
+  dY2.name_def = l4
+
+  conclusion.add(*
+      same_pair_skip(
+          x_hp1, x_hp2, y_hp1, y_hp2,
+          have_direction(dX1, l1),
+          add_skip=True))
+
+  conclusion.add(*
+      same_pair_skip(
+          x_hp1, x_hp2, y_hp1, y_hp2,
+          have_direction(dX2, l2),
+          add_skip=True))
+
+  conclusion.add(*
+      same_pair_skip(
+          x_hp1, x_hp2, y_hp1, y_hp2,
+          have_direction(dY1, l3),
+          add_skip=True))
+
+  conclusion.add(*
+      same_pair_skip(
+          x_hp1, x_hp2, y_hp1, y_hp2,
+          have_direction(dY2, l4),
+          add_skip=True))
+
+
+  mX, mX_supplement = AngleMeasure('m' + name), AngleMeasure('m' + name + '_')
+
+  X_xx, X_xo, X_def = fangle_def(dX1, dX2)
+
+  X_xx.name_def = X_xo.name_def = name_def(x_hp1, x_hp2)
+
+  conclusion.add(*
+      same_pair_skip(
+          x_hp1, x_hp2, y_hp1, y_hp2,
+          X_def,
+          add_skip=True))
+  angleX = SelectAngle(X_xx, X_xo, x_hp1, x_hp2)
+  conclusion.add(*
+      same_pair_skip(
+          x_hp1, x_hp2, y_hp1, y_hp2,
+          have_measure(mX, angleX),
+          add_skip=True))
+  conclusion.add(*
+      same_pair_skip(
+          x_hp1, x_hp2, y_hp1, y_hp2,
+          have_measure(mX_supplement, angleX.supplement()),
+          add_skip=True))
+
+  Y_xx, Y_xo, Y_def = fangle_def(dY1, dY2)
+  Y_xx.name_def = Y_xo.name_def = name_def(y_hp1, y_hp2)
+
+  conclusion.add(*
+      same_pair_skip(
+          x_hp1, x_hp2, y_hp1, y_hp2,
+          Y_def,
+          add_skip=True))
+  angleY = SelectAngle(Y_xx, Y_xo, y_hp1, y_hp2)
+  conclusion.add_critical(*
+      same_pair_skip(
+          x_hp1, x_hp2, y_hp1, y_hp2,
+          have_measure(mX, angleY),
+          add_skip=True))
+  conclusion.add_critical(*
+      same_pair_skip(
+          x_hp1, x_hp2, y_hp1, y_hp2,
+          have_measure(mX_supplement, angleY.supplement()),
+          add_skip=True))
 
 
 class SAS(Congruences):
@@ -1284,16 +1668,16 @@ class SAS(Congruences):
     bc, bc_hp, _ = line_and_halfplanes('bc')
     de, de_hp, _ = line_and_halfplanes('de')
     ef, ef_hp, _ = line_and_halfplanes('ef')
-    ABC, DEF = Angle('ABC'), Angle('DEF')
-    AB, BC, DE, EF = map(Segment, ['AB', 'BC', 'DE', 'EF'])
-               
-    dAB, dBC = LineDirection('dAB'), LineDirection('dBC')
-    dDE, dEF = LineDirection('dDE'), LineDirection('dEF')
 
-    B_xx, B_xo, B_def = fangle_def(dAB, dBC)
-    E_xx, E_xo, E_def = fangle_def(dDE, dEF)
+    ab_hp.name_def = A, B, C
+    bc_hp.name_def = B, C, A
+    de_hp.name_def = D, E, F
+    ef_hp.name_def = E, F, D
 
     self.premise = (
+        premise_equal_segments(A, B, D, E) +
+        premise_equal_segments(B, C, E, F) +
+
         collinear(ab, A, B) +
         collinear(bc, B, C) +
         collinear(de, D, E) +
@@ -1307,99 +1691,29 @@ class SAS(Congruences):
         divides_halfplanes(de, de_hp, p1=F) +  # F != D, F != E
         divides_halfplanes(ef, ef_hp, p1=D) +  # D != E
         
-        same_pair_skip(
-            A, B, D, E,
-            # If set(A, B) == set(D, E), skip:
-            segment_def(AB, A, B) +
-            segment_def(DE, D, E) +
-            have_length('lAB', AB, DE)
-        ) +
-        
-        same_pair_skip(
-            B, C, E, F,
-            # If set(B, C) == set(E, F), skip:
-            segment_def(BC, B, C) +
-            segment_def(EF, E, F) +
-            have_length('lBC', BC, EF)
-        ) +
-        
-        same_pair_skip(
-            ab_hp, bc_hp, de_hp, ef_hp,
-            # If set(ab_hp, bc_hp) == set(de_hp, ef_hp), skip:
-            have_direction(dAB, ab) +
-            have_direction(dBC, bc) +
-            have_direction(dDE, de) +
-            have_direction(dEF, ef) +
-            B_def + E_def +
-            have_measure('mB', SelectAngle(B_xx, B_xo, ab_hp, bc_hp), 
-                               SelectAngle(E_xx, E_xo, de_hp, ef_hp))
-        )
+        premise_equal_angles('B', ab, bc, ab_hp, bc_hp, de, ef, de_hp, ef_hp)
     )
 
     conclusion = Conclusion()
 
-    ca, ca_hp, _ = line_and_halfplanes('ca')
-    fd, fd_hp, _ = line_and_halfplanes('fd')
-    conclusion.add(*collinear(ca, A, C))
-    conclusion.add(*collinear(fd, D, F))
-    conclusion.add(*divides_halfplanes(ca, ca_hp, p1=B))
-    conclusion.add(*divides_halfplanes(fd, fd_hp, p1=E))
+    ca, ca_hp = conclusion_add_line_and_hp(conclusion, A, C, B)
+    fd, fd_hp = conclusion_add_line_and_hp(conclusion, D, F, E)
 
-    AC, DF = Segment('AC'), Segment('DF')
-    conclusion.add(*segment_def(AC, A, C))
-    conclusion.add(*segment_def(DF, D, F))
+    conclusion_add_equal_segments(conclusion, A, C, D, F)
 
-    lAC = SegmentLength('lAC')
-    conclusion.add(*have_length(lAC, AC))
-    conclusion.add_critical(*have_length(lAC, DF))
+    conclusion_add_equal_angles(conclusion, 'A', 
+                                ca, ab, ca_hp, ab_hp,
+                                de, fd, de_hp, fd_hp)
 
-    dCA, dFD = LineDirection('dCA'), LineDirection('dFD')
-    conclusion.add(LineHasDirection(ca, dCA))
-    conclusion.add(LineHasDirection(fd, dFD))
-
-    A_xx, A_xo, A_def = fangle_def(dAB, dCA)
-    C_xx, C_xo, C_def = fangle_def(dBC, dCA)
-    D_xx, D_xo, D_def = fangle_def(dDE, dFD)
-    F_xx, F_xo, F_def = fangle_def(dEF, dFD)
-
-    conclusion.add(*A_def)
-    conclusion.add(*C_def)
-    conclusion.add(*D_def)
-    conclusion.add(*F_def)
-
-    mA, mA_supplement = AngleMeasure('mA'), AngleMeasure('mA_')
-    mC, mC_supplement = AngleMeasure('mC'), AngleMeasure('mC_')
-
-    angleA = SelectAngle(A_xx, A_xo, ab_hp, ca_hp)
-
-    conclusion.add(*have_measure(mA, angleA))
-    conclusion.add(*have_measure(mA_supplement, angleA.supplement()))
-
-    angleD = SelectAngle(D_xx, D_xo, de_hp, fd_hp)
-
-    conclusion.add_critical(*have_measure(mA, angleD))
-    conclusion.add_critical(*have_measure(mA_supplement, angleD.supplement()))
-
-    angleC = SelectAngle(C_xx, C_xo, bc_hp, ca_hp)
-
-    conclusion.add(*have_measure(mC, angleC))
-    conclusion.add(*have_measure(mC_supplement, angleC.supplement()))
-
-    angleF = SelectAngle(F_xx, F_xo, ef_hp, fd_hp)
-    conclusion.add_critical(*have_measure(mC, angleF))
-    conclusion.add_critical(*have_measure(mC_supplement, angleF.supplement()))
+    conclusion_add_equal_angles(conclusion, 'C', 
+                                bc, ca, bc_hp, ca_hp,
+                                ef, fd, ef_hp, fd_hp)
 
     self.conclusion = conclusion
-    self._distinct = [(AB, DE), 
-                      (AB, BC), (BC, AC), (AC, AB),
-                      (DE, EF), (EF, DF), (DF, DE),
-                      (ab, bc), (bc, ca), (ca, ab),
+    self._distinct = [(ab, bc), (bc, ca), (ca, ab),
                       (de, ef), (ef, fd), (fd, de),
-                      # (BAC, BCA), (BCA, ABC), (ABC, BAC),
-                      # (DEF, EDF), (EDF, EFD), (EFD, DEF),
                       (A, B), (B, C), (C, A),
-                      (D, E), (E, F), (F, D),
-                      ]
+                      (D, E), (E, F), (F, D)]
 
     self.for_drawing = [ca, A, C, fd, D, F]
 
@@ -1429,120 +1743,44 @@ class SSS(Congruences):
 
   def __init__(self):
     A, B, C, D, E, F = map(Point, 'ABCDEF')
-    AB, BC, CA, DE, EF, FD = map(
-        Segment, ['AB', 'BC', 'CA', 'DE', 'EF', 'FD'])
 
     self.premise = (
         distinct(A, B, C) +
         distinct(D, E, F) +
-        same_pair_skip(
-            A, B, D, E,
-            segment_def(AB, A, B) +
-            segment_def(DE, D, E) +
-            have_length('lAB', AB, DE)
-        ) +
-        same_pair_skip(
-            B, C, E, F,
-            segment_def(BC, B, C) +
-            segment_def(EF, E, F) +
-            have_length('lBC', BC, EF)
-        ) +
-        same_pair_skip(
-            C, A, F, D,
-            segment_def(CA, C, A) +
-            segment_def(FD, F, D) +
-            have_length('l3', CA, FD)
-        )
+
+        premise_equal_segments(A, B, D, E) +
+        premise_equal_segments(B, C, E, F) +
+        premise_equal_segments(C, A, F, D)
     )
 
     conclusion = Conclusion()
 
-    ab, ab_hp, _ = line_and_halfplanes('ab')
-    bc, bc_hp, _ = line_and_halfplanes('bc')
-    ca, ca_hp, _ = line_and_halfplanes('ca')
+    ab, ab_hp = conclusion_add_line_and_hp(conclusion, A, B, C)
+    bc, bc_hp = conclusion_add_line_and_hp(conclusion, B, C, A)
+    ca, ca_hp = conclusion_add_line_and_hp(conclusion, C, A, B)
 
-    de, de_hp, _ = line_and_halfplanes('de')
-    ef, ef_hp, _ = line_and_halfplanes('ef')
-    fd, fd_hp, _ = line_and_halfplanes('fd')
+    de, de_hp = conclusion_add_line_and_hp(conclusion, D, E, F)
+    ef, ef_hp = conclusion_add_line_and_hp(conclusion, E, F, D)
+    fd, fd_hp = conclusion_add_line_and_hp(conclusion, F, D, E)
 
-    conclusion.add(*collinear(ab, A, B))
-    conclusion.add(*collinear(bc, B, C))
-    conclusion.add(*collinear(ca, C, A))
-    conclusion.add(*collinear(de, D, E))
-    conclusion.add(*collinear(ef, E, F))
-    conclusion.add(*collinear(fd, F, D))
+    conclusion_add_equal_angles(conclusion, 'A',
+                                ab, ca, ab_hp, ca_hp,
+                                de, fd, de_hp, fd_hp)
 
-    conclusion.add(*divides_halfplanes(ab, ab_hp, p1=C))
-    conclusion.add(*divides_halfplanes(bc, bc_hp, p1=A))
-    conclusion.add(*divides_halfplanes(ca, ca_hp, p1=B))
+    conclusion_add_equal_angles(conclusion, 'B',
+                                ab, bc, ab_hp, bc_hp,
+                                de, ef, de_hp, ef_hp)
 
-    conclusion.add(*divides_halfplanes(de, de_hp, p1=F))
-    conclusion.add(*divides_halfplanes(ef, ef_hp, p1=D))
-    conclusion.add(*divides_halfplanes(fd, fd_hp, p1=E))
-
-    dAB, dBC = LineDirection('dAB'), LineDirection('dBC')
-    dDE, dEF = LineDirection('dDE'), LineDirection('dEF')
-    dCA, dFD = LineDirection('dCA'), LineDirection('dFD')
-
-    conclusion.add(LineHasDirection(ab, dAB))
-    conclusion.add(LineHasDirection(bc, dBC))
-    conclusion.add(LineHasDirection(de, dDE))
-    conclusion.add(LineHasDirection(ef, dEF))
-    conclusion.add(LineHasDirection(ca, dCA))
-    conclusion.add(LineHasDirection(fd, dFD))
-
-    A_xx, A_xo, A_def = fangle_def(dAB, dCA)
-    B_xx, B_xo, B_def = fangle_def(dAB, dBC)
-    C_xx, C_xo, C_def = fangle_def(dBC, dCA)
-    D_xx, D_xo, D_def = fangle_def(dDE, dFD)
-    E_xx, E_xo, E_def = fangle_def(dDE, dEF)
-    F_xx, F_xo, F_def = fangle_def(dEF, dFD)
-
-    conclusion.add(*A_def)
-    conclusion.add(*B_def)
-    conclusion.add(*C_def)
-    conclusion.add(*D_def)
-    conclusion.add(*E_def)
-    conclusion.add(*F_def)
-
-    mA, mA_supplement = AngleMeasure('mA'), AngleMeasure('mA_')
-    mB, mB_supplement = AngleMeasure('mB'), AngleMeasure('mB_')
-    mC, mC_supplement = AngleMeasure('mC'), AngleMeasure('mC_')
-
-    angleA = SelectAngle(A_xx, A_xo, ab_hp, ca_hp)
-    conclusion.add(*have_measure(mA, angleA))
-    conclusion.add(*have_measure(mA_supplement, angleA.supplement()))
-
-    angleD = SelectAngle(D_xx, D_xo, de_hp, fd_hp)
-    conclusion.add_critical(*have_measure(mA, angleD))
-    conclusion.add_critical(*have_measure(mA_supplement, angleD.supplement()))
-
-    angleB = SelectAngle(B_xx, B_xo, ab_hp, bc_hp)
-    conclusion.add(*have_measure(mB, angleB))
-    conclusion.add(*have_measure(mB_supplement, angleB.supplement()))
-
-    angleE = SelectAngle(D_xx, D_xo, de_hp, ef_hp)
-    conclusion.add_critical(*have_measure(mB, angleE))
-    conclusion.add_critical(*have_measure(mB_supplement, angleE.supplement()))
-
-    angleC = SelectAngle(C_xx, C_xo, bc_hp, ca_hp)
-    conclusion.add(*have_measure(mC, angleC))
-    conclusion.add(*have_measure(mC_supplement, angleC.supplement()))
-
-    angleF = SelectAngle(F_xx, F_xo, ef_hp, fd_hp)
-    conclusion.add_critical(*have_measure(mC, angleF))
-    conclusion.add_critical(*have_measure(mC_supplement, angleF.supplement()))
-
+    conclusion_add_equal_angles(conclusion, 'C',
+                                bc, ca, bc_hp, ca_hp,
+                                ef, fd, ef_hp, fd_hp)
 
     self.conclusion = conclusion
     self._distinct = [(A, D),
-                      (AB, BC), (BC, CA), (CA, AB),
-                      (DE, EF), (EF, FD), (FD, DE),
                       (ab, bc), (bc, ca), (ca, ab),
                       (de, ef), (ef, fd), (fd, de),
                       (A, B), (B, C), (C, A),
-                      (D, E), (E, F), (F, D),
-                      ]
+                      (D, E), (E, F), (F, D)]
 
     self.for_drawing = [ab, bc, ca, de, ef, fd,
                         A, B, C, D, E, F]
@@ -1577,15 +1815,19 @@ class ASA(Congruences):
 
   def __init__(self):
     A, B, C, D, E, F = map(Point, 'ABCDEF')
-    ab, ab_hp1, _ = line_and_halfplanes('ab')
-    bc, bc_hp1, _ = line_and_halfplanes('bc')
-    ca, ca_hp1, _ = line_and_halfplanes('ca')
-    de, de_hp1, _ = line_and_halfplanes('de')
-    ef, ef_hp1, _ = line_and_halfplanes('ef')
-    fd, fd_hp1, _ = line_and_halfplanes('fd')
-    BAC, BCA, EDF, EFD = map(
-        Angle, 'BAC BCA EDF EFD'.split())
-    CA, FD = map(Segment, ['CA', 'FD'])
+    ab, ab_hp, _ = line_and_halfplanes('ab')
+    bc, bc_hp, _ = line_and_halfplanes('bc')
+    ca, ca_hp, _ = line_and_halfplanes('ca')
+    de, de_hp, _ = line_and_halfplanes('de')
+    ef, ef_hp, _ = line_and_halfplanes('ef')
+    fd, fd_hp, _ = line_and_halfplanes('fd')
+
+    ab_hp.name_def = A, B, C
+    bc_hp.name_def = B, C, A
+    ca_hp.name_def = C, A, B
+    de_hp.name_def = D, E, F
+    ef_hp.name_def = E, F, D
+    fd_hp.name_def = F, D, E
 
     self.premise = (
         collinear(ab, A, B) +
@@ -1597,80 +1839,36 @@ class ASA(Congruences):
         collinear(fd, F, D) +
 
         # ab != bc, ab != ca, ca != bc
-        divides_halfplanes(ab, ab_hp1, p1=C) +
-        divides_halfplanes(bc, bc_hp1, p1=A) +
-        divides_halfplanes(ca, ca_hp1, p1=B) +
+        divides_halfplanes(ab, ab_hp, p1=C) +
+        divides_halfplanes(bc, bc_hp, p1=A) +
+        divides_halfplanes(ca, ca_hp, p1=B) +
 
         # de != fd, de != ef, ef != fd
-        divides_halfplanes(de, de_hp1, p1=F) +
-        divides_halfplanes(ef, ef_hp1, p1=D) +
-        divides_halfplanes(fd, fd_hp1) +
+        divides_halfplanes(de, de_hp, p1=F) +
+        divides_halfplanes(ef, ef_hp, p1=D) +
+        divides_halfplanes(fd, fd_hp) +
 
-        # segment_def(AB, A, B) +
-        segment_def(CA, C, A) +
-        # segment_def(DE, D, E) +
-        segment_def(FD, F, D) +
+        premise_equal_segments(C, A, F, D) +
 
-        angle_def(BAC, ab_hp1, ca_hp1) +
-        angle_def(BCA, bc_hp1, ca_hp1) +
-        angle_def(EDF, de_hp1, fd_hp1) +
-        angle_def(EFD, ef_hp1, fd_hp1) +
-
-        have_length('l1', CA, FD) +
-        have_measure('0"', BAC, EDF) +
-        have_measure('1"', BCA, EFD)
+        premise_equal_angles('C', ca, bc, ca_hp, bc_hp, ef, fd, ef_hp, fd_hp) +
+        premise_equal_angles('A', ca, ab, ca_hp, ab_hp, de, fd, de_hp, fd_hp)
     )
 
     self.conclusion = Conclusion()
 
     # Now we introduce point E:
-    self.conclusion.add(LineContainsPoint(de, E),
-                        LineContainsPoint(ef, E))
-                        # HalfPlaneContainsPoint(fd_hp1, E))
+    self.conclusion.add_critical(LineContainsPoint(de, E),
+                                 LineContainsPoint(ef, E))
 
-    ABC, DEF = Angle('ABC'), Angle('DEF')
-    self.conclusion.add(*angle_def(DEF, de_hp1, ef_hp1))
-    self.conclusion.add(*angle_def(ABC, ab_hp1, bc_hp1))
-
-    AB, BC, DE, EF = map(Segment, ['AB', 'BC', 'DE', 'EF'])
-    self.conclusion.add(*segment_def(AB, A, B))
-    self.conclusion.add(*segment_def(BC, B, C))
-    self.conclusion.add(*segment_def(DE, D, E))
-    self.conclusion.add(*segment_def(EF, E, F))
-
-    l1, l2, m0 = SegmentLength('1m'), SegmentLength('2m'), AngleMeasure('0"')
-
-    self.conclusion.add(SegmentHasLength(AB, l1)) 
-    self.conclusion.add_critical(SegmentHasLength(DE, l1)) 
-    # self.conclusion.add_critical(SegmentHasLength(AB, l1),
-    #                              SegmentHasLength(DE, l1)) 
-
-    self.conclusion.add(SegmentHasLength(BC, l2))
-    self.conclusion.add_critical(SegmentHasLength(EF, l2))
-    # self.conclusion.add_critical(SegmentHasLength(BC, l2),
-    #                              SegmentHasLength(EF, l2))
-
-    self.conclusion.add(AngleHasMeasure(ABC, m0)) 
-    self.conclusion.add_critical(AngleHasMeasure(DEF, m0)) 
-    # self.conclusion.add_critical(AngleHasMeasure(ABC, m0),
-    #                              AngleHasMeasure(DEF, m0)) 
-
-    # self.conclusion.add_critical(*have_length('l1', AB, DE))
-    # self.conclusion.add_critical(*have_length('l2', BC, EF))
-    # self.conclusion.add_critical(*have_measure('0"', ABC, DEF))
+    conclusion_add_equal_segments(self.conclusion, A, B, D, E)
+    conclusion_add_equal_segments(self.conclusion, B, C, E, F)
+    conclusion_add_equal_angles(self.conclusion, 'B', ab, bc, ab_hp, bc_hp, de, ef, de_hp, ef_hp)
 
     self._distinct = [(A, D),
-                      (AB, CA), (AB, BC), (CA, BC),
-                      (DE, FD), (DE, EF), (FD, EF),
-                      (BAC, BCA), (BAC, ABC), (BCA, ABC),
-                      (EDF, EFD), (EDF, DEF), (EFD, DEF),
                       (ab, bc), (bc, ca), (ca, ab),
                       (de, ef), (ef, fd), (fd, de),
                       (A, B), (B, C), (C, A), 
-                      (D, E), (E, F), (F, D),
-                      (ab_hp1, bc_hp1), (ab_hp1, ca_hp1), (bc_hp1, ca_hp1),
-                      (de_hp1, ef_hp1), (de_hp1, fd_hp1), (ef_hp1, fd_hp1)
-                      ]
+                      (D, E), (E, F), (F, D)]
 
     self.names = dict(A=A, B=B, C=C, D=D, F=F, de=de, ef=ef)
     self.for_drawing = [E, de, ef]
@@ -1706,7 +1904,7 @@ all_theorems = [
     ConstructThirdLine(),
     # EqualAnglesBecauseParallel(),  # 1.73088312149
     SAS(),  # 0.251692056656
-    # ASA(),  # 2.26002907753 3.96637487411
+    ASA(),  # 2.26002907753 3.96637487411
     SSS(),
     # ParallelBecauseCorrespondingAngles(),
     # ParallelBecauseInteriorAngles(),
@@ -1729,14 +1927,16 @@ theorem_from_name = {
 }
 
 theorem_from_short_name = {
-    # 'unq_line_dir': SameLineBecauseParallel(){}
-    # 'unq_mid_point': SamePointBecauseSameMidpoint(),
+    # '1direction': SameLineBecauseParallel(){}
+    # '1distance': SamePointBecauseSameMidpoint(),
     # 'unq_line_dir': SameLineBecauseSameDirection(),
     # 'right': ConstructRightAngle(),
-    'mid': ConstructMidPoint(),  # 0.000365972518921
+    'midp': ConstructMidPoint(),  # 0.000365972518921
     # 'mirror': ConstructMirrorPoint(),
-    'bisect': ConstructAngleBisector(),
-    'seg_line': ConstructIntersectSegmentLine(),
+    'angle_bisect': ConstructAngleBisector(),
+    # 'segment_bisect'
+    # 'segment_pbisect'
+    'line_x_segment': ConstructIntersectSegmentLine(),
     # 'line_line': UserConstructIntersectLineLine(),
     # 'parallel': ConstructParallelLine(),
     # 'perp_on': ConstructPerpendicularLineFromPointOn(),
@@ -1744,7 +1944,7 @@ theorem_from_short_name = {
     'line': ConstructThirdLine(),
     # 'eq': EqualAnglesBecauseParallel(),  # 1.73088312149
     'sas': SAS(),  # 0.251692056656
-    # 'asa': ASA(),  # 2.26002907753 3.96637487411
+    'asa': ASA(),  # 2.26002907753 3.96637487411
     'sss': SSS(),
     # '.parallel': ParallelBecauseCorrespondingAngles(),
     # '.parallel2': ParallelBecauseInteriorAngles(),

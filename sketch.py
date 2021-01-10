@@ -70,12 +70,12 @@ class Line(object):
     if a < 0:
       self.coefficients = (-a, -b, -c)
 
-    if a == 0:
+    if a == 0.:
       # With a being always positive,
       # Assuming a = +epsilon > 0
-      # Then b such that ax + by = 0 should be negative. 
+      # Then b such that ax + by = 0 with y>0 should be negative. 
       if b > 0:
-        self.coefficients = (-a, -b, -c)
+        self.coefficients = (0., -b, -c)
 
   def parallel_line(self, p):
     a, b, _ = self.coefficients
@@ -134,9 +134,9 @@ def solve_quad(a, b, c):
   d = b*b - 2*a*c
   
   if d < 0:
-    import pdb; pdb.set_trace()
+    return None  # the caller should expect this result.
 
-  y = math.sqrt(b * b - 2 * a * c)
+  y = math.sqrt(d)
   return (-b - y)/a, (-b + y)/a
 
 
@@ -556,22 +556,112 @@ class Canvas(object):
     self.update_line(new_line, line.parallel_line(p))
     return {new_line: self.line2points[new_line]}
 
-  def add_triangle(self, p1, p2, p3, l12, l23, l31):
+  def add_normal_triangle(self, p1, p2, p3, l12, l23, l31):
     # A standard normal triangle
-    b, c, a = Point(0., 0.), Point(3., 0.), Point(0.5, 2.5)
+    a = np.pi/2
+    A = Point(0., 1.)
+    
+    d = np.pi/45.
 
-    self.update_point(p1, a)
-    self.update_point(p2, b)
-    self.update_point(p3, c)
-    self.update_line(l12, Line(a, b))
-    self.update_line(l23, Line(b, c))
-    self.update_line(l31, Line(c, a))
+    b = np.random.uniform(np.pi/2 + d, 3 * np.pi/2)
+    Bx = np.cos(b)
+    By = np.sin(b)
+    B = Point(Bx, By)
+
+    if a+d >= b-d:
+      gap = 2*d - (b-a)
+      c = np.random.uniform(2*np.pi - gap)
+      if c >= a+d:
+        c += gap
+    else:
+      c = np.random.uniform(2*np.pi - 4 * d)
+      if (a-d <= c and c <= a+d or
+          b-d <= c and c <= b+d):
+        c += 2 * d
+    
+    C = Point(np.cos(c), np.sin(c))
+
+    self.update_point(p1, A)
+    self.update_point(p2, B)
+    self.update_point(p3, C)
+    self.update_line(l12, Line(A, B))
+    self.update_line(l23, Line(B, C))
+    self.update_line(l31, Line(C, A))
+    return self.line2points
+
+  def add_right_triangle(self, p1, p2, p3, l12, l23, l31):
+    # A standard normal triangle
+    a = np.pi/2
+    A = Point(0., 1.)
+    b = 3*a
+    B = Point(0., -1)
+    
+    d = np.pi/45.
+
+    c = np.random.uniform(2*np.pi - 4 * d)
+    if (a-d <= c and c <= a+d or
+        b-d <= c and c <= b+d):
+      c += 2 * d
+    
+    C = Point(np.cos(c), np.sin(c))
+
+    self.update_point(p1, A)
+    self.update_point(p2, B)
+    self.update_point(p3, C)
+    self.update_line(l12, Line(A, B))
+    self.update_line(l23, Line(B, C))
+    self.update_line(l31, Line(C, A))
+    return self.line2points
+
+  def add_isosceles_triangle(self, p1, p2, p3, l12, l23, l31):
+    A = Point(0., 1.)
+    d = np.pi/45.
+    b = np.random.uniform(np.pi/2 + d, 3 * np.pi/2 - d)
+    Bx = np.cos(b)
+    By = np.sin(b)
+
+    B = Point(Bx, By)
+    C = Point(-Bx, By)
+
+    self.update_point(p1, A)
+    self.update_point(p2, B)
+    self.update_point(p3, C)
+    self.update_line(l12, Line(A, B))
+    self.update_line(l23, Line(B, C))
+    self.update_line(l31, Line(C, A))
+    return self.line2points
+
+  def add_equilateral_triangle(self, p1, p2, p3, l12, l23, l31):
+    # A standard normal triangle
+    A, B, C = Point(0., 1.), Point(3., 0.), Point(0.5, 2.5)
+
+    self.update_point(p1, A)
+    self.update_point(p2, B)
+    self.update_point(p3, C)
+    self.update_line(l12, Line(A, B))
+    self.update_line(l23, Line(B, C))
+    self.update_line(l31, Line(C, A))
     return self.line2points
 
   def add_line(self, new_line, p1, p2):
     p1, p2 = self.points[p1], self.points[p2]
     self.update_line(new_line, Line(p1, p2))
     return {new_line: self.line2points[new_line]}
+
+  def calculate_hp_sign(self, p1, p2, p):
+    # calculate the sign of hp that border line L
+    # that goes through points lp1, lp2 and the hp contains point p
+    p1, p2, p = map(self.points.get, [p1, p2, p])
+    a, b, c =  (p1.y - p2.y,
+                p2.x - p1.x,
+                p1.x * p2.y - p2.x * p1.y)
+    if a <= 0.:
+      a, b, c = -a, -b, -c
+    
+    if a * p.x + b * p.y + c > 0:
+      return 1
+    return -1
+    
 
   # def add_circumscribe_circle(self, new_circle, p1, p2, p3):
   #   raise NotImplementedError('Not implemented Circle')

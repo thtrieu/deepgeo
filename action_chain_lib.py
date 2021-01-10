@@ -103,7 +103,7 @@ def execute_steps(steps, state, canvas, verbose=False, init_action_chain=None):
   for i, (theorem, command) in enumerate(steps):
     mapping = mapping_from_command(command, theorem, state)
     action_gen = theorem.match_from_input_mapping(
-        state, mapping, randomize=False)
+        state, mapping, randomize=False, canvas=canvas)
 
     pos = i + len(init_action_chain)
 

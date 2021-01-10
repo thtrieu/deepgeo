@@ -19,9 +19,9 @@ from profiling import Timer
 import cython_graph_match
 # import parallel_graph_match
 
-from theorems import all_theorems
+from theorems import FundamentalTheorem, SamePairSkip, all_theorems
 
-from geometry import Point, Line, Segment, Angle, HalfPlane, Circle, SelectAngle, TransitiveRelation 
+from geometry import AngleXX, FullAngle, Point, Line, Segment, Angle, HalfPlane, Circle, SelectAngle, TransitiveRelation 
 from geometry import SegmentLength, AngleMeasure, LineDirection
 from geometry import SegmentHasLength, AngleHasMeasure, LineHasDirection
 from geometry import PointEndsSegment, LineBordersHalfplane
@@ -142,6 +142,7 @@ def recursively_match(
   return matches
 
 
+
 def create_new_obj_and_rels_for_conclusion(
       conclusion,
       relations,
@@ -149,7 +150,8 @@ def create_new_obj_and_rels_for_conclusion(
       state_candidates,
       critical,
       conclusion_position,
-      val2objs):
+      val2objs,
+      canvas):
   """Given a list of relations in conclusion, create corresponding ones.
 
   To add to the State.
@@ -158,6 +160,9 @@ def create_new_obj_and_rels_for_conclusion(
   new_objs_and_rels = []  # return this
   # Loop through the relation (in the conclusion) and create new objects on demand:
   for rel in relations:
+    if isinstance(rel, SamePairSkip):
+      continue
+
     new_init_list = []
 
     for obj in rel.init_list:
@@ -169,12 +174,57 @@ def create_new_obj_and_rels_for_conclusion(
         # 2 new lines are created, although they are not critical.
         # (i.e. their creation doesnt need the full premise.)
         if obj != geometry.halfpi:
-          new_obj = type(obj)()  # automatic naming
+
+          # Determine sign of hp right away.
+          sign = None
+          if isinstance(obj, HalfPlane) and hasattr(obj, 'def_points'):
+            p1, p2, p = map(premise_match.get, obj.def_points)
+            sign = canvas.calculate_hp_sign(p1, p2, p)
+
+          sign_name = ''
+          if sign:
+            sign_name = '+' if sign > 0 else '-'
+
+          name = None
+          if hasattr(obj, 'name_def'):
+            if isinstance(obj, HalfPlane):
+              p1, p2, p = obj.name_def
+              name = premise_match[p1].name.lower() + premise_match[p2].name.lower()
+              if sign_name:
+                name += sign_name
+              else:
+                name += '*' + p.name
+            elif isinstance(obj, Line):
+              p1, p2 = obj.name_def
+              name = premise_match[p1].name.lower() + premise_match[p2].name.lower()
+            elif isinstance(obj, LineDirection):
+              l = obj.name_def
+              name = 'd_' + premise_match[l].name 
+            elif isinstance(obj, Segment):
+              p1, p2 = obj.name_def
+              name = premise_match[p1].name + premise_match[p2].name
+            elif isinstance(obj, SegmentLength):
+              seg = obj.name_def
+              name = 'l_' + premise_match[seg].name
+            elif isinstance(obj, Angle):
+              p1, p2, p3 = obj.name_def
+              name = premise_match[p1].name + premise_match[p2].name + premise_match[p3].name
+              if isinstance(obj, AngleXX):
+                name += '_xx'
+              else:
+                name += '_xo'
+            elif isinstance(obj, FullAngle):
+              d1, d2 = obj.name_def
+              name = '<' + premise_match[d1].name + ' ' + premise_match[d2].name + '>'
+
+          new_obj = type(obj)(name=name)
           new_objs_and_rels.append(new_obj)
-          # Critical for example, the new AngleMeasure created
-          # for the two equal angles in EqualAnglesBecauseIntersectingCords
           new_obj.set_critical(critical)
           new_obj.set_conclusion_position(conclusion_position)
+
+          if sign:
+            new_obj.sign = sign
+
         else:
           new_obj = geometry.halfpi
 
@@ -212,40 +262,40 @@ def create_new_obj_and_rels_for_conclusion(
   return new_objs_and_rels
 
 
-def add_new_rels_from_auto_merge(
-      trigger_obj,
-      theorem, 
-      filtered_state_relations, 
-      new_rels, 
-      critical, 
-      conclusion_position,
-      current_state):
-  if theorem is None:
-    return new_rels
+# def add_new_rels_from_auto_merge(
+#       trigger_obj,
+#       theorem, 
+#       filtered_state_relations, 
+#       new_rels, 
+#       critical, 
+#       conclusion_position,
+#       current_state):
+#   if theorem is None:
+#     return new_rels
 
-  while True:
-    found = False
+#   while True:
+#     found = False
 
-    state_candidates = {}
-    for rel in filtered_state_relations + new_rels:
-      state_candidates[type(rel)] = state_candidates.get(type(rel), []) + [rel]
+#     state_candidates = {}
+#     for rel in filtered_state_relations + new_rels:
+#       state_candidates[type(rel)] = state_candidates.get(type(rel), []) + [rel]
 
-    auto_merges = theorem.find_auto_merge_from_trigger(
-        state_candidates, {theorem.trigger_obj: trigger_obj})
-    # import pdb; pdb.set_trace()
-    for (obj1, obj2) in auto_merges:
-      # print('because {}, merging {} and {}'.format(trigger_obj.name, obj1.name, obj2.name))
-      # import pdb; pdb.set_trace()
-      new_rels += create_new_rels_from_merge(
-          obj1, obj2, 
-          filtered_state_relations + new_rels,
-          critical,
-          conclusion_position,
-          current_state)
-      found = False
-    if not found:
-      break
-  return new_rels
+#     auto_merges = theorem.find_auto_merge_from_trigger(
+#         state_candidates, {theorem.trigger_obj: trigger_obj})
+#     # import pdb; pdb.set_trace()
+#     for (obj1, obj2) in auto_merges:
+#       # print('because {}, merging {} and {}'.format(trigger_obj.name, obj1.name, obj2.name))
+#       # import pdb; pdb.set_trace()
+#       new_rels += create_new_rels_from_merge(
+#           obj1, obj2, 
+#           filtered_state_relations + new_rels,
+#           critical,
+#           conclusion_position,
+#           current_state)
+#       found = False
+#     if not found:
+#       break
+#   return new_rels
 
 
 def other_obj(rel, obj):
@@ -431,7 +481,7 @@ def create_new_rels_from_merge(obj1, obj2,
 
 def match_conclusions(conclusion, state_candidates, 
                       premise_match, state_relations, 
-                      distinct=None, state=None):
+                      distinct=None, state=None, canvas=None):
   """Given that premise is matched, see if the conclusion is already there.
 
   Args:
@@ -525,7 +575,8 @@ def match_conclusions(conclusion, state_candidates,
           state_candidates=state_candidates,
           critical=critical,
           conclusion_position=conclusion_position,
-          val2objs=concl_val2objs
+          val2objs=concl_val2objs,
+          canvas=canvas
       )
 
     if critical:
@@ -550,7 +601,8 @@ def match_relations(premise_relations,
                     distinct=None,
                     mapping=None,
                     timeout=None,
-                    match_all=False):
+                    match_all=False,
+                    canvas=None):
   """Yield list of matched list of relations in state_relation.
   
   Args:
@@ -610,7 +662,8 @@ def match_relations(premise_relations,
           # Distinct is needed to avoid rematching the same premise
           # by rotating the match.
           distinct=distinct,
-          state=state  # needed for merging merge_graphs
+          state=state,  # needed for merging merge_graphs
+          canvas=canvas  # needed for knowing the sign of new hps right away.
       )
     if any(matched_conclusion.critical):
     # if matched_conclusion.topological_list:

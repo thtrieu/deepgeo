@@ -140,11 +140,11 @@ class GeometryEntity(object):
 
     elif isinstance(self, SegmentLength):
       _name_bank[SegmentLength] += 1
-      return str(_name_bank[SegmentLength]) + 'm'
+      return 'l' + str(_name_bank[SegmentLength])
 
     elif isinstance(self, AngleMeasure):
       _name_bank[AngleMeasure] += 1
-      return str(_name_bank[AngleMeasure]) + '"'
+      return 'm' + str(_name_bank[AngleMeasure])
 
     elif isinstance(self, LineDirection):
       _name_bank[LineDirection] += 1
@@ -432,6 +432,7 @@ class Circle(GeometryEntity):
 
 
 alphabet = 'abcdefghijklmnopqrstuvwxyz'
+ALPHABET = alphabet.upper()
 
 _name_bank = {
     Point: 0,
@@ -549,7 +550,7 @@ class AngleOfFullAngle(Relation):
     assert isinstance(angle, Angle)
     assert isinstance(fangle, FullAngle)
 
-    self.name = '{}-{}'.format(angle.name, fangle.name)
+    self.name = u'{}@{}'.format(angle.name, fangle.name)
     self._init_list = angle, fangle
 
 
@@ -602,7 +603,7 @@ class LineContainsPoint(Relation):
     assert isinstance(line, Line)
     assert isinstance(point, Point)
 
-    self.name = '{}[{}]'.format(line.name, point.name)
+    self.name = line.name + '{' + point.name + '}'
     self._init_list = line, point
 
 

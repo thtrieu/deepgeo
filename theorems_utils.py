@@ -94,7 +94,10 @@ def segment_def(seg, p1, p2):
 def fangle_def(direction1, direction2, 
                angle_xx=None, angle_xo=None,
                measure_xx=None, measure_xo=None):
-  fangle = FullAngle(direction1.name+'^'+direction2.name)
+  fangle = FullAngle('<' + direction1.name + ' ' + direction2.name + '>')
+
+  fangle.name_def = direction1, direction2
+  
   result = []
   if direction1:
     result.append(DirectionOfFullAngle(direction1, fangle))
