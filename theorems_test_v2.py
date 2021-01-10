@@ -94,7 +94,7 @@ def test_asa_isosceles():
   line2points = init_canvas.add_isosceles_triangle(A, B, C, ab, bc, ca)
   init_state.add_spatial_relations(line2points)
   init_canvas.update_hps(init_state.line2hps)
-  
+
   B_angle = B_xx if ab_hp.sign == bc_hp.sign else B_xo
   C_angle = C_xx if ca_hp.sign == bc_hp.sign else C_xo
 
@@ -224,17 +224,24 @@ def test_base_bisect_sss_isosceles():
   action_chain_lib.execute_steps(steps, state, canvas)
 
 
-
-
 if __name__ == '__main__':
   np.random.seed(1234)
   t = time.time()
+
   # Self-congruences:
   test_sss_isosceles()
   test_asa_isosceles()
   test_sas_isosceles()
+  
   # Aux point/lines
   test_angle_bisect_isosceles()
   test_base_bisect_sss_isosceles()
+  # TODO(thtrieu): build the gaussian elimination engine.
+  
+  # TODO(thtrieu): test constructing different types of triangle
+  # TODO(thtrieu): test thales theorems & proof whittling
+  # TODO(thtrieu): add composite actions. remember to join premise & conclusions. 
+  # TODO(thtrieu): think about reapplying facts in the current tree.
+
   print('\n [OK!]')
   print('Total time = {}'.format(time.time()-t))

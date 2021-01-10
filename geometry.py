@@ -21,17 +21,24 @@ def print_tb():
 name_to_obj = {}
 
 
-name_scope = ''
+name_scopes = {}
+current_scope = None
+
 
 
 def start_name_scope(name):
-  global name_scope
-  name_scope = name
+  global name_scopes
+  global current_scope
+
+  current_scope = name
+  if name not in name_scopes:
+    name_scopes[name] = len(name_scopes)
+  current_scope = name_scopes[name]
 
 
 def reset_name_scope():
-  global name_scope
-  name_scope = ''
+  global current_scope
+  current_scope = None
 
 
 def get_obj(name):
@@ -77,8 +84,11 @@ class GeometryEntity(object):
 
   def __init__(self, name=None):
     self.name = name or self.get_name()
-    # global name_scope
-    # self.name = name_scope + '/' + self.name
+    global current_scope
+    
+    if current_scope is not None:
+      prefix = str(current_scope)
+      self.name = prefix + '.' + self.name.replace(prefix + '.', '')
 
     global name_to_obj
 
@@ -459,13 +469,6 @@ def reset():
 def reset_auto_name_bank():
   global _name_bank
   _name_bank = {k: 0 for k in _name_bank}
-
-
-# TODO(thtrieu): handle the case where relations does not cover all objs.
-# or prove that it is not the case for any algorithm
-# in fact it might as well be.
-# no: given a segment and a point, exists a line through the point perp to segment.
-
 
 
 class Relation(GeometryEntity):

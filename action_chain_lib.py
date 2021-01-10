@@ -45,6 +45,7 @@ def _is_numeric(string):
 
 
 def _find(state, name):
+
   if name in state.name2obj:
     return state.name2obj[name]
 
@@ -55,6 +56,7 @@ def _find(state, name):
               _is_numeric(n[1]) 
            )]
   if len(names) != 1:
+    import pdb; pdb.set_trace()
     raise ValueError('Failed looking for {}'.format(name))
 
   name = '_'.join(names[0])

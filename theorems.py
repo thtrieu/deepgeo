@@ -109,7 +109,7 @@ from theorems_utils import segment_def, fangle_def
 from theorems_utils import diff_side, same_side, distinct
 from state import State, Conclusion
 
-from geometry import GeometryEntity, Merge, DistinctPoint, DistinctLine
+from geometry import GeometryEntity, Merge, DistinctPoint, DistinctLine, start_name_scope
 from geometry import Point, Line, Segment, Angle, HalfPlane, Circle, SelectAngle
 from geometry import AngleOfFullAngle
 from geometry import SegmentLength, AngleMeasure, LineDirection
@@ -202,6 +202,7 @@ class Action(object):
 class FundamentalTheorem(object):
 
   def __init__(self):
+    geometry.reset_name_scope()
     if not hasattr(self, 'premise'):
       self.premise = []
     if not hasattr(self, 'conclusion'):
@@ -718,6 +719,7 @@ class ConstructRightAngle(FundamentalTheorem):
 class ConstructMidPoint(FundamentalTheorem):
 
   def __init__(self):
+    geometry.start_name_scope('ConstructMidPoint')
     A, B = map(Point, 'AB')
 
     self.premise = distinct(A, B)
@@ -813,6 +815,7 @@ class ConstructMirrorPoint(FundamentalTheorem):
 class ConstructIntersectSegmentLine(FundamentalTheorem):
 
   def __init__(self):
+    geometry.start_name_scope('ConstructIntersectSegmentLine')
     A, B = map(Point, 'AB')
     l = Line('l')
     l_hp1, l_hp2 = HalfPlane('l_hp1'), HalfPlane('l_hp2')
@@ -1008,6 +1011,7 @@ class MappingCheck(object):
 class ConstructAngleBisector(FundamentalTheorem):
 
   def __init__(self):
+    geometry.start_name_scope('ConstructAngleBisector')
     l1, l2 = map(Line, 'l1 l2'.split())
     A = Point('A')
     l1_hp, l2_hp = map(HalfPlane, 'l1_hp l2_hp'.split())
@@ -1191,6 +1195,7 @@ class ConstructLine(FundamentalTheorem):
 class ConstructThirdLine(FundamentalTheorem):
 
   def __init__(self):
+    geometry.start_name_scope('ConstructThirdLine')
     A, B, C = map(Point, 'ABC')
     ac, bc = map(Line, 'ac bc'.split())
 
@@ -1663,6 +1668,7 @@ def conclusion_add_equal_angles(
 class SAS(Congruences):
 
   def __init__(self):
+    geometry.start_name_scope('SAS')
     A, B, C, D, E, F = map(Point, 'ABCDEF')
     ab, ab_hp, _ = line_and_halfplanes('ab')
     bc, bc_hp, _ = line_and_halfplanes('bc')
@@ -1742,6 +1748,7 @@ class SAS(Congruences):
 class SSS(Congruences):
 
   def __init__(self):
+    geometry.start_name_scope('SSS')
     A, B, C, D, E, F = map(Point, 'ABCDEF')
 
     self.premise = (
@@ -1814,6 +1821,7 @@ class SSS(Congruences):
 class ASA(Congruences):
 
   def __init__(self):
+    geometry.start_name_scope('ASA')
     A, B, C, D, E, F = map(Point, 'ABCDEF')
     ab, ab_hp, _ = line_and_halfplanes('ab')
     bc, bc_hp, _ = line_and_halfplanes('bc')
@@ -1931,21 +1939,21 @@ theorem_from_short_name = {
     # '1distance': SamePointBecauseSameMidpoint(),
     # 'unq_line_dir': SameLineBecauseSameDirection(),
     # 'right': ConstructRightAngle(),
-    'midp': ConstructMidPoint(),  # 0.000365972518921
+    'midp': theorem_from_name['ConstructMidPoint'],  # 0.000365972518921
     # 'mirror': ConstructMirrorPoint(),
-    'angle_bisect': ConstructAngleBisector(),
+    'angle_bisect': theorem_from_name['ConstructAngleBisector'],
     # 'segment_bisect'
     # 'segment_pbisect'
-    'line_x_segment': ConstructIntersectSegmentLine(),
+    'line_x_segment': theorem_from_name['ConstructIntersectSegmentLine'],
     # 'line_line': UserConstructIntersectLineLine(),
     # 'parallel': ConstructParallelLine(),
     # 'perp_on': ConstructPerpendicularLineFromPointOn(),
     # 'perp_out': ConstructPerpendicularLineFromPointOut(),
-    'line': ConstructThirdLine(),
+    'line': theorem_from_name['ConstructThirdLine'],
     # 'eq': EqualAnglesBecauseParallel(),  # 1.73088312149
-    'sas': SAS(),  # 0.251692056656
-    'asa': ASA(),  # 2.26002907753 3.96637487411
-    'sss': SSS(),
+    'sas': theorem_from_name['SAS'],  # 0.251692056656
+    'asa': theorem_from_name['ASA'],  # 2.26002907753 3.96637487411
+    'sss': theorem_from_name['SSS'],
     # '.parallel': ParallelBecauseCorrespondingAngles(),
     # '.parallel2': ParallelBecauseInteriorAngles(),
     # 'angle_check': OppositeAnglesCheck(),
