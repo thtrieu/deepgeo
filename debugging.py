@@ -16,8 +16,10 @@ import trieu_graph_match
 
 import geometry 
 
+from theorems import SamePairSkip
+
 from geometry import Point, Line, Segment, Angle, HalfPlane, Circle
-from geometry import SegmentLength, AngleMeasure, LineDirection
+from geometry import SegmentLength, AngleMeasure, LineDirection, SelectAngle
 from geometry import SegmentHasLength, AngleHasMeasure, LineHasDirection
 from geometry import PointEndsSegment, LineBordersHalfplane
 from geometry import PointCentersCircle, Merge, Distinct
@@ -74,12 +76,41 @@ def name_map(struct):
       return struct
 
 
+def can_be_same(x, y, object_mappings):
+  x_in = x in object_mappings
+  y_in = y in object_mappings
+  if x_in and y_in:
+    if object_mappings[x] != object_mappings[y]:
+      return False, {}, []
+    else:
+      # already same, move on
+      return True, {}, []
+  elif not x_in and not y_in:
+    return True, {}, [(x, y)]
+  elif x_in:
+    return True, {y: object_mappings[x]}, []
+  else:  # y_in
+    return True, {x: object_mappings[y]}, []
+
+
+def maybe_skip(a, b, c, d, object_mappings):
+  can_be_same_ac, update_ac, same_ac = can_be_same(a, c, object_mappings)
+  can_be_same_bd, update_bd, same_bd = can_be_same(a, c, object_mappings)
+  
+  if can_be_same_ac and can_be_same_bd:
+    update_ac.update(update_bd)
+    return update_ac, same_ac + same_bd
+  else:
+    return None, None
+
+
 # Then match recursively
 def recursively_match_best_effort(
     query_relations,
     state_candidates,
     object_mappings,
     distinct=None,
+    same=[],
     best=[{}],
     pdb_at=None):
   """Python generator that yields dict({premise_object: state_object}).
@@ -142,11 +173,87 @@ def recursively_match_best_effort(
     # There is not any premise edge to match:
     return [object_mappings]
 
+  all_matches = []
   query0 = query_relations[0]
+  
+  if isinstance(query0, SamePairSkip):
+    a, b, c, d = query0.pairs
+    # try a -> x, c -> x, b -> y, d -> y
+    new_mappings, appended_same = maybe_skip(a, b, c, d, object_mappings)
+
+    if new_mappings is not None and appended_same is not None:
+      query_relations_skip = [q for q in query_relations[1:]
+                              if getattr(q, 'skip', None) != query0]
+      all_matches += recursively_match_best_effort(
+          query_relations=query_relations_skip, 
+          state_candidates=state_candidates,
+          object_mappings=dict(object_mappings, **new_mappings),
+          distinct=distinct,
+          same=same + appended_same,
+          best=best,
+          pdb_at=pdb_at)
+    
+    # try a -> x, d -> x, b -> y, c -> y
+    new_mappings, appended_same = maybe_skip(a, b, d, c, object_mappings)
+    if new_mappings is not None and appended_same is not None:
+      query_relations_skip = [q for q in query_relations[1:]
+                              if getattr(q, 'skip', None) != query0]
+      all_matches += recursively_match_best_effort(
+          query_relations=query_relations_skip, 
+          state_candidates=state_candidates,
+          object_mappings=dict(object_mappings, **new_mappings),
+          distinct=distinct,
+          same=same + appended_same,
+          best=best,
+          pdb_at=pdb_at)
+
+    # Finally without trying to skip anything (simply skip the skip)
+    all_matches += recursively_match_best_effort(
+        query_relations=query_relations[1:], 
+        state_candidates=state_candidates,
+        object_mappings=object_mappings,
+        distinct=distinct,
+        same=same,
+        best=best,
+        pdb_at=pdb_at)
+    return all_matches
+    
+  # If query0 is not a Skip, do as normal.
+  a, b = query0.init_list
+
+  available = 1 
+
+  if isinstance(a, SelectAngle):
+    if a.name == '8.l1_hp==8.l2_hp?8.<d3 d2>_xo:8.<d3 d2>_xx':
+      print('**')
+      print(a.is_available(object_mappings))
+      print(a.select(object_mappings).name)
+    if a.is_available(object_mappings):
+      a = a.select(object_mappings)
+    else:
+      available = 0
+  
+  if isinstance(b, SelectAngle):
+    if b.is_available(object_mappings):
+      b = b.select(object_mappings)
+    else:
+      available = 0
+  
+  if available == 0:
+    # If query0 is not available, then it is guaranteed that len(query_relations) >= 2
+    # print(query_relations)
+    return recursively_match_best_effort(
+        query_relations=query_relations[1:]+[query0], 
+        state_candidates=state_candidates,
+        object_mappings=object_mappings,
+        distinct=distinct,
+        same=same,
+        best=best,
+        pdb_at=pdb_at)
+
   # At this recursion level we try to match premise_rel0
   rel_type = type(query0)
 
-  all_matches = []
   # Enumerate through possible edge match:
   candidates = state_candidates.get(rel_type, [])
   for _, candidate in enumerate(candidates):
@@ -343,6 +450,25 @@ def why_fail_to_match(
           if rel not in best]
 
   return best, miss
+
+
+def why_fail_to_match_conclusion(
+      relations, state_candidates, premise_match, distinct):
+
+  best = [{}]
+  recursively_match_best_effort(
+      relations,
+      state_candidates,
+      premise_match,
+      distinct=distinct,
+      best=best
+  )
+  best = best[0] 
+  miss = [rel for rel in relations
+          if rel not in best]
+
+  return best, miss
+
 
       
 

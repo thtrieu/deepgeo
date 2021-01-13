@@ -169,7 +169,7 @@ action_vocab = {
     theorems.ASA: 7,  # 2.26002907753 3.96637487411
     
     theorems.ParallelBecauseCorrespondingAngles: 8,
-    theorems.ParallelBecauseInteriorAngles: 9,
+    # theorems.ParallelBecauseInteriorAngles: 9,
     theorems.ConstructPerpendicularLineFromPointOn: 10,
     theorems.ConstructPerpendicularLineFromPointOut: 11,
     theorems.ConstructAngleBisector: 12

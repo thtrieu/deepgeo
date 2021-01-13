@@ -2,7 +2,7 @@ from collections import defaultdict as ddict
 
 import geometry 
 
-from geometry import AngleOfFullAngle, DirectionOfFullAngle, Point, Line, Segment, Angle, HalfPlane, Circle
+from geometry import AngleXX, AngleXXOfFullAngle, AngleXOOfFullAngle, DirectionOfFullAngle, Point, Line, Segment, Angle, HalfPlane, Circle
 from geometry import Distinct, DistinctLine, DistinctPoint
 from geometry import SegmentLength, AngleMeasure, LineDirection
 from geometry import SegmentHasLength, AngleHasMeasure, LineHasDirection
@@ -199,6 +199,18 @@ class State(object):
     
     return result
 
+
+  def print_all_parallel_lines(self):
+    val2valrels = ddict(lambda: [])
+    for rel in self.relations:
+      if isinstance(rel, LineHasDirection):
+        line, dir = rel.init_list
+        val2valrels[dir].append(line.name)
+
+    for dir, equal_lines in val2valrels.items():
+      print('>> ' + dir.name + ' = ' + ' = '.join(equal_lines))
+
+
   def print_all_equal_angles(self):
     val2valrels = ddict(lambda: [])
     for rel in self.relations:
@@ -229,7 +241,8 @@ class State(object):
   def hp_and_line_of_angle(self, angle):
 
     fangle = None
-    for rel in self.type2rel[AngleOfFullAngle]:
+    rel_type = AngleXXOfFullAngle if isinstance(angle, AngleXX) else AngleXOOfFullAngle
+    for rel in self.type2rel[rel_type]:
       if angle == rel.init_list[0]:
         fangle = rel.init_list[1]
 
@@ -535,6 +548,13 @@ class State(object):
       hp2.sign = +1
 
       for p1 in points_neg:
+        for rel in self.type2rel[LineContainsPoint]:
+          l0, p0 = rel.init_list
+          if l0 == line:  # l0 goes through p0 but not p1.
+            self.add_spatial_distincts(p1, p0)
+          elif p0 == p1:  # l0 goes through p1 but line does not.
+            self.add_spatial_distincts(line, l0)
+
         if p1 in points_hp1:
           continue
 
@@ -543,18 +563,18 @@ class State(object):
         for p2 in points_hp2:
           self.add_spatial_distincts(p1, p2)  # p1 and p2 on diff hps
         
-        for rel in self.type2rel[LineContainsPoint]:
-          l0, p0 = rel.init_list
-          if l0 == line:  # l0 goes through p0 but not p1.
-            self.add_spatial_distincts(p1, p0)
-          elif p0 == p1:  # l0 goes through p1 but line does not.
-            self.add_spatial_distincts(line, l0)
-              
       # Update the value of points_hp1 after new stuff being added above.
       points_hp1 = self.hp2points.get(hp1, [])
 
       # Repeat the same steps for points_pos:
       for p2 in points_pos:
+        for rel in self.type2rel[LineContainsPoint]:
+          l0, p0 = rel.init_list
+          if l0 == line:
+            self.add_spatial_distincts(p2, p0)
+          elif p0 == p2:
+            self.add_spatial_distincts(line, l0)
+
         if p2 in points_hp2:
           continue
         self.add_one(HalfPlaneContainsPoint(hp2, p2))
@@ -562,13 +582,6 @@ class State(object):
         # Add to distincts
         for p1 in points_hp1:
           self.add_spatial_distincts(p2, p1)
-
-        for rel in self.type2rel[LineContainsPoint]:
-          l0, p0 = rel.init_list
-          if l0 == line:
-            self.add_spatial_distincts(p2, p0)
-          elif p0 == p2:
-            self.add_spatial_distincts(line, l0)
   
   def add_spatial_distincts(self, x, y):
     if (x, y) in self.proof_distincts:

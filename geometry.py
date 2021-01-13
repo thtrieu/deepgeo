@@ -138,7 +138,7 @@ class GeometryEntity(object):
 
     elif isinstance(self, Segment):
       _name_bank[Segment] += 1
-      return 's' + str(_name_bank[Segment])
+      return 'seg' + str(_name_bank[Segment])
 
     elif isinstance(self, Circle):
       _name_bank[Circle] += 1
@@ -146,7 +146,7 @@ class GeometryEntity(object):
 
     elif isinstance(self, HalfPlane):
       _name_bank[HalfPlane] += 1
-      return '.' + str(_name_bank[HalfPlane])
+      return 'hp' + str(_name_bank[HalfPlane])
 
     elif isinstance(self, SegmentLength):
       _name_bank[SegmentLength] += 1
@@ -557,6 +557,26 @@ class AngleOfFullAngle(Relation):
     self._init_list = angle, fangle
 
 
+class AngleXXOfFullAngle(Relation):
+
+  def __init__(self, angle, fangle):
+    assert isinstance(angle, Angle)
+    assert isinstance(fangle, FullAngle)
+
+    self.name = u'{}@{}'.format(angle.name, fangle.name)
+    self._init_list = angle, fangle
+
+
+class AngleXOOfFullAngle(Relation):
+
+  def __init__(self, angle, fangle):
+    assert isinstance(angle, Angle)
+    assert isinstance(fangle, FullAngle)
+
+    self.name = u'{}@{}'.format(angle.name, fangle.name)
+    self._init_list = angle, fangle
+
+
 class DirectionOfFullAngle(Relation):
 
   def __init__(self, direction, fangle):
@@ -590,6 +610,24 @@ class AngleHasMeasure(TransitiveRelation):
             isinstance(measure, AngleMeasure))
     self.name = '{}={}'.format(angle.name, measure.name)
     self._init_list = angle, measure
+
+
+# class AngleXXHasMeasure(AngleHasMeasure):
+
+#   def __init__(self, angle, measure):
+#     assert (isinstance(angle, Angle) and
+#             isinstance(measure, AngleMeasure))
+#     self.name = '{}={}'.format(angle.name, measure.name)
+#     self._init_list = angle, measure
+
+
+# class AngleXOHasMeasure(AngleHasMeasure):
+
+#   def __init__(self, angle, measure):
+#     assert (isinstance(angle, Angle) and
+#             isinstance(measure, AngleMeasure)), angle
+#     self.name = '{}={}'.format(angle.name, measure.name)
+#     self._init_list = angle, measure
 
 
 class LineHasDirection(TransitiveRelation):

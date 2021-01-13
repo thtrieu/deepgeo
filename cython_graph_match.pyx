@@ -41,7 +41,7 @@ from geometry import SelectAngle
 from geometry import GeometryEntity
 from geometry import Point, Line, Segment, Angle, HalfPlane, Circle 
 from geometry import SegmentLength, AngleMeasure, LineDirection
-from geometry import SegmentHasLength, AngleHasMeasure, LineHasDirection
+from geometry import SegmentHasLength, LineHasDirection
 from geometry import PointEndsSegment, LineBordersHalfplane
 from geometry import PointCentersCircle
 from geometry import Merge, DistinctPoint, DistinctLine

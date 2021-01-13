@@ -131,6 +131,8 @@ def execute_steps(steps, state, canvas, verbose=False, init_action_chain=None):
     recursively_auto_merge(action, state, pos)
 
     line2pointgroups = action.draw(canvas)
+    action.theorem.eliminate(action.mapping, canvas)
+
     state.add_spatial_relations(line2pointgroups)
     canvas.update_hps(state.line2hps)
 

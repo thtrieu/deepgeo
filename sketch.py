@@ -3,11 +3,14 @@ from __future__ import division
 from __future__ import print_function
 
 import time
+
+from numpy.testing._private.utils import _assert_no_gc_cycles_context
 import theorems
 import numpy as np
 import math
 
 import geometry
+import elimination
 
 from collections import OrderedDict as odict
 
@@ -324,9 +327,16 @@ def highlight_angle(ax, hps, lines, color, alpha):
   ax.add_artist(fov)
 
 
-class Canvas(object):
+class Halfpi(object):
 
   def __init__(self):
+    self.name = 'pi/2'
+    self.line = Line(coefficients=(1, 0, 0))
+
+
+class Canvas(object):
+
+  def __init__(self, angle_engine=None):
     self.points = odict()  # graph Point -> sym Point *and* vice versa
     # self.points_inverse = odict()
     self.lines = odict()  # graph Line -> sym Line
@@ -339,6 +349,12 @@ class Canvas(object):
     self.line_matrix = np.zeros((0, 3))
     # point_matrix[:, i] = point[i].x, point[i].y
     self.point_matrix = np.zeros((3, 0))
+
+    if angle_engine == None:
+      self.halfpi = Halfpi()
+      angle_engine = elimination.Engine(self.halfpi)
+    
+    self.angle_engine = angle_engine
 
   def plt_show(self, ax, state, obj_hightlights, mark_segment=False):
     lines = self.lines.keys()
@@ -412,7 +428,7 @@ class Canvas(object):
         highlight_segment(ax, p1, p2, color, alpha)
 
   def copy(self):
-    new_canvas = Canvas()
+    new_canvas = Canvas(self.angle_engine)
 
     new_canvas.points = _copy(self.points)
     # new_canvas.points_inverse = _copy(self.points_inverse)
@@ -661,6 +677,25 @@ class Canvas(object):
     if a * p.x + b * p.y + c > 0:
       return 1
     return -1
+
+  def add_free_variable(self, *vars):
+    self.angle_engine.add_free(*vars)
+
+  def eliminate(self, pair1, pair2, same_sign):
+    da, db = pair1
+    dx, dy = pair2
+
+    if db.line.greater_than(da.line):
+      da, db = db, da
+
+    if dy.line.greater_than(dx.line):
+      dx, dy = dy, dx
+
+    if same_sign:
+      return self.angle_engine.add_eq(da, db, dx, dy)
+    else:
+      return self.angle_engine.add_sup(da, db, dx, dy)
+
     
 
   # def add_circumscribe_circle(self, new_circle, p1, p2, p3):

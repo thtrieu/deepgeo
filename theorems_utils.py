@@ -6,10 +6,12 @@ from __future__ import print_function
 import time
 import geometry
 
-from geometry import AngleOfFullAngle, FullAngle, DirectionOfFullAngle, Distinct, DistinctLine, DistinctPoint
+from geometry import AngleXXOfFullAngle, AngleXOOfFullAngle, AngleHasMeasure
+from geometry import FullAngle, DirectionOfFullAngle
+from geometry import Distinct, DistinctLine, DistinctPoint
 from geometry import Point, Line, Segment, Angle, HalfPlane, Circle, AngleXX, AngleXO
 from geometry import SegmentLength, AngleMeasure, LineDirection
-from geometry import SegmentHasLength, AngleHasMeasure, LineHasDirection
+from geometry import SegmentHasLength, LineHasDirection
 from geometry import PointEndsSegment, LineBordersHalfplane
 from geometry import PointCentersCircle, Merge
 from geometry import LineContainsPoint, CircleContainsPoint, HalfPlaneContainsPoint
@@ -73,6 +75,8 @@ def have_measure(name, *angle_list):
   else:
     raise ValueError('{} is not str nor AngleMeasure'.format(name))
   return [AngleHasMeasure(angle, angle_measure)
+          if isinstance(angle, AngleXX) else
+          AngleHasMeasure(angle, angle_measure)
           for angle in list(angle_list)]
 
 
@@ -106,14 +110,14 @@ def fangle_def(direction1, direction2,
 
   if angle_xx is None:
     angle_xx = AngleXX(fangle.name + '_xx')
-  result.append(AngleOfFullAngle(angle_xx, fangle))
+  result.append(AngleXXOfFullAngle(angle_xx, fangle))
 
   if measure_xx:
     result.append(AngleHasMeasure(angle_xx, measure_xx))
 
   if angle_xo is None:
     angle_xo = AngleXO(fangle.name + '_xo')
-  result.append(AngleOfFullAngle(angle_xo, fangle))
+  result.append(AngleXOOfFullAngle(angle_xo, fangle))
 
   if measure_xo:
     result.append(AngleHasMeasure(angle_xo, measure_xo))

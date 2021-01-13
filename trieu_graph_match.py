@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+from action_chain_lib import recursively_auto_merge
 
 import numpy as np
 # import random
@@ -10,6 +11,7 @@ import geometry
 # import time
 import profiling
 # import theorems_utils
+import debugging
 
 
 from state import Conclusion
@@ -142,6 +144,52 @@ def recursively_match(
   return matches
 
 
+def get_name(obj, premise_match, sign):
+  sign_name = ''
+  if sign:
+    sign_name = '+' if sign > 0 else '-'
+
+  name = None
+  if hasattr(obj, 'name_def'):
+    if isinstance(obj.name_def, list):
+      if any([x not in premise_match for x in obj.name_def]):
+        return None
+    else:
+      if obj.name_def not in premise_match:
+        return None
+
+    if isinstance(obj, HalfPlane):
+      p1, p2, p = obj.name_def
+      name = premise_match[p1].name.lower() + premise_match[p2].name.lower()
+      if sign_name:
+        name += sign_name
+      else:
+        name += '*' + premise_match[p].name
+    elif isinstance(obj, Line):
+      p1, p2 = obj.name_def
+      name = premise_match[p1].name.lower() + premise_match[p2].name.lower()
+    elif isinstance(obj, LineDirection):
+      l = obj.name_def
+      name = 'd_' + premise_match[l].name 
+    elif isinstance(obj, Segment):
+      p1, p2 = obj.name_def
+      name = premise_match[p1].name + premise_match[p2].name
+    elif isinstance(obj, SegmentLength):
+      seg = obj.name_def
+      name = 'l_' + premise_match[seg].name
+    elif isinstance(obj, Angle):
+      p1, p2, p3 = obj.name_def
+      name = premise_match[p1].name + premise_match[p2].name + premise_match[p3].name
+      if isinstance(obj, AngleXX):
+        name += '_xx'
+      else:
+        name += '_xo'
+    elif isinstance(obj, FullAngle):
+      d1, d2 = obj.name_def
+      name = '<' + premise_match[d1].name + ' ' + premise_match[d2].name + '>'
+  return name
+
+
 
 def create_new_obj_and_rels_for_conclusion(
       conclusion,
@@ -156,7 +204,6 @@ def create_new_obj_and_rels_for_conclusion(
 
   To add to the State.
   """
-
   new_objs_and_rels = []  # return this
   # Loop through the relation (in the conclusion) and create new objects on demand:
   for rel in relations:
@@ -164,15 +211,12 @@ def create_new_obj_and_rels_for_conclusion(
       continue
 
     new_init_list = []
-
     for obj in rel.init_list:
       if isinstance(obj, SelectAngle):
         obj = obj.select(premise_match)
+        
       if obj not in premise_match:
         # A new object is needed to be created.
-        # For example in EqualAnglesBecauseIntersectingCords,
-        # 2 new lines are created, although they are not critical.
-        # (i.e. their creation doesnt need the full premise.)
         if obj != geometry.halfpi:
 
           # Determine sign of hp right away.
@@ -181,47 +225,10 @@ def create_new_obj_and_rels_for_conclusion(
             p1, p2, p = map(premise_match.get, obj.def_points)
             sign = canvas.calculate_hp_sign(p1, p2, p)
 
-          sign_name = ''
-          if sign:
-            sign_name = '+' if sign > 0 else '-'
-
-          name = None
-          if hasattr(obj, 'name_def'):
-            if isinstance(obj, HalfPlane):
-              p1, p2, p = obj.name_def
-              name = premise_match[p1].name.lower() + premise_match[p2].name.lower()
-              if sign_name:
-                name += sign_name
-              else:
-                name += '*' + p.name
-            elif isinstance(obj, Line):
-              p1, p2 = obj.name_def
-              name = premise_match[p1].name.lower() + premise_match[p2].name.lower()
-            elif isinstance(obj, LineDirection):
-              l = obj.name_def
-              name = 'd_' + premise_match[l].name 
-            elif isinstance(obj, Segment):
-              p1, p2 = obj.name_def
-              name = premise_match[p1].name + premise_match[p2].name
-            elif isinstance(obj, SegmentLength):
-              seg = obj.name_def
-              name = 'l_' + premise_match[seg].name
-            elif isinstance(obj, Angle):
-              p1, p2, p3 = obj.name_def
-              name = premise_match[p1].name + premise_match[p2].name + premise_match[p3].name
-              if isinstance(obj, AngleXX):
-                name += '_xx'
-              else:
-                name += '_xo'
-            elif isinstance(obj, FullAngle):
-              d1, d2 = obj.name_def
-              name = '<' + premise_match[d1].name + ' ' + premise_match[d2].name + '>'
-
-          new_obj = type(obj)(name=name)
+          new_obj = type(obj)(name=get_name(obj, premise_match, sign))
           new_objs_and_rels.append(new_obj)
           new_obj.set_critical(critical)
           new_obj.set_conclusion_position(conclusion_position)
-
           if sign:
             new_obj.sign = sign
 
@@ -233,12 +240,12 @@ def create_new_obj_and_rels_for_conclusion(
 
       new_init_list.append(premise_match[obj])
 
-    # Now we are ready to create a new init list.
+    # Now we are ready to create a new rel.
     new_rel = type(rel)(*new_init_list)
 
     # We also want to add these to state_candidate, so that
     # the next construction iteration will not build the same
-    # thing again because of a failed match (happens e.g. ASA, SAS)
+    # thing again because of a failed match
     if type(rel) not in state_candidates:
       state_candidates[type(rel)] = []
     state_candidates[type(rel)].append(new_rel)

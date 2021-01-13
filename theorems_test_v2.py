@@ -23,7 +23,7 @@ from state import State, Conclusion
 
 from geometry import Point, Line, Segment, Angle, HalfPlane, Circle, TransitiveRelation
 from geometry import SegmentLength, AngleMeasure, LineDirection
-from geometry import SegmentHasLength, AngleHasMeasure, LineHasDirection
+from geometry import SegmentHasLength, LineHasDirection
 from geometry import PointEndsSegment, LineBordersHalfplane
 from geometry import LineContainsPoint, CircleContainsPoint, HalfPlaneContainsPoint
 
@@ -56,7 +56,7 @@ def test_sss_isosceles():
 
   # Original thales + noises
   steps = [
-      (all_theorems['sss'], 'A=B B=A C=C D=C E=A F=B')
+      (all_theorems['SSS'], 'A=B B=A C=C D=C E=A F=B')
   ]
 
   print('\nRunning SSS isosceles test:')
@@ -105,7 +105,7 @@ def test_asa_isosceles():
 
   # Original thales + noises
   steps = [
-      (all_theorems['asa'], 'B=A C=B A=C D=B F=C de=ab ef=ca')
+      (all_theorems['ASA'], 'B=A C=B A=C D=B F=C de=ab ef=ca')
   ]
 
   print('\nRunning ASA isosceles test:')
@@ -138,7 +138,7 @@ def test_sas_isosceles():
 
   # Original thales + noises
   steps = [
-      (all_theorems['sas'], 'B=A A=B C=C E=A D=C F=B')
+      (all_theorems['SAS'], 'B=A A=B C=C E=A D=C F=B')
   ]
 
   print('\nRunning SAS isosceles test:')
@@ -178,8 +178,8 @@ def test_angle_bisect_isosceles():
   # Original thales + noises
   steps = [
       (all_theorems['angle_bisect'], 'hp1=ab_hp hp2=ca_hp'),  # l1
-      (all_theorems['line_x_segment'], 'l=l1 A=B B=C'),
-      (all_theorems['sas'], 'A=B B=A C=P1 D=C E=A F=P1')
+      (all_theorems['lineXsegment'], 'l=l1 A=B B=C'),
+      (all_theorems['SAS'], 'A=B B=A C=P1 D=C E=A F=P1')
   ]
 
   print('\nRunning bisector isosceles test:')
@@ -217,11 +217,55 @@ def test_base_bisect_sss_isosceles():
   steps = [
       (all_theorems['midp'], 'A=B B=C'),
       (all_theorems['line'], 'A=A B=P1'),
-      (all_theorems['sss'], 'A=B B=A C=P1 D=C E=A F=P1')
+      (all_theorems['SSS'], 'A=B B=A C=P1 D=C E=A F=P1')
   ]
 
   print('\nRunning bisector SSS isosceles test:')
   action_chain_lib.execute_steps(steps, state, canvas)
+
+
+def test_ang_isos_outer_bisect():
+  geometry.reset()
+
+  init_canvas = sketch.Canvas()
+  init_state = State()
+
+  steps = [
+      (all_theorems['ang_isos'], ''),
+      (all_theorems['angle_bisect'], 'hp1=l1_hp hp2=hp3')
+  ]
+
+  print('\nRunning Angle Isosceles test:')
+  state, canvas, action_chain = action_chain_lib.execute_steps(
+      steps, init_state, init_canvas)
+
+  assert len([v for v in state.val2valrel 
+              if isinstance(v, LineDirection)]) == 3
+  assert len([v for v in state.val2valrel 
+              if isinstance(v, AngleMeasure)]) == 2
+
+
+def test_ang_isos_bisect():
+  geometry.reset()
+
+  init_canvas = sketch.Canvas()
+  init_state = State()
+
+  steps = [
+      (all_theorems['ang_isos'], ''),
+      (all_theorems['angle_bisect'], 'hp1=hp1 hp2=hp3')
+  ]
+
+  print('\nRunning Angle Isosceles test:')
+  state, canvas, action_chain = action_chain_lib.execute_steps(
+      steps, init_state, init_canvas)
+
+  assert len([v for v in state.val2valrel 
+              if isinstance(v, LineDirection)]) == 4
+  assert len([v for v in state.val2valrel 
+              if isinstance(v, AngleMeasure)]) == 4
+
+  
 
 
 if __name__ == '__main__':
@@ -229,15 +273,17 @@ if __name__ == '__main__':
   t = time.time()
 
   # Self-congruences:
-  test_sss_isosceles()
-  test_asa_isosceles()
-  test_sas_isosceles()
+  # test_sss_isosceles()
+  # test_asa_isosceles()
+  # test_sas_isosceles()
   
   # Aux point/lines
-  test_angle_bisect_isosceles()
-  test_base_bisect_sss_isosceles()
+  # test_angle_bisect_isosceles()
+  # test_base_bisect_sss_isosceles()
   # TODO(thtrieu): build the gaussian elimination engine.
-  
+  test_ang_isos_outer_bisect()
+  test_ang_isos_bisect()
+
   # TODO(thtrieu): test constructing different types of triangle
   # TODO(thtrieu): test thales theorems & proof whittling
   # TODO(thtrieu): add composite actions. remember to join premise & conclusions. 
