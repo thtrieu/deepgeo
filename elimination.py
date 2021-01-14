@@ -46,11 +46,6 @@ def rref(matrix):
   return A, None
 
 
-def swap(a, m):
-  x, y = a[:, :m], a[:, m:]
-  return np.concatenate([y, x], -1)
-
-
 def parse(s):
   r = ['']
   for c in s:
@@ -211,23 +206,30 @@ def add(d1, d2):
   return d1
 
 
+def substract(d1, d2):
+  for k, v in d2.items():
+    d1[k] -= v
+    if d1[k] == 0:
+      d1.pop(k)
+  return d1
+
+
 class Engine(object):
 
-  def __init__(self, halfpi):
+  def __init__(self, pi):
     self.free = []
     self.deps = {}
 
-    self.halfpi = halfpi
-    self.add_free(halfpi)
-
-    self.angs = []
+    self.pi = pi
+    self.add_free(pi)
+    self.constants = []
 
     self.v2a = ddict(lambda: [])
     self.a2v = ddict(lambda: None)
 
   def supplement_of(self, angle):
     if len(angle) == 2:
-      return ('pi',) + angle
+      return (self.pi,) + angle
     return angle[1:]
 
   def is_equal(self, a1, a2):
@@ -262,37 +264,37 @@ class Engine(object):
       self.v2a[v_a1] += [a2]
       self.v2a[v_a1_] += [a2_]
     else:
-      for x in self.v2a[v_a2]:
-        self.a2v[x] = v_a1
-      for x in self.v2a[v_a2_]:
-        self.a2v[x] = v_a1_
-      self.v2a[v_a1] += self.v2a[v_a2]
-      self.v2a[v_a1_] += self.v2a[v_a2_]
+      if v_a1 != v_a2:
+        for x in self.v2a[v_a2]:
+          self.a2v[x] = v_a1
+        self.v2a[v_a1] += self.v2a[v_a2]
+        self.v2a.pop(v_a2)
+      if v_a1_ != v_a2_:
+        for x in self.v2a[v_a2_]:
+          self.a2v[x] = v_a1_
+        self.v2a[v_a1_] += self.v2a[v_a2_]
+        self.v2a.pop(v_a2_)
 
-      self.v2a.pop(v_a2)
-      self.v2a.pop(v_a2_)
   
   def add_free(self, *vars):
     for v in list(vars):
       self.deps[v] = {v: 1.0}
+
+      for v0 in self.free:
+        if v0.line.greater_than(v.line):
+          a, b = v0, v
+        else:
+          a, b = v, v0
+
+        self.calculate(a, b)
+        self.calculate_sup(a, b)
+
       self.free.append(v)
-
-  def add_halfpi(self, a, b):
-    # a - b = halfpi
-    result = ddict(lambda: 0.)
-    if a in self.deps:
-      result.update({self.halfpi: -1.})
-      self.deps[b] = add(result, self.deps[a])
-      return self.auto(b)
-    elif b in self.free:
-      result.update({self.halfpi: 1.})
-      self.deps[a] = add(result, self.deps[b])
-      return self.auto(a)
-
+      
   def add_eq(self, a, b, x, y):
     # a - b = x - y = > a - b - x + y = 0
     if self.is_equal((a, b), (x, y)):
-      return None
+      return []
 
     result = ddict(lambda: 0.)
 
@@ -308,15 +310,15 @@ class Engine(object):
       self.deps[dep] = {k: v / div for k, v in result.items()}
       self.merge((a, b), (x, y))
       return self.auto(dep)
-    return None
+    return []
 
   def add_sup(self, a, b, x, y):
     # a - b = pi - (x - y) => a - b + x - y = pi
-    if self.is_equal((a, b), ('pi', x, y)):
-      return None
+    if self.is_equal((a, b), (self.pi, x, y)):
+      return []
 
     result = ddict(lambda: 0)
-    result[self.halfpi] = 2.0
+    result[self.pi] = 1.0
 
     dep, div = None, 0.
     for t, s in zip([a, b, x, y], [1., -1., 1., -1.]):
@@ -328,21 +330,23 @@ class Engine(object):
 
     if dep:
       self.deps[dep] = {k: v / div for k, v in result.items()}
-      self.merge((a, b), ('pi', x, y))
+      self.merge((a, b), (self.pi, x, y))
       return self.auto(dep)
-    return None
+    return []
 
   def name(self, x):
     if len(x) == 2:
       d1, d2 = x
       return d1.name + '-' + d2.name
     else:
-      _, d1, d2 = x
-      return 'pi+' + d2.name + '-' + d1.name
+      p, d1, d2 = x
+      return p.name + '+' + d2.name + '-' + d1.name
 
   def auto(self, v):
+    # find vars that is not v:
     vars = [v0 for v0 in self.deps 
-            if v0 not in self.angs + [v, self.halfpi]]
+            if v0 not in [v, self.pi] and
+            not isinstance(v0, tuple)]
 
     val2angs = ddict(lambda: [])
     for v0 in vars:
@@ -351,198 +355,69 @@ class Engine(object):
       else:
         a, b = v, v0
 
-      val = self.add_def((a, b), a, b)
-      val2angs[val].append((a, b))
-
-      val = self.add_sup_def(('pi', a, b), (a, b))
-      val2angs[val].append(('pi', a, b))
-
-    for k, v in val2angs.items():
-      if len(v) <= 1:
+      val2angs[self.calculate(a, b)].append((a, b))
+      val2angs[self.calculate_sup(a, b)].append((self.pi, a, b))
+    
+    connected = set()
+    new_eqs = []  
+    for val, angs in val2angs.items():
+      if len(angs) <= 1:
         continue
 
-      for i, x1 in enumerate(v[:-1]):
-        for x2 in v[i+1:]:
-
-          if self.is_equal(x1, x2):
-            continue
+      for i, ang1 in enumerate(angs[:-1]):
+        for ang2 in angs[i+1:]:
           
-          k_name = '+'.join([
-              (str(m) if m != 1.0 else '') + d.name 
-              for d, m in k])
-          names = [k_name, self.name(x1), self.name(x2)]
-          print('='.join(names))
+          if self.is_equal(ang1, ang2):
+            continue
+
+          val1, val2 = self.a2v[ang1], self.a2v[ang2]
+          if (val1, val2) in connected or (val2, val1) in connected:
+            continue
+
+          new_val = (val1, val2)
+          connected.add(new_val)
+          if len(val) == 1 and val[0][0] == self.pi:
+            new_val = val[0][1]
+          
+          new_eqs.append((new_val, ang1, ang2))
+          # print(new_val, self.name(ang1), self.name(ang2))
+
+    for _, x1, x2 in new_eqs:
+      self.merge(x1, x2)
+    return new_eqs
   
-  def add_def(self, m, a, b):
+  def calculate(self, a, b):
     # m = a - b
-    result = ddict(lambda: 0)
-    result.update(self.deps[a])
-    self.deps[m] = add(result, {k: -v for k, v in self.deps[b].items()})
-    self.angs.append(m)
+    if (a, b) not in self.deps:
+      result = ddict(lambda: 0)
+      result.update(self.deps[a])
+      self.deps[(a, b)] = substract(result, self.deps[b])
 
-    val = self.deps[m]
+    val = self.deps[(a, b)]
     hash = []
     for f in self.free:
       if f in val:
         hash.append((f, val[f]))
     return tuple(hash)
 
-  def add_sup_def(self, m, n):
-    # m = pi - n
-    result = ddict(lambda: 0)
-    result[self.halfpi] = 2.0
-    self.deps[m] = add(result, {k: -v for k, v in self.deps[n].items()})
-    self.angs.append(m)
+  def calculate_sup(self, a, b):
+    if (self.pi, a, b) not in self.deps:
+      result = ddict(lambda: 0)
+      result[self.pi] = 1.0
+      self.deps[(self.pi, a, b)] = substract(
+          result, self.deps[(a, b)])
 
-    val = self.deps[m]
+    val = self.deps[(self.pi, a, b)]
     hash = []
     for f in self.free:
       if f in val:
         hash.append((f, val[f]))
     return tuple(hash)
 
-
-
-# class EngineV2(object):
-
-#   def __init__(self):
-#     self.free = []
-#     self.deps = {}
-
-#     self.halfpi = 'pi/2'
-#     self.add_free(self.halfpi)
-    
-#     self.angs = []
-#     self.eqs = []
-  
-#   def add_free(self, *vars):
-#     for v in list(vars):
-#       self.deps[v] = np.zeros(100)
-#       self.deps[v][len(self.free)] = 1.0
-#       self.free.append(v)
-
-#   def add_halfpi(self, a, b):
-#     # a - b = halfpi
-#     if a in self.free:
-#       self.deps[b] = self.deps[a] - self.deps[self.halfpi]
-#       return self.auto(b)
-#     elif b in self.free:
-#       self.deps[a] = self.deps[self.halfpi] + self.deps[b]
-#       return self.auto(a)
-
-#   def add_eq(self, a, b, x, y):
-#     # a - b = x - y = > a - b - x + y = 0
-#     result = np.zeros(100)
-
-#     dep, div = None, 0
-#     for t, s in zip([a, b, x, y], [1, -1, -1, 1]):
-#       if t in self.deps:
-#         result -= self.deps[t] * s
-#       else:
-#         dep = t
-#         div += s 
-#     self.deps[dep] = result/div
-
-#     self.eqs.append({(a, b), (x, y)})
-#     return self.auto(dep)
-
-#   def add_sup(self, a, b, x, y):
-#     # a - b = pi - (x - y) => a - b + x - y = pi
-#     result = np.array(self.deps[self.halfpi]) * 2
-
-#     dep, div = None, 0
-#     for t, s in zip([a, b, x, y], [1, -1, 1, -1]):
-#       if t in self.deps:
-#         result -= self.deps[t] * s
-#       else:
-#         dep = t
-#         div += s 
-
-#     self.deps[dep] = result/div
-#     return self.auto(dep)
-
-#   def auto(self, v):
-#     vars = self.free[1:] + [
-#         v0 for v0 in self.deps 
-#         if v0 not in self.angs and v0 != v]
-
-#     val2angs = ddict(lambda: [])
-
-#     for v0 in vars:
-#       if v0.line.greater_than(v.line):
-#         a, b = v0, v
-#       else:
-#         a, b = v, v0
-#       # new.update(self.add_def((v0, v), v0, v))
-#       # new.update(self.add_sup_def(('pi', v0, v), (v0, v)))
-
-#       val = self.add_def((a, b), a, b)
-#       val2angs[val].append((a, b))
-
-#       val = self.add_sup_def(('pi', a, b), (a, b))
-#       val2angs[val].append(('pi', a, b))
-
-#     for k, v in val2angs.items():
-#       if len(v) > 1:
-#         v += [k]
-#         print('='.join([str(x) for x in v]))
-  
-#   def add_def(self, m, a, b):
-#     # m = a - b
-#     result = ddict(lambda: 0)
-#     self.deps[m] = self.deps[a] - self.deps[b]
-#     self.angs.append(m)
-
-#     val = self.deps[m]
-#     hash = []
-#     for f in self.free:
-#       if f in val:
-#         hash.append((f, val[f]))
-#     return tuple(hash)
-
-#   def add_sup_def(self, m, n):
-#     # m = pi - n
-#     self.deps[m] = self.deps[self.halfpi] * 2 - self.deps[n]
-#     self.angs.append(m)
-#     val = self.deps[m]
-#     hash = []
-#     for f in self.free:
-#       if f in val:
-#         hash.append((f, val[f]))
-#     return tuple(hash)
-
-
-def test_gradual_eqs():
-  e = Engine('halfpi')
-  e.add_free('d3', 'd4')
-  e.add_sup('d1', 'd4', 'd3', 'd4')
-  e.add_eq('d1', 'd2', 'd2', 'd3')
-  e.add_def('x', 'd1', 'd2')
-  e.add_sup_def('y', 'x')
-  e.add_def('n', 'd2', 'd4')
-  e.add_sup_def('m', 'n')
-
-  assert e.deps['m'] == e.deps[e.halfpi]
-  assert e.deps['n'] == e.deps[e.halfpi]
-
-  # print('===')
-  e = Engine('halfpi')
-  e.add_free('d3', 'd4')
-  e.add_sup('d1', 'd4', 'd3', 'd4')
-  e.add_halfpi('d2', 'd4')
-  e.add_def('x', 'd1', 'd2')
-  e.add_def('y', 'd2', 'd3')
-  e.add_def('n', 'd2', 'd4')
-  e.add_sup_def('m', 'n')
-
-  assert e.deps['m'] == {e.halfpi: 1.0}
-  assert e.deps['n'] == {e.halfpi: 1.0}
-  assert e.deps['x'] == e.deps['y']
 
 
 if __name__ == '__main__':
   s = time.time()
   test_isosceles_angle_bisect()
   test_isosceles_perp()
-  test_gradual_eqs()
   print('\n\t[OK!] {}s'.format(time.time()-s))

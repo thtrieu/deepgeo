@@ -101,6 +101,11 @@ class GeometryEntity(object):
     self.name = name
     name_to_obj[self.name] = self
 
+  def __str__(self):
+    if hasattr(self, 'name'):
+      return self.__class__.__name__ + '.' + self.name
+    return super().__str__()
+
   def get_merge_graph(self, state, default={}):
     if not hasattr(self, 'merge_graph'):
       self.merge_graph = {}
@@ -416,6 +421,19 @@ class SelectAngle(Angle):
 class FullAngle(GeometryEntity):
   pass
 
+
+constant_angles = {}
+
+
+def get_constant_angles(v):
+  global constant_angles
+  if v not in constant_angles:
+    constant_angles[v] = Angle(str(v) + 'pi')
+  if (1-v) not in constant_angles:
+    constant_angles[1-v] = Angle(str(1-v) + 'pi')
+
+  # for v = 0.5 (angle = pi/2), these two are the same:
+  return constant_angles[v], constant_angles[1-v]
 
 
 halfpi = None

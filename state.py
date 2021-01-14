@@ -2,7 +2,9 @@ from collections import defaultdict as ddict
 
 import geometry 
 
-from geometry import AngleXX, AngleXXOfFullAngle, AngleXOOfFullAngle, DirectionOfFullAngle, Point, Line, Segment, Angle, HalfPlane, Circle
+from geometry import AngleXX, AngleXO, DirectionOfFullAngle
+from geometry import AngleXXOfFullAngle, AngleXOOfFullAngle
+from geometry import Point, Line, Segment, Angle, HalfPlane, Circle
 from geometry import Distinct, DistinctLine, DistinctPoint
 from geometry import SegmentLength, AngleMeasure, LineDirection
 from geometry import SegmentHasLength, AngleHasMeasure, LineHasDirection
@@ -152,9 +154,6 @@ class State(object):
       return segment.name
 
   def angle_name(self, angle):
-    if angle == geometry.halfpi:
-      return angle.name
-
     result = []
 
     for [hp1, hp2], [l1, l2] in self.hp_and_line_of_angle(angle):
@@ -171,9 +170,20 @@ class State(object):
           break 
       
       if not intersection:
-        import pdb; pdb.set_trace()
-        raise ValueError(
-            'Not found intersection of {} and {}'.format(l1.name, l2.name))
+        name = '<{} {} {}>'.format(angle.name, l1.name, l2.name)
+        if isinstance(angle, AngleXX):
+          name +=  '_xx'
+        elif isinstance(angle, AngleXO):
+          name += '_xo'
+        else:
+          raise ValueError('Angle is not XX nor XO.')
+        result.append(name)
+        break
+
+          
+        # import pdb; pdb.set_trace()
+        # raise ValueError(
+        #     'Not found intersection of {} and {}'.format(l1.name, l2.name))
 
       def _find_point_on_line_in_hp(line, other_line, hp_idx):
         hp = self.line2hps[other_line][hp_idx]
@@ -197,6 +207,8 @@ class State(object):
       p2 = _find_point_on_line_in_hp(l2, l1, hp1)
       result.append('|{} {} {} {}|'.format(angle.name, p1, intersection, p2))
     
+    if result == []:
+      return [angle.name]
     return result
 
 
@@ -247,7 +259,7 @@ class State(object):
         fangle = rel.init_list[1]
 
     if fangle is None:
-      raise ValueError('fangle of angle {} is None'.format(angle.name))
+      return
 
     ds = []
     for rel in self.type2rel[DirectionOfFullAngle]:

@@ -97,7 +97,7 @@ def can_be_same(x, y, object_mappings):
 
 def maybe_skip(a, b, c, d, object_mappings):
   can_be_same_ac, update_ac, same_ac = can_be_same(a, c, object_mappings)
-  can_be_same_bd, update_bd, same_bd = can_be_same(a, c, object_mappings)
+  can_be_same_bd, update_bd, same_bd = can_be_same(b, d, object_mappings)
   
   if can_be_same_ac and can_be_same_bd:
     update_ac.update(update_bd)
@@ -190,6 +190,7 @@ cpdef list recursively_match(
     if new_mappings is not None and appended_same is not None:
       query_relations_skip = [q for q in query_relations[1:]
                               if getattr(q, 'skip', None) != query0]
+      new_mappings[query0] = True
       match = recursively_match(
           query_relations=query_relations_skip, 
           state_candidates=state_candidates,
@@ -199,6 +200,8 @@ cpdef list recursively_match(
           return_all=return_all,
           depth=depth+1)
 
+      # if not match:
+      #   print('fail {}={} & {}={}'.format(query0.name))
       if not return_all:
         if match:
           return match
@@ -210,6 +213,7 @@ cpdef list recursively_match(
     if new_mappings is not None and appended_same is not None:
       query_relations_skip = [q for q in query_relations[1:]
                               if getattr(q, 'skip', None) != query0]
+      new_mappings[query0] = True
       match = recursively_match(
           query_relations=query_relations_skip, 
           state_candidates=state_candidates,
@@ -219,6 +223,8 @@ cpdef list recursively_match(
           return_all=return_all,
           depth=depth+1)
 
+      # if not match:
+      #   print('fail {}={} & {}={}'.format(query0.name))
       if not return_all:
         if match:
           return match
@@ -352,17 +358,30 @@ cpdef list recursively_match(
         # a conflict happens. 
         conflict = 0
         for distinct_pair in distinct:
-          if a not in distinct_pair and b not in distinct_pair:
-            continue  # nothing to check here
-
           x, y = distinct_pair[0], distinct_pair[1]
-          x_map = object_mappings.get(x, new_mappings.get(x, None))
-          y_map = object_mappings.get(y, new_mappings.get(y, None))
-          # either x or y will be in new_mappings by the above "if",
-          # so x_map and y_map cannot be both None
-          if x_map == y_map:
-            conflict = 1
-            break
+
+          if isinstance(x, tuple):
+            if a not in x and a not in y and b not in x and b not in y:
+              continue  # nothing to check here
+            m, n = x
+            p, q = y
+            m_map = object_mappings.get(m, new_mappings.get(m, None))
+            n_map = object_mappings.get(n, new_mappings.get(n, None))
+            p_map = object_mappings.get(p, new_mappings.get(p, None))
+            q_map = object_mappings.get(q, new_mappings.get(q, None))
+            if m_map == p_map and n_map == q_map:
+              conflict = 1
+              break
+          else:
+            if a not in distinct_pair and b not in distinct_pair:
+              continue  # nothing to check here
+            x_map = object_mappings.get(x, new_mappings.get(x, None))
+            y_map = object_mappings.get(y, new_mappings.get(y, None))
+            # either x or y will be in new_mappings by the above "if",
+            # so x_map and y_map cannot be both None
+            if x_map == y_map:
+              conflict = 1
+              break
 
         if conflict:
           continue  # move on to the next candidate.

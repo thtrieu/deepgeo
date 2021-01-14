@@ -127,14 +127,19 @@ def execute_steps(steps, state, canvas, verbose=False, init_action_chain=None):
     state = state.copy()
     canvas = canvas.copy()
     
+    # add conclusion
     state.add_relations(action.new_objects)
-    recursively_auto_merge(action, state, pos)
 
+    # add spatial relations:
     line2pointgroups = action.draw(canvas)
-    action.theorem.eliminate(action.mapping, canvas)
-
     state.add_spatial_relations(line2pointgroups)
     canvas.update_hps(state.line2hps)
+    
+    # add auto equalities
+    action.eliminate(state, canvas)
+    
+    # add auto merges
+    recursively_auto_merge(action, state, pos)
 
   return state, canvas, init_action_chain+action_chain
 

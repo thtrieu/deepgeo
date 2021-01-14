@@ -22,7 +22,8 @@ from geometry import Point, Line, Segment, Angle, HalfPlane, Circle
 from geometry import SegmentLength, AngleMeasure, LineDirection, SelectAngle
 from geometry import SegmentHasLength, AngleHasMeasure, LineHasDirection
 from geometry import PointEndsSegment, LineBordersHalfplane
-from geometry import PointCentersCircle, Merge, Distinct
+from geometry import PointCentersCircle, Merge
+from geometry import DistinctPoint, DistinctLine
 from geometry import LineContainsPoint, CircleContainsPoint, HalfPlaneContainsPoint
 
 
@@ -95,7 +96,7 @@ def can_be_same(x, y, object_mappings):
 
 def maybe_skip(a, b, c, d, object_mappings):
   can_be_same_ac, update_ac, same_ac = can_be_same(a, c, object_mappings)
-  can_be_same_bd, update_bd, same_bd = can_be_same(a, c, object_mappings)
+  can_be_same_bd, update_bd, same_bd = can_be_same(b, d, object_mappings)
   
   if can_be_same_ac and can_be_same_bd:
     update_ac.update(update_bd)
@@ -224,10 +225,6 @@ def recursively_match_best_effort(
   available = 1 
 
   if isinstance(a, SelectAngle):
-    if a.name == '8.l1_hp==8.l2_hp?8.<d3 d2>_xo:8.<d3 d2>_xx':
-      print('**')
-      print(a.is_available(object_mappings))
-      print(a.select(object_mappings).name)
     if a.is_available(object_mappings):
       a = a.select(object_mappings)
     else:
@@ -263,9 +260,9 @@ def recursively_match_best_effort(
 
     # Suppose edge query0 connects nodes a, b in premise graph
     # and edge candidate connects nodes c, d in state graph:
-    (a, b), (c, d) = query0.init_list, candidate.init_list
+    c, d = candidate.init_list
 
-    if rel_type is Distinct:
+    if rel_type in [DistinctPoint, DistinctLine]:
       map_ab_to = [(c, d), (d, c)]
     else:
       map_ab_to = [(c, d)]
@@ -281,14 +278,29 @@ def recursively_match_best_effort(
 
       # Now we want to match a->c, b->d without any conflict,
       # if there is conflict then candidate cannot be matched to query0.
-      if (object_mappings.get(a, c) != c or
-          object_mappings.get(b, d) != d or
-          # Also check for inverse map if there is any:
-          object_mappings.get(c, a) != a or
-          object_mappings.get(d, b) != b):
+      if (a in object_mappings and object_mappings[a] != c or
+          b in object_mappings and object_mappings[b] != d or
+          c in object_mappings and object_mappings[c] != a or
+          d in object_mappings and object_mappings[d] != b):
         continue  # move on to the next candidate.
 
       new_mappings = {a: c, b: d}
+
+      # First, we check for sameness enforcement:
+      conflict = 0
+      for same_pair in same:
+        x, y = same_pair[0], same_pair[1]
+        x_map = object_mappings.get(x, new_mappings.get(x, None))
+        y_map = object_mappings.get(y, new_mappings.get(y, None))
+        # if either x or y has not been map, then its fine
+        # but if both is mapped, but to different guys, then conflict
+        if x_map and y_map and x_map != y_map:
+          conflict = 1
+          break
+      
+      if conflict:
+        continue
+
       # Check for distinctiveness:
       if not distinct:  # Everything is distinct except numeric values.
         # Add the inverse mappings, so that now a <-> c and b <-> d,
@@ -332,6 +344,7 @@ def recursively_match_best_effort(
           state_candidates=state_candidates,
           object_mappings=appended_mappings,
           distinct=distinct,
+          same=same,
           best=best,
           pdb_at=pdb_at)
 
@@ -434,7 +447,7 @@ def why_fail_to_match(
         command_str, theorem, state)
 
   type2rel = ddict(lambda: [])
-  for rel in state.relations:
+  for rel in state.relations + state.distinct_relations():
     type2rel[type(rel)].append(rel)
 
   best = [{}]

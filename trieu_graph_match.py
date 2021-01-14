@@ -39,8 +39,6 @@ def strip_match_relations(premise_relations, conclusion_relations, state_relatio
   # This also help with early pruning during recursive calls.
   relevant_state_candidates = {}
 
-  if premise_relations == []:
-    return premise_relations, relevant_state_candidates
 
   for rel in premise_relations + conclusion_relations:
     rel_type = type(rel)
@@ -57,6 +55,9 @@ def strip_match_relations(premise_relations, conclusion_relations, state_relatio
     if isinstance(rel, Distinct):
       branch_count *= 2
     rel_branch_count.append(branch_count)
+
+  if premise_relations == []:
+    return premise_relations, relevant_state_candidates
 
   # Sort according to branch_count
   premise_relations, _ = zip(*sorted(
@@ -624,7 +625,7 @@ def match_relations(premise_relations,
       presented in the premise.
     conclusion: An object of type Conclusion
   """
-  state_relations = list(state.relations)
+  state_relations = list(state.relations + state.distinct_relations())
 
   if conclusion:
     conclusion_relations = sum(conclusion.topological_list, [])
@@ -634,8 +635,7 @@ def match_relations(premise_relations,
   # Rearrage relations to optimize recursion branching
   with Timer('action/prepare'):
     sorted_premise_relations, state_candidates = strip_match_relations(
-        premise_relations, conclusion_relations, 
-        state_relations + state.distinct_relations())
+        premise_relations, conclusion_relations, state_relations)
 
     if randomize:
       for rel_type in state_candidates:

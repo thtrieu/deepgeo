@@ -224,7 +224,7 @@ def test_base_bisect_sss_isosceles():
   action_chain_lib.execute_steps(steps, state, canvas)
 
 
-def test_ang_isos_outer_bisect():
+def test_ang_isos_outer_bisect_parallel_to_base():
   geometry.reset()
 
   init_canvas = sketch.Canvas()
@@ -262,9 +262,25 @@ def test_ang_isos_bisect():
 
   assert len([v for v in state.val2valrel 
               if isinstance(v, LineDirection)]) == 4
-  assert len([v for v in state.val2valrel 
-              if isinstance(v, AngleMeasure)]) == 4
 
+  assert len([v for v in state.val2valrel 
+              if isinstance(v, AngleMeasure)]) == 5
+  
+  halfpi, _ = geometry.get_constant_angles(0.5)
+  assert any([halfpi in state.obj2valrel])
+  mhalfpi = state.obj2valrel[halfpi].init_list[1]
+  assert len(state.val2valrel[mhalfpi]) == 3
+
+  steps = [
+      (all_theorems['lineXline'], 'l1=l4 l2=l2'),
+      (all_theorems['ASA'], 'A=P1 C=P4')
+  ]
+
+  state, canvas, action_chain = action_chain_lib.execute_steps(
+      steps, state, canvas, init_action_chain=action_chain)
+
+  assert len([v for v in state.val2valrel 
+              if isinstance(v, SegmentLength)]) == 2
   
 
 
@@ -273,18 +289,19 @@ if __name__ == '__main__':
   t = time.time()
 
   # Self-congruences:
-  # test_sss_isosceles()
-  # test_asa_isosceles()
-  # test_sas_isosceles()
+  test_sss_isosceles()
+  test_asa_isosceles()
+  test_sas_isosceles()
   
   # Aux point/lines
-  # test_angle_bisect_isosceles()
-  # test_base_bisect_sss_isosceles()
-  # TODO(thtrieu): build the gaussian elimination engine.
-  test_ang_isos_outer_bisect()
+  test_angle_bisect_isosceles()
+  test_base_bisect_sss_isosceles()
+
+  test_ang_isos_outer_bisect_parallel_to_base()
+  
+  # Test gaussian elimination engine.
   test_ang_isos_bisect()
 
-  # TODO(thtrieu): test constructing different types of triangle
   # TODO(thtrieu): test thales theorems & proof whittling
   # TODO(thtrieu): add composite actions. remember to join premise & conclusions. 
   # TODO(thtrieu): think about reapplying facts in the current tree.

@@ -327,11 +327,11 @@ def highlight_angle(ax, hps, lines, color, alpha):
   ax.add_artist(fov)
 
 
-class Halfpi(object):
+class PiDirection(object):
 
   def __init__(self):
-    self.name = 'pi/2'
-    self.line = Line(coefficients=(1, 0, 0))
+    self.name = 'pi'
+    self.line = Line(coefficients=(0, 1, 0))
 
 
 class Canvas(object):
@@ -351,8 +351,8 @@ class Canvas(object):
     self.point_matrix = np.zeros((3, 0))
 
     if angle_engine == None:
-      self.halfpi = Halfpi()
-      angle_engine = elimination.Engine(self.halfpi)
+      self.pi = PiDirection()
+      angle_engine = elimination.Engine(self.pi)
     
     self.angle_engine = angle_engine
 
