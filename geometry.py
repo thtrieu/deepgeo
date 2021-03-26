@@ -25,6 +25,13 @@ name_scopes = {}
 current_scope = None
 
 
+def get_name_scope(num):
+  global name_scopes
+  for k, v in name_scopes.items():
+    if v == num:
+      return k
+
+
 
 def start_name_scope(name):
   global name_scopes
@@ -222,10 +229,10 @@ class GeometryEntity(object):
 
   def set_critical(self, critical):
     """Set this during exploration."""
-    if hasattr(self, '_critical'):
-      raise ValueError(
-          'Cannot set critical for {} {} twice.'.format(
-                type(self).__name__,  self.name))
+    # if hasattr(self, '_critical'):
+    #   raise ValueError(
+    #       'Cannot set critical for {} {} twice.'.format(
+    #             type(self).__name__,  self.name))
     self._critical = critical
 
   def copy(self, old_state, new_state):
@@ -247,7 +254,9 @@ class GeometryEntity(object):
     
     edges = self.merge_graph[state]
     equivalents = edges[other].keys()
+    # equivalents = self.merge_graph[state][other].keys()
 
+    # edges = obj.merge_graph[state]
     path = _bfs(edges, obj, equivalents)
     found = path[0]
     result = [
@@ -334,9 +343,23 @@ class CausalValue(GeometryEntity):
     path = _bfs(edges, obj1, [obj2])
     result = [
         edges[p2][p1] for p1, p2 in zip(path[:-1], path[1:])]
-    return result
+    
+    r = []
+    for p in result:
+      if isinstance(p, set):
+        r += list(p)
+      else:
+        r.append(p)
 
-  def set_chain_position(self, pos):
+    # print('{}: {} <-> {} = {}'.format(
+    #     self.name, 
+    #     state.name_map(obj1), 
+    #     state.name_map(obj2) 
+    #     r
+    # ))
+    return r
+
+  def set_chain_position(self, pos, auto_pos=None):
     if not hasattr(self, '_chain_position'):
       self._chain_position = pos
 
@@ -344,7 +367,7 @@ class CausalValue(GeometryEntity):
     for _, neighbors in self.edges_tmp.items():
       for p2 in neighbors:
         if neighbors[p2] is None:
-          neighbors[p2] = pos
+          neighbors[p2] = auto_pos or pos
 
   def merge_tmp_clique(self, state):
     for p1, neighbors in self.edges_tmp.items():

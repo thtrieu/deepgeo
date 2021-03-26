@@ -164,14 +164,13 @@ action_vocab = {
     theorems.ConstructIntersectSegmentLine: 2,
     theorems.ConstructParallelLine: 3,
     theorems.ConstructThirdLine: 4,
-    theorems.EqualAnglesBecauseParallel: 5,  # 1.73088312149
     theorems.SAS: 6,  # 0.251692056656
     theorems.ASA: 7,  # 2.26002907753 3.96637487411
     
     theorems.ParallelBecauseCorrespondingAngles: 8,
     # theorems.ParallelBecauseInteriorAngles: 9,
-    theorems.ConstructPerpendicularLineFromPointOn: 10,
-    theorems.ConstructPerpendicularLineFromPointOut: 11,
+    # theorems.ConstructPerpendicularLineFromPointOn: 10,
+    # theorems.ConstructPerpendicularLineFromPointOut: 11,
     theorems.ConstructAngleBisector: 12
     # ============
     # Only add things after this point for backward compat

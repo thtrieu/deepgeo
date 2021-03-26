@@ -311,6 +311,13 @@ def other_obj(rel, obj):
   return rel.init_list[1-rel.init_list.index(obj)]
 
 
+def copy_merge_graph(g):
+  if isinstance(g, (list, tuple)):
+    return list(g)
+  if isinstance(g, dict):
+    return {k: copy_merge_graph(v) for k, v in g.items()}
+  return g
+      
 
 def create_new_rels_from_merge(obj1, obj2, 
                                state_relations,
@@ -361,6 +368,7 @@ def create_new_rels_from_merge(obj1, obj2,
       other_obj(rel, obj2): {obj2: rel} 
       for rel in state_relations 
       if not isinstance(rel, Merge) and obj2 in rel.init_list})
+  
 
   assert obj2 not in merge_graph1
   assert obj1 not in merge_graph2
@@ -371,9 +379,17 @@ def create_new_rels_from_merge(obj1, obj2,
   merge_graph[obj1] = merge_graph.get(obj1, {})
   merge_graph[obj1].update({obj2: None})
 
+  # merge_graph_second = copy_merge_graph(merge_graph)
+
   merge_graph['equivalents'] = list(merge_graph1['equivalents'])
   merge_graph['equivalents'] += list(merge_graph2['equivalents'])
   merge_graph['equivalents'] += [obj2]
+  
+  # merge_graph_second['equivalents'] = list(merge_graph2['equivalents'])
+  # merge_graph_second['equivalents'] += list(merge_graph1['equivalents'])
+  # merge_graph_second['equivalents'] += [obj1]
+
+  # merge_graph2['equivalents'] += [obj1]
 
   # Copy info from merge_graph2
   for obj_a, obj_b_dict in merge_graph2.items():
@@ -417,6 +433,7 @@ def create_new_rels_from_merge(obj1, obj2,
       new_rel.set_conclusion_position(conclusion_position)
       new_rels.append(new_rel)
 
+  # Step 2. Now we deal with vals.
   if val_rels[obj1] is None and val_rels[obj2] is None:
     pass  # nothing to do.
 
@@ -450,7 +467,7 @@ def create_new_rels_from_merge(obj1, obj2,
       new_rel.set_critical(critical)
       new_rel.set_conclusion_position(conclusion_position)
       new_rels.append(new_rel)
-  
+
   # Now filter obj2 out of state_relations to recursively
   # seek for consequently triggered merges.
   # filtered_state_relations = filter(
@@ -594,9 +611,17 @@ def match_conclusions(conclusion, state_candidates,
     conclusion_position += 1
 
   # Finally we add dependency cliques:
+  state_concl_val2objs = ddict(lambda: set())
   for val, objs in concl_val2objs.items():
+    v = premise_match[val]
+    objs = [a.select(premise_match) if isinstance(a, SelectAngle)
+            else a for a in objs]
+    objs = map(premise_match.get, objs)
+    state_concl_val2objs[v].update(objs)
+
+  for val, objs in state_concl_val2objs.items():
     # Map both val & objs into state space.
-    premise_match[val].add_new_clique(map(premise_match.get, objs))
+    val.add_new_clique(list(objs))
 
   return matched_conclusion, premise_match
 

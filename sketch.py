@@ -336,7 +336,7 @@ class PiDirection(object):
 
 class Canvas(object):
 
-  def __init__(self, angle_engine=None):
+  def __init__(self, angle_engine=None, distance_engine=None):
     self.points = odict()  # graph Point -> sym Point *and* vice versa
     # self.points_inverse = odict()
     self.lines = odict()  # graph Line -> sym Line
@@ -352,11 +352,15 @@ class Canvas(object):
 
     if angle_engine == None:
       self.pi = PiDirection()
-      angle_engine = elimination.Engine(self.pi)
+      angle_engine = elimination.AngleEngine(self.pi)
+    
+    if distance_engine is None:
+      distance_engine = elimination.DistanceEngine()
     
     self.angle_engine = angle_engine
+    self.distance_engine = distance_engine
 
-  def plt_show(self, ax, state, obj_hightlights, mark_segment=False):
+  def plt_show(self, ax, state, obj_hightlights=[], mark_segment=False):
     lines = self.lines.keys()
     all_points = self.points.keys()
 
@@ -428,7 +432,10 @@ class Canvas(object):
         highlight_segment(ax, p1, p2, color, alpha)
 
   def copy(self):
-    new_canvas = Canvas(self.angle_engine)
+    new_canvas = Canvas(
+        self.angle_engine.copy(), 
+        self.distance_engine.copy()
+    )
 
     new_canvas.points = _copy(self.points)
     # new_canvas.points_inverse = _copy(self.points_inverse)
@@ -442,12 +449,16 @@ class Canvas(object):
     return new_canvas
 
   def update_hps(self, state_line2hps):
-    self.line2hps = state_line2hps
+    self.line2hps = {
+        l: list(hps) for l, hps in
+        state_line2hps.items()
+    }
 
   def update_line(self, line, sym_line):
     if line in self.lines:
       return
-
+    
+    # sym_line.name = line.name
     self.lines[line] = sym_line
     a, b, c = sym_line.coefficients 
     line.sym_line = sym_line
@@ -473,6 +484,8 @@ class Canvas(object):
     if node_point in self.points:
       return 
 
+    node_point.x = sym_point.x
+    node_point.y = sym_point.y
     self.points[node_point] = sym_point
     # different sympy Points with the same coordinate
     # get the same hash id, so we need to use id here.
@@ -678,10 +691,10 @@ class Canvas(object):
       return 1
     return -1
 
-  def add_free_variable(self, *vars):
+  def add_free_directions(self, *vars):
     self.angle_engine.add_free(*vars)
 
-  def eliminate(self, pair1, pair2, same_sign):
+  def eliminate_angle(self, pair1, pair2, same_sign, chain_pos):
     da, db = pair1
     dx, dy = pair2
 
@@ -692,9 +705,26 @@ class Canvas(object):
       dx, dy = dy, dx
 
     if same_sign:
-      return self.angle_engine.add_eq(da, db, dx, dy)
+      return self.angle_engine.add_eq(da, db, dx, dy, chain_pos)
     else:
-      return self.angle_engine.add_sup(da, db, dx, dy)
+      return self.angle_engine.add_sup(da, db, dx, dy, chain_pos)
+  
+  def add_free_points(self, l, *free_points):
+    self.distance_engine.add_free(l, *free_points)
+
+  def add_points(self, l, *points):
+    self.distance_engine.add(l, *points)
+
+  def eliminate_distance(self, pair1, pair2, chain_pos):
+    pa, pb = pair1
+    px, py = pair2
+
+    if elimination.point_greater(pb, pa):
+      pa, pb = pb, pa
+    if elimination.point_greater(py, px):
+      px, py = py, px
+    return self.distance_engine.add_eq(pa, pb, px, py, chain_pos)
+    
 
     
 

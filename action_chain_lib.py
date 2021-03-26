@@ -70,8 +70,21 @@ def _find_premise(premise_objects, name):
   return None
 
 
-def mapping_from_command(command, theorem, state):
+def mapping_from_command(command, theorem, state):  
+
   name_maps = [c.split('=') for c in command.split()]
+
+  if name_maps == []:
+    return {}
+
+  if '=' not in command:
+    return {
+        theorem_obj: _find(state, command_obj_name)
+        for theorem_obj, command_obj_name
+        in zip(theorem.args, command.split())
+        if command_obj_name != 'None'
+    }
+
   mapping = dict(
       (theorem.names[a], _find(state, b))
       if a in theorem.names
@@ -81,11 +94,21 @@ def mapping_from_command(command, theorem, state):
 
 
 def recursively_auto_merge(action, state, chain_position):
+  """A merge could lead to a chain of merges."""
+  if not action.merges:
+    return
+
+  # for merge_rel in action.merges:
+  #   print('Merge {} ==> {}'.format(
+  #       merge_rel.from_obj.name, 
+  #       merge_rel.to_obj.name))
+  
   exhausted = False  # is all auto merges exhausted?
   while not exhausted:
     exhausted = True  # set to False immediately once a match is found.
-    for merge_rel in action.merges:
+    for merge_rel, _ in action.merges:
       trigger_obj = merge_rel.to_obj
+
       for theorem in theorems.auto_merge_theorems_from_trigger_obj(trigger_obj):
         for next_merge_action in theorem.match_from_input_mapping(
             state, {theorem.trigger_obj: trigger_obj}):
@@ -93,8 +116,22 @@ def recursively_auto_merge(action, state, chain_position):
           next_merge_action.set_chain_position(chain_position)
           state.add_relations(next_merge_action.new_objects)
           recursively_auto_merge(next_merge_action, state, chain_position)
+          
           # append action with auto merged's matched_conclusion & new objects
           action.update(next_merge_action)
+
+
+def extract_theorem_mapping(theorem_command, state):
+  theorem, command = None, None
+  if isinstance(theorem_command, tuple):
+    theorem, command = theorem_command
+  elif isinstance(theorem_command, str):
+    theorem, command = theorem_command.split(':')
+    theorem = theorems.theorem_from_short_name[theorem.strip()]
+    command = command.strip()
+  
+  mapping = mapping_from_command(command, theorem, state)
+  return theorem, mapping
 
 
 
@@ -102,8 +139,8 @@ def execute_steps(steps, state, canvas, verbose=False, init_action_chain=None):
   init_action_chain = init_action_chain or []
   action_chain = []
 
-  for i, (theorem, command) in enumerate(steps):
-    mapping = mapping_from_command(command, theorem, state)
+  for i, theorem_command in enumerate(steps):
+    theorem, mapping = extract_theorem_mapping(theorem_command, state)
     action_gen = theorem.match_from_input_mapping(
         state, mapping, randomize=False, canvas=canvas)
 
@@ -112,18 +149,22 @@ def execute_steps(steps, state, canvas, verbose=False, init_action_chain=None):
     try:
       action = action_gen.next()
     except StopIteration:
-      best, miss = debugging.why_fail_to_match(theorem, state, command_str=command)
+      best, miss = debugging.why_fail_to_match(
+          theorem, state, mapping=mapping)
       import pdb; pdb.set_trace()
-      raise ValueError('Matching not found {} {}'.format(theorem, command))
+      raise ValueError('Matching not found {} {}'.format(
+          theorem, theorem_command))
 
     print(pos+1, action.to_str())
     action.set_chain_position(pos)
     action_chain.append(action)
 
     if verbose:
-      print('\tAdd : {}'.format([obj.name for obj in action.new_objects]))
+      print('\tAdd : {}'.format(
+          [obj.name for obj in action.new_objects]))
     
     # import pdb; pdb.set_trace()
+    # print(state)
     state = state.copy()
     canvas = canvas.copy()
     
@@ -136,9 +177,20 @@ def execute_steps(steps, state, canvas, verbose=False, init_action_chain=None):
     canvas.update_hps(state.line2hps)
     
     # add auto equalities
-    action.eliminate(state, canvas)
+    state = action.action_eliminate_angle(state, canvas, pos)
+    state, auto_merge_points = action.action_eliminate_distance(state, canvas, pos)
     
     # add auto merges
+    if auto_merge_points:
+      # Loop through actions and update state.
+      for theorem, mapping, auto_pos in auto_merge_points:
+        for merge_action in theorem.match_from_input_mapping(state, mapping, canvas=canvas):
+          merge_action.set_chain_position(pos, auto_pos)
+          break
+        state.add_relations(merge_action.new_objects)
+        recursively_auto_merge(merge_action, state, pos)
+        action.update(merge_action)
+    # else:
     recursively_auto_merge(action, state, pos)
 
   return state, canvas, init_action_chain+action_chain

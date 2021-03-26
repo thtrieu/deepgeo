@@ -174,6 +174,7 @@ cpdef list recursively_match(
     return [object_mappings]
 
   cdef object a, b, c, d, query0, candidate, x, y, x_map, y_map, rel_type
+  cdef object select_a, select_b
 
   query0 = query_relations[0]
   cdef list all_matches = []
@@ -254,14 +255,18 @@ cpdef list recursively_match(
 
   cdef int available = 1 
 
+  select_a = None
   if isinstance(a, SelectAngle):
     if a.is_available(object_mappings):
+      select_a = a
       a = a.select(object_mappings)
     else:
       available = 0
   
+  select_b = None
   if isinstance(b, SelectAngle):
     if b.is_available(object_mappings):
+      select_b = b
       b = b.select(object_mappings)
     else:
       available = 0
@@ -324,6 +329,10 @@ cpdef list recursively_match(
         continue  # move on to the next candidate.
 
       new_mappings = {a: c, b: d}
+      # if select_a:
+      #   new_mappings.update({select_a: c})
+      # if select_b:
+      #   new_mappings.update({select_b: d})
 
       # First, we check for sameness enforcement:
       conflict = 0

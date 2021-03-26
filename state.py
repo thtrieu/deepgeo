@@ -99,13 +99,17 @@ class State(object):
     return copied
 
   def name_map(self, struct):
-    if isinstance(struct, (list, tuple)):
+    if isinstance(struct, (list, tuple, set)):
       return [self.name_map(o) for o in struct]
     elif isinstance(struct, dict):
-      return {
-        self.name_map(key): self.name_map(value)
-        for (key, value) in struct.items()
-      }
+      r = {}
+      for key, value in struct.items():
+        key = self.name_map(key)
+        if isinstance(key, list):
+          key = tuple(key)
+        value = self.name_map(value)
+        r.update({key: value})
+      return r
     else:
       if isinstance(struct, Segment):
         return self.segment_name(struct)
@@ -140,6 +144,10 @@ class State(object):
         p = r.init_list[1]
       if l and p:
         break
+    if l is None:
+      return hp.name
+    if p is None:
+      return 'hp({}, ?)'.format(l.name)
     return 'hp({},{})'.format(l.name, p.name)
 
   def halfpi_val(self):
@@ -211,36 +219,42 @@ class State(object):
       return [angle.name]
     return result
 
-
-  def print_all_parallel_lines(self):
-    val2valrels = ddict(lambda: [])
+  def all_parallel_lines(self):
+    dir2lines = ddict(lambda: [])
     for rel in self.relations:
       if isinstance(rel, LineHasDirection):
         line, dir = rel.init_list
-        val2valrels[dir].append(line.name)
+        dir2lines[dir].append(line)
+    return dir2lines
 
-    for dir, equal_lines in val2valrels.items():
-      print('>> ' + dir.name + ' = ' + ' = '.join(equal_lines))
+  def print_all_parallel_lines(self):
+    for dir, para_lines in self.all_parallel_lines().items():
+      para_lines = [l.name for l in para_lines]
+      print('>> ' + dir.name + ' = ' + ' = '.join(para_lines))
 
-
-  def print_all_equal_angles(self):
-    val2valrels = ddict(lambda: [])
+  def all_equal_angles(self):
+    measure2angs = ddict(lambda: [])
     for rel in self.relations:
       if isinstance(rel, AngleHasMeasure):
         angle, measure = rel.init_list
-        val2valrels[measure].extend(self.angle_name(angle))
+        measure2angs[measure].extend(self.angle_name(angle))
+    return measure2angs
 
-    for measure, equal_angles in val2valrels.items():
+  def print_all_equal_angles(self):
+    for measure, equal_angles in self.all_equal_angles().items():
       print('>> ' + measure.name + ' = ' + ' = '.join(equal_angles))
 
-  def print_all_equal_segments(self):
-    val2valrels = ddict(lambda: [])
+  def all_equal_segments(self):
+    len2seg = ddict(lambda: [])
     for rel in self.relations:
       if isinstance(rel, SegmentHasLength):
         seg, length = rel.init_list
-        val2valrels[length].append(self.segment_name(seg))
+        len2seg[length].append(seg)
+    return len2seg
 
-    for length, equal_segments in val2valrels.items():
+  def print_all_equal_segments(self):
+    for length, equal_segments in self.all_equal_segments().items():
+      equal_segments = [self.segment_name(s) for s in equal_segments]
       print('>> ' + length.name + ' = ' + ' = '.join(equal_segments))
 
   def ends_of_segment(self, segment):
@@ -318,7 +332,9 @@ class State(object):
 
     if isinstance(entity, Merge):
       self.remove(entity.from_obj)
+      # print('set {} merge graph'.format(entity.to_obj.name))
       entity.to_obj.merge_graph[self] = entity.merge_graph
+      # entity.from_obj.merge_graph[self]['equivalents'] += [entity.to_obj]
       return
         
     relation = entity
@@ -371,7 +387,8 @@ class State(object):
       if hp not in self.line2hps[line]:
         if len(self.line2hps[line]) == 2:
           hp1, hp2 = self.line2hps[line]
-          print(line.name, hp1.name, hp2.name, hp.name)
+          # print('{} has >= 3 hps: {}, {}, {}'.format(
+          #     line.name, hp1.name, hp2.name, hp.name))
           # raise ValueError('More than 2 halfplanes.')
         self.line2hps[line].append(hp)
 
@@ -384,6 +401,14 @@ class State(object):
 
     self.relations.append(relation)
     self.type2rel[rel_type].append(relation)
+
+  def has_relation(self, rel):
+    a, b = rel.init_list
+    return any([
+      x == a and y == b
+      for x, y in [r.init_list for r in 
+                   self.type2rel[type(rel)]]
+    ])
 
   def remove(self, obj):
     # mask = [True] * len(self.relations)

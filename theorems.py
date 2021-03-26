@@ -129,7 +129,7 @@ from theorems_utils import segment_def, fangle_def
 from theorems_utils import diff_side, same_side, distinct
 from state import State, Conclusion
 
-from geometry import GeometryEntity, Merge, DistinctPoint, DistinctLine, start_name_scope
+from geometry import CausalValue, GeometryEntity, Merge, DistinctPoint, DistinctLine, start_name_scope
 from geometry import Point, Line, Segment, Angle, HalfPlane, Circle, SelectAngle
 from geometry import AngleOfFullAngle
 from geometry import SegmentLength, AngleMeasure, LineDirection
@@ -140,12 +140,15 @@ from geometry import LineContainsPoint, CircleContainsPoint, HalfPlaneContainsPo
 
 class Action(object):
 
-  def __init__(self, matched_conclusion, mapping, state, theorem):
+  def __init__(self, matched_conclusion, mapping, state, canvas, theorem):
     self.matched_conclusion = matched_conclusion  # a Conclusion object.
     self.new_objects = sum(matched_conclusion.topological_list, [])
+
     self.mapping = mapping
     self.theorem = theorem
     self.state = state
+    self.canvas = canvas
+    self.other_premises = []  # for subsequent auto actions
 
     self.premise_objects = []
     for x in theorem.premise_objects:
@@ -155,9 +158,14 @@ class Action(object):
         self.premise_objects.append(mapping[x])
 
     # List of Merge() relations associcated with this action.
-    self.merges = [obj for obj in self.new_objects if isinstance(obj, Merge)]
+    self.merges = [
+        (obj, state) for obj in self.new_objects 
+        if isinstance(obj, Merge)
+    ]
 
     if any([isinstance(x, Merge) for x in theorem.conclusion_objects]):
+      # Conclusion object in merge theorems is decided only after matching,
+      # Not when defining the theorem like other theorem types.
       self.conclusion_objects = self.new_objects
     else:
       self.conclusion_objects = []
@@ -171,32 +179,71 @@ class Action(object):
       #     else mapping[x] for x in theorem.conclusion_objects]
     self.duration = None
 
-  def update(self, other):
-    assert isinstance(self.theorem, MergeTheorem), self.theorem
-    assert isinstance(other.theorem, MergeTheorem)
-    assert len(self.matched_conclusion.topological_list) == 1 
-    assert len(other.matched_conclusion.topological_list) == 1 
+  def update(self, other_action):
+    """Called in recursively_auto_merge, which is called *after* eliminate()."""
+    if isinstance(self.theorem, MergeTheorem):
+      assert len(self.matched_conclusion.topological_list) == 1 
 
-    self.matched_conclusion.topological_list[0] += other.matched_conclusion.topological_list[0]
-    self.new_objects += other.new_objects
+    assert isinstance(other_action.theorem, MergeTheorem)
+    assert len(other_action.matched_conclusion.topological_list) == 1 
 
-  def eliminate(self, state, canvas):
-    eqs = self.theorem.eliminate(self.mapping, canvas)
+    for obj in other_action.new_objects:
+      if obj.critical:
+        obj.set_critical(len(self.other_premises))
+
+    self.other_premises += [other_action.premise_objects]
+    self.matched_conclusion.topological_list[0] += other_action.matched_conclusion.topological_list[0]
+    self.new_objects += other_action.new_objects
+    self.merges += other_action.merges
+
+  def action_eliminate_distance(self, state, canvas, chain_position):
+    """Called after adding spatial relations."""
+    eqs = self.theorem.eliminate_distance(self.mapping, canvas, chain_position)
+
+    auto_eq_theorem_and_map = []
+    auto_merge_points = []
+    for eq in eqs:
+      if len(eq) == 4:
+        _, (a, b), (x, y), pos  = eq
+        theorem = theorem_from_type[AutoEqualSegments]
+        mapping = {k: v for k, v in zip(theorem.input, [a, b, x, y])}
+
+        # print('{}{} == {}{} because {}'.format(a.name, b.name, x.name, y.name, pos))
+        auto_eq_theorem_and_map.append((theorem, mapping, pos))
+      elif len(eq) == 3:
+        _, (p1, p2), pos = eq
+        theorem = theorem_from_type[AutoMergePointZeroDistance]
+        mapping = {k: v for k, v in zip(theorem.input, [p1, p2])}
+        # print('Merging {} & {} because {}'.format(p1.name, p2.name, pos))
+        auto_merge_points.append((theorem, mapping, pos))
+        # print('AUTO {} == {}'.format(p1.name, p2.name))
+
+    for theorem, mapping, pos in auto_eq_theorem_and_map:
+      for action in theorem.match_from_input_mapping(state, mapping, canvas=canvas):
+        action.set_chain_position(chain_position, pos)
+        state.add_relations(action.new_objects)
+        break
+
+    return state, auto_merge_points
+
+  def action_eliminate_angle(self, state, canvas, chain_position):
+    """Called after adding spatial relations."""
+    eqs = self.theorem.eliminate_angle(self.mapping, canvas, chain_position)
 
     results = []
-    for (v, a1, a2) in eqs:
-      if isinstance(v, float):
-        angle, angle_sup = geometry.get_constant_angles(v)
+    for (a1, a2, p) in eqs:
+      if isinstance(a1, float):
+        angle, angle_sup = geometry.get_constant_angles(a1)
         theorem = theorem_from_type[AutoAngleEqualConstant]
-
-        for a in [a1, a2]:
-          if len(a) == 2:
-            d1, d2 = a  # d1 > d2.
-            mapping = {k: v for k, v in zip(theorem.input, [d1, d2, angle, angle_sup])}
-          else:
-            _, d1, d2 = a
-            mapping = {k: v for k, v in zip(theorem.input, [d1, d2, angle_sup, angle])}
-          results.append((theorem, mapping))
+        if len(a2) == 2:
+          d1, d2 = a2  # d1 > d2.
+          # print('<{} {}> == {} pi because {}'.format(d1.name, d2.name, a1, p))
+          mapping = {k: v for k, v in zip(theorem.input, [d1, d2, angle, angle_sup])}
+        else:
+          _, d1, d2 = a2
+          # print('pi - <{} {}> == {} pi because {}'.format(d1.name, d2.name, a1, p))
+          mapping = {k: v for k, v in zip(theorem.input, [d1, d2, angle_sup, angle])}
+        results.append((theorem, mapping, p))
       else:
         if len(a1) == len(a2):
           theorem = theorem_from_type[AutoEqualAngles]
@@ -204,31 +251,43 @@ class Action(object):
           theorem = theorem_from_type[AutoEqualAnglesSup]
         d11, d12 = a1[-2:]
         d21, d22 = a2[-2:]
-        mapping = {k: v for k, v in zip(theorem.input, [d11, d12, d21, d22])}
-        results.append((theorem, mapping))
 
-    for theorem, mapping in results:
+        # print('{}<{} {}> == {}<{} {}> because {}'.format(
+        #     'pi-' if len(a1)==3 else '',
+        #     d11.name, d12.name,
+        #     'pi-' if len(a2)==3 else '',
+        #      d21.name, d22.name, p))
+        mapping = {k: v for k, v in zip(theorem.input, [d11, d12, d21, d22])}
+        results.append((theorem, mapping, p))
+
+    for theorem, mapping, p in results:
       for action in theorem.match_from_input_mapping(state, mapping, canvas=canvas):
+        action.set_chain_position(chain_position, p)
         state.add_relations(action.new_objects)
         break
 
     return state
 
-
-  def set_chain_position(self, pos):
+  def set_chain_position(self, pos, auto_pos=None):
     vals = {}
     for obj in self.new_objects:
+
       if obj.chain_position is None:
-        obj.set_chain_position(pos)
+        if isinstance(obj, CausalValue):
+          obj.set_chain_position(pos, auto_pos)
+        else:
+          obj.set_chain_position(pos)
 
       if isinstance(obj, (SegmentHasLength, AngleHasMeasure, LineHasDirection)):
         val = obj.init_list[1]
         if val not in vals:
-          val.set_chain_position(pos)
+          val.set_chain_position(pos, auto_pos)
           vals[val] = True
 
       if isinstance(obj, Merge):
         from_obj, to_obj = obj.init_list
+        # this obj.merge_graph will be set to 
+        # to_obj.merge_graph[state] in state.add_relations
         obj.merge_graph[to_obj][from_obj] = pos
         obj.merge_graph[from_obj][to_obj] = pos
 
@@ -271,8 +330,12 @@ class FundamentalTheorem(object):
     if not hasattr(self, 'names'):
       self.names = {}
 
+    self.post_process_premise_and_conclusion()
     self.gather_objects()
     self.conclusion.gather_val2objs()
+
+  def post_process_premise_and_conclusion(self):
+    pass
 
   def draw(self, mapping, canvas):
     return {}
@@ -305,7 +368,7 @@ class FundamentalTheorem(object):
     except StopIteration:
       return None
 
-    return Action(constructions, mapping, state, self)
+    return Action(constructions, mapping, state, canvas, self)
 
   def match_one_random(self, state, canvas=None):
     try:
@@ -320,7 +383,7 @@ class FundamentalTheorem(object):
     except StopIteration:
       return None
 
-    return Action(constructions, mapping, state, self)
+    return Action(constructions, mapping, state, canvas, self)
 
   def match_all(self, state, randomize=True, canvas=None):
     timeout = []
@@ -337,7 +400,7 @@ class FundamentalTheorem(object):
     try:
       timeout.append(time.time() + self.timeout)
       for constructions, mapping in matches:
-        yield Action(constructions, mapping, state, self)
+        yield Action(constructions, mapping, state, canvas, self)
         timeout[0] = time.time() + self.timeout
     except trieu_graph_match.Timeout:
       return
@@ -357,10 +420,13 @@ class FundamentalTheorem(object):
     )
     timeout.append(time.time() + self.timeout)
     for matched_conclusion, mapping in matches:
-      yield Action(matched_conclusion, mapping, state, self)
+      yield Action(matched_conclusion, mapping, state, canvas, self)
       timeout.append(time.time() + self.timeout)
 
-  def eliminate(self, mapping, canvas):
+  def eliminate_angle(self, mapping, canvas, chain_pos):
+    return []
+
+  def eliminate_distance(self, mapping, canvas, chain_pos):
     return []
 
   @property
@@ -450,7 +516,8 @@ Theorem set 1. Merge (=>)
 
 class MergeTheorem(FundamentalTheorem):
 
-  def build_premise_and_conclusion(self):
+  def post_process_premise_and_conclusion(self):
+    # two merge objects have to be distinct nodes.
     self._distinct = []
     for l in self.conclusion.topological_list:
       for m in l:
@@ -490,82 +557,6 @@ class SameHalfplaneBecauseSameLine(MergeTheorem):
     self.conclusion = Conclusion()
     self.conclusion.add_critical(Merge(hp1, hp2))
     self.names = dict(hp1=hp1, hp2=hp2)
-
-
-# class SameHalfAngleBecauseSameHalfPlane(MergeTheorem):
-
-#   def build_premise_and_conclusion(self):
-#     l1, l2 = Line('l1'), Line('l2')
-#     hp1, hp2 = HalfPlane('hp1'), HalfPlane('hp2')
-#     hangle1, hangle2 = HalfAngle('ha_1'), HalfAngle('ha_2')
-
-#     self.premise = (
-#         divides_halfplanes(l1, hp1) +
-#         divides_halfplanes(l2, hp2) +
-#         hangle_def(hangle1, hp1, hp2) +
-#         hangle_def(hangle2, hp1, hp2) +
-#         distinct(l1, l2)
-#     )
-#     self.trigger_obj = hp1
-#     self.conclusion = Conclusion()
-#     self.conclusion.add_critical(Merge(hangle1, hangle2))
-#     self.names = dict(hp1=hp1, hp2=hp2)
-
-
-# class SameAngleBecauseSameHangle(MergeTheorem):
-
-#   def build_premise_and_conclusion(self):
-#     hangle = HalfAngle('ha')
-#     angle1, angle2 = Angle('a1'), Angle('a2')
-
-#     self.premise = [
-#         HalfAngleOfAngle(hangle, angle1),
-#         HalfAngleOfAngle(hangle, angle2)
-#     ]
-#     self.trigger_obj = hangle
-
-#     self.conclusion = Conclusion()
-
-#     self.conclusion.add_critical(Merge(angle1, angle2))
-#     self.names = dict(a1=angle1, a2=angle2)
-
-
-# class SameFangleBecauseSameLineDirection(MergeTheorem):
-
-#   def build_premise_and_conclusion(self):
-#     l1, l2 = Line('d1'), Line('d2')
-#     d1, d2 = LineDirection('d1'), LineDirection('d2')
-#     fangle1, fangle2 = FullAngle('fa_1'), HalfAngle('fa_2')
-
-#     self.premise = (
-#         [LineHasDirection(l1, d1),
-#          LineHasDirection(l2, d2)] +
-#         distinct(l1, l2) + 
-#         fangle_def(fangle1, d1, d2) +
-#         fangle_def(fangle2, d1, d2) 
-#     )
-#     self.trigger_obj = d1
-#     self.conclusion = Conclusion()
-
-#     self.conclusion.add_critical(Merge(fangle1, fangle2))
-#     self.names = dict(d1=d1, d2=d2)
-
-
-# class SameFangleBecauseSameAngle(MergeTheorem):
-
-#   def build_premise_and_conclusion(self):
-#     angle1, angle2 = Angle('a1'), Angle('a2')
-#     fangle1, fangle2 = FullAngle('fa1'), HalfAngle('fa2')
-
-#     self.premise = (
-#         fangle_def(fangle1, angle1=angle1, angle2=angle2) +
-#         fangle_def(fangle2, angle1=angle1, angle2=angle2)
-#     )
-#     self.trigger_obj = angle1
-#     self.conclusion = Conclusion()
-
-#     self.conclusion.add_critical(Merge(fangle1, fangle2))
-#     self.names = dict(a1=angle1, a2=angle2)
 
 
 class SameLineBecauseSamePoint(MergeTheorem):
@@ -612,32 +603,7 @@ class SamePointBecauseSameLine(MergeTheorem):
     self.names = dict(l1=l1, l2=l2, A=A, B=B)
 
 
-class SamePointBecauseSameSideEqualDistance(MergeTheorem):
-
-  def build_premise_and_conclusion(self):
-    l, l1 = Line('l'), Line('l1')
-    l1_hp = HalfPlane('l1_hp')
-    A, B, C = Point('A'), Point('B'), Point('C')
-    AB, AC = Segment('AB'), Segment('AC')
-
-    self.premise = (
-        collinear(l, A, B, C) +
-        collinear(l1, A) +
-        divides_halfplanes(l1, l1_hp, p1=B) +  # l1!=l, B!=A
-        [HalfPlaneContainsPoint(l1_hp, C)] +  # C!=A
-        segment_def(AB, A, B) +
-        segment_def(AC, A, C) +
-        have_length('1m', AB, AC)
-    )
-
-    self.conclusion = Conclusion()
-    self.conclusion.add_critical(Merge(B, C))
-
-    self.for_drawing = []
-    self.names = dict(A=A, B=B, C=C)
-
-
-class SameLineBecauseSameDirection(MergeTheorem):
+class SameLineBecauseSameDirectionPointTrigger(MergeTheorem):
 
   def build_premise_and_conclusion(self):
     l1, l2 = Line('l1'), Line('l2')
@@ -649,6 +615,7 @@ class SameLineBecauseSameDirection(MergeTheorem):
         # both l1 and l2 has the same direction
         have_direction('d1', l1, l2)
     )
+    self.trigger_obj = A
     self.conclusion = Conclusion()
     self.conclusion.add_critical(Merge(l1, l2))
 
@@ -659,33 +626,96 @@ class SameLineBecauseSameDirection(MergeTheorem):
     return {}
 
 
-class SamePointBecauseSameDistances(MergeTheorem):
+class SameLineBecauseSameDirectionDirectionTrigger(MergeTheorem):
+
+  def build_premise_and_conclusion(self):
+    l1, l2 = Line('l1'), Line('l2')
+    A = Point('A')
+    d1 = LineDirection('d1')
+
+    self.premise = (
+        collinear(l1, A) +
+        collinear(l2, A) +
+        # both l1 and l2 has the same direction
+        have_direction(d1, l1, l2)
+    )
+    self.trigger_obj = d1
+    self.conclusion = Conclusion()
+    self.conclusion.add_critical(Merge(l1, l2))
+
+    self.for_drawing = []
+    self.names = dict(l1=l1, l2=l2)
+
+  def draw(self, mapping, canvas):
+    return {}
+
+
+class SameDirectionBecauseSameLine(MergeTheorem):
 
   def build_premise_and_conclusion(self):
     l = Line('l')
-    AM, BM, AN, BN = map(Segment, 'AM BM AN BN'.split())
-    A, B, M, N = map(Point, 'A B M N'.split())
-
-    length1, length2 = SegmentLength('lAM'), SegmentLength('lBM')
+    d1, d2 = LineDirection('d1'), LineDirection('d2')
 
     self.premise = (
-        collinear(l, A, B, M, N) +
-        distinct(A, B) +
-        segment_def(AM, A, M) +
-        segment_def(BM, B, M) +
-        segment_def(AN, A, N) +
-        segment_def(BN, B, N) +
-        have_length(length1, AM, AN) +
-        have_length(length2, BM, BN)
+        have_direction(d1, l) +
+        have_direction(d2, l)
     )
-
+    self.trigger_obj = l
     self.conclusion = Conclusion()
-    self.conclusion.add_critical(Merge(M, N))
-    self.for_drawing = [A, B, M, N]
-    self.names = dict(A=A, B=B, M=M, N=N)
+    self.conclusion.add_critical(Merge(d1, d2))
+
+    self.for_drawing = []
+    self.names = dict(d1=d1, d2=d2)
 
   def draw(self, mapping, canvas):
-    # return canvas.remove_point(N)
+    return {}
+
+
+class SameAngleXXBecauseSameDirection(MergeTheorem):
+
+  def build_premise_and_conclusion(self):
+    l = Line('l')
+    d1, d2 = LineDirection('d1'), LineDirection('d2')
+    d3 = d1
+
+    angle13_xx, _, fangle13_def = fangle_def(d2, d1)
+    angle32_xx, _, fangle32_def = fangle_def(d2, d3)
+
+    self.premise = (
+        fangle13_def + fangle32_def
+    )
+    self.trigger_obj = d1
+    self.conclusion = Conclusion()
+    self.conclusion.add_critical(Merge(angle13_xx, angle32_xx))
+
+    self.for_drawing = []
+    self.names = dict(d1=d1, d2=d2)
+
+  def draw(self, mapping, canvas):
+    return {}
+
+
+class SameAngleXOBecauseSameDirection(MergeTheorem):
+
+  def build_premise_and_conclusion(self):
+    l = Line('l')
+    d1, d2 = LineDirection('d1'), LineDirection('d2')
+    d3 = d1
+
+    _, angle13_xo, fangle13_def = fangle_def(d2, d1)
+    _, angle32_xo, fangle32_def = fangle_def(d2, d3)
+
+    self.premise = (
+        fangle13_def + fangle32_def
+    )
+    self.trigger_obj = d1
+    self.conclusion = Conclusion()
+    self.conclusion.add_critical(Merge(angle13_xo, angle32_xo))
+
+    self.for_drawing = []
+    self.names = dict(d1=d1, d2=d2)
+
+  def draw(self, mapping, canvas):
     return {}
 
 
@@ -694,7 +724,7 @@ class SamePointBecauseSameDistances(MergeTheorem):
 #   def build_premise_and_conclusion(self):
 #     self.premise = []
 
-#     self.conclusion = Conclusion()
+#     self.conclusion = Conclusion()d
 
 #     half pi = geometry.get_half pi()
 #     half pi_measure = AngleMeasure('^90degree')
@@ -725,7 +755,9 @@ class ConstructMidPoint(FundamentalTheorem):
     ))
 
     self.for_drawing = [C, A, B, l]
+    self.for_distance_eliminate = [C, A, B, l]
     self.names = dict(A=A, B=B)
+    self.args = [A, B]
     self.short_name = 'midp'
 
   def draw(self, mapping, canvas):
@@ -734,6 +766,13 @@ class ConstructMidPoint(FundamentalTheorem):
     info.update(canvas.add_midpoint(C, A, B))
     return info
 
+  def eliminate_distance(self, mapping, canvas, chain_pos):
+    C, A, B, l = map(mapping.get, self.for_distance_eliminate)
+    # l = canvas.lines[l]
+    # C, A, B = map(canvas.points.get, [C, A, B])
+    canvas.add_points(l, C, A, B)
+    return canvas.eliminate_distance((C, A), (B, C), chain_pos)
+    
 
 class ConstructMirrorPoint(FundamentalTheorem):
 
@@ -821,6 +860,7 @@ class ConstructIntersectLineLine(FundamentalTheorem):
     self.for_drawing = [X, l1, l2]
 
     self.names = dict(l1=l1, l2=l2)
+    self.args = [l1, l2]
     self.short_name = 'lineXline'
 
   def draw(self, mapping, canvas):
@@ -862,6 +902,7 @@ class ConstructIntersectSegmentLine(FundamentalTheorem):
     self.for_drawing = [C, l, A, B, ab]
 
     self.names = dict(l=l, A=A, B=B)
+    self.args = l, A, B
     self.short_name = 'lineXsegment'
 
   def draw(self, mapping, canvas):
@@ -875,14 +916,116 @@ class ConstructIntersectSegmentLine(FundamentalTheorem):
     return 'Construct Line-Segment Intersection'
 
 
-class ConstructPerpendicularLineFromPointOn(FundamentalTheorem):
+# class ConstructPerpendicularLineFromPointOn(FundamentalTheorem):
+
+#   def build_premise_and_conclusion(self):
+#     l1 = Line('l1')
+#     P = Point('P')
+
+#     # If there is a line l1 and a line P
+#     self.premise = collinear(l1, P) # divides_halfplanes(l1, hp1, hp2)
+
+#     # Then:
+#     self.conclusion = Conclusion()
+
+#     d1, d2 = LineDirection('d1'), LineDirection('d2')
+
+#     # Suppose l1 has direction d1
+#     self.conclusion.add(LineHasDirection(l1, d1))
+
+#     l2 = Line('l2')
+
+#     # Suppose d2 has angle measure 90 to d1
+#     angle12, angle21, angle12_def = fangle_def(d1, d2)
+#     self.conclusion.add(*(
+#         angle12_def + have_measure('m', angle12, angle21)
+#     ))  # d2 related
+
+#     # Then l2 goes through P, has direction d2 and distinct to l1
+#     self.conclusion.add_critical(*(  # l2 related.
+#         collinear(l2, P) + distinct(l1, l2) + [LineHasDirection(l2, d2)]
+#     ))
+
+#     self.for_drawing = [l2, P, l1]
+#     self.for_angle_eliminate = [d1, l1, d2, l2]
+
+#     self.names = dict(P=P, l=l1)
+
+#   def draw(self, mapping, canvas):
+#     l2, P, l1 = map(mapping.get, self.for_drawing)
+#     info = canvas.add_perp_line_from_point_on(l2, P, l1)
+#     return info
+
+#   def eliminate(self, mapping, canvas):
+#     d1, l1, d2, l2 = map(mapping.get, self.for_angle_eliminate)
+#     d1.line = l1
+#     d2.line = l2
+#     return canvas.eliminate((d1, d2), (d1, d2), same_sign=False)
+
+
+# class ConstructPerpendicularLineFromPointOut(FundamentalTheorem):
+
+#   def build_premise_and_conclusion(self):
+#     l1 = Line('l1')
+#     P = Point('P')
+
+#     # If there is a line l1 and a line P
+#     self.premise = collinear(l1, P) # divides_halfplanes(l1, hp1, hp2)
+
+#     # Then:
+#     self.conclusion = Conclusion()
+
+#     d1, d2 = LineDirection('d1'), LineDirection('d2')
+
+#     # Suppose l1 has direction d1
+#     self.conclusion.add(LineHasDirection(l1, d1))
+
+#     l2 = Line('l2')
+
+#     # Suppose d2 has angle measure 90 to d1
+#     angle12, angle21, angle12_def = fangle_def(d1, d2)
+#     self.conclusion.add(*(
+#       angle12_def + have_measure('m', angle12, angle21)))  # d2 related
+
+#     # Then l2 goes through P, has direction d2 and distinct to l1
+#     self.conclusion.add_critical(*(  # l2 related.
+#         collinear(l2, P) + distinct(l1, l2) + [LineHasDirection(l2, d2)]
+#     ))
+
+#     X = Point('X')
+#     self.conclusion.add(*(
+#         collinear(l1, X) + collinear(l2, X)
+#     ))
+
+#     self.for_drawing = [l2, P, l1, X]
+#     self.for_angle_eliminate = [d1, l1, d2, l2]
+#     self.names = dict(P=P, l=l1)
+
+#   def draw(self, mapping, canvas):
+#     l2, P, l1, X = map(mapping.get, self.for_drawing)
+#     return canvas.add_perp_line_from_point_out(l2, X, P, l1)
+
+#   def eliminate(self, mapping, canvas):
+#     d1, l1, d2, l2 = map(mapping.get, self.for_angle_eliminate)
+#     d1.line = l1
+#     d2.line = l2
+#     eqs = canvas.eliminate((d1, d2), (d1, d2), same_sign=False)
+#     for (v, la, lb) in eqs:
+#       print(v, la.name, lb.name)
+
+
+class ConstructPerpendicularLineFromPoint(FundamentalTheorem):
 
   def build_premise_and_conclusion(self):
     l1 = Line('l1')
     P = Point('P')
 
+    some_hp1 = HalfPlane('some_hp1')
+    some_hp2 = HalfPlane('some_hp2')
+
     # If there is a line l1 and a line P
-    self.premise = collinear(l1, P) # divides_halfplanes(l1, hp1, hp2)
+    self.premise = [LineBordersHalfplane(l1, some_hp1),
+                    HalfPlaneContainsPoint(some_hp2, P)]  # no particular constraints between l1 and P:
 
     # Then:
     self.conclusion = Conclusion()
@@ -894,55 +1037,9 @@ class ConstructPerpendicularLineFromPointOn(FundamentalTheorem):
 
     l2 = Line('l2')
 
-    # Suppose d2 has angle measure 90 to d1
+    # Suppose d2 create an angle to d1
     angle12, angle21, angle12_def = fangle_def(d1, d2)
-    self.conclusion.add(*(
-        angle12_def + have_measure('m', angle12, angle21)
-    ))  # d2 related
-
-    # Then l2 goes through P, has direction d2 and distinct to l1
-    self.conclusion.add_critical(*(  # l2 related.
-        collinear(l2, P) + distinct(l1, l2) + [LineHasDirection(l2, d2)]
-    ))
-
-    self.for_drawing = [l2, P, l1]
-    self.for_eliminate = [d1, l1, d2, l2]
-
-    self.names = dict(P=P, l=l1)
-
-  def draw(self, mapping, canvas):
-    l2, P, l1 = map(mapping.get, self.for_drawing)
-    info = canvas.add_perp_line_from_point_on(l2, P, l1)
-    return info
-
-  def eliminate(self, mapping, canvas):
-    d1, l1, d2, l2 = map(mapping.get, self.for_eliminate)
-    d1.line = l1
-    d2.line = l2
-    return canvas.eliminate((d1, d2), (d1, d2), same_sign=False)
-
-
-class ConstructPerpendicularLineFromPointOut(FundamentalTheorem):
-
-  def build_premise_and_conclusion(self):
-    l1 = Line('l1')
-    P = Point('P')
-
-    # If there is a line l1 and a line P
-    self.premise = collinear(l1, P) # divides_halfplanes(l1, hp1, hp2)
-
-    # Then:
-    self.conclusion = Conclusion()
-
-    d1, d2 = LineDirection('d1'), LineDirection('d2')
-
-    # Suppose l1 has direction d1
-    self.conclusion.add(LineHasDirection(l1, d1))
-
-    l2 = Line('l2')
-
-    # Suppose d2 has angle measure 90 to d1
-    angle12, angle21, angle12_def = fangle_def(d1, d2)
+    # such that angle12 = angle21 (therefore the elimination must derive 0.5pi)
     self.conclusion.add(*(
       angle12_def + have_measure('m', angle12, angle21)))  # d2 related
 
@@ -951,27 +1048,33 @@ class ConstructPerpendicularLineFromPointOut(FundamentalTheorem):
         collinear(l2, P) + distinct(l1, l2) + [LineHasDirection(l2, d2)]
     ))
 
+    # If possible, create the intersection.
     X = Point('X')
     self.conclusion.add(*(
         collinear(l1, X) + collinear(l2, X)
     ))
 
     self.for_drawing = [l2, P, l1, X]
-    self.for_eliminate = [d1, l1, d2, l2]
+    self.for_angle_eliminate = [d1, l1, d2, l2]
     self.names = dict(P=P, l=l1)
+    self.args = P, l1
+    self._distinct = [(l1, l2)]  # this is to say P & X can be the same!
+
+    self.short_name = 'perp'
 
   def draw(self, mapping, canvas):
     l2, P, l1, X = map(mapping.get, self.for_drawing)
-    return canvas.add_perp_line_from_point_out(l2, X, P, l1)
+    if X != P:
+      return canvas.add_perp_line_from_point_out(l2, X, P, l1)
+    else:
+      return canvas.add_perp_line_from_point_on(l2, P, l1)
 
-  def eliminate(self, mapping, canvas):
-    d1, l1, d2, l2 = map(mapping.get, self.for_eliminate)
-    d1.line = l1
-    d2.line = l2
-    eqs = canvas.eliminate((d1, d2), (d1, d2), same_sign=False)
-    for (v, la, lb) in eqs:
-      print(v, la.name, lb.name)
-
+  def eliminate_angle(self, mapping, canvas, chain_pos):
+    d1, l1, d2, l2 = map(mapping.get, self.for_angle_eliminate)
+    d1.line = canvas.lines[l1]
+    d2.line = canvas.lines[l2]
+    return canvas.eliminate_angle(
+        (d1, d2), (d1, d2), same_sign=False, chain_pos=chain_pos)
 
 
 class ConstructAngleBisector(FundamentalTheorem):
@@ -983,7 +1086,7 @@ class ConstructAngleBisector(FundamentalTheorem):
 
     self.premise = [
         DistinctLine(l1, l2),
-        LineContainsPoint(l1, A),  # So that l1 and l2 is not perpendicular.
+        LineContainsPoint(l1, A),  # So that l1 and l2 is not parallel.
         LineContainsPoint(l2, A),
         LineBordersHalfplane(l1, l1_hp),
         LineBordersHalfplane(l2, l2_hp),
@@ -1005,9 +1108,9 @@ class ConstructAngleBisector(FundamentalTheorem):
     m2 = AngleMeasure('m2')
     angle13_xx, angle13_xo, fangle13_def = fangle_def(d3, d1)
     angle32_xx, angle32_xo, fangle32_def = fangle_def(d3, d2)
+
     # Unfortunately, there are two satisfying d3: inner bisector & outer.
     # So we have to numerically check using SelectAngle()
-
     angle12 = SelectAngle(angle32_xx, angle32_xo, l1_hp, l2_hp)
 
     self.conclusion.add(*(
@@ -1026,24 +1129,28 @@ class ConstructAngleBisector(FundamentalTheorem):
     ))
 
     self.for_drawing = [l3, A, l1, l1_hp, l2, l2_hp]
-    self.for_eliminate = [d1, l1, d2, l2, d3, l3, l1_hp, l2_hp]
+    self.for_angle_eliminate = [d1, l1, d2, l2, d3, l3, l1_hp, l2_hp]
 
     self.names = dict(hp1=l1_hp, hp2=l2_hp)
+    self.args = [l1_hp, l2_hp]
     self.short_name = 'angle_bisect'
+
 
   def draw(self, mapping, canvas):
     l3, A, l1, hp1, l2, hp2 = map(mapping.get, self.for_drawing)
     return canvas.add_angle_bisector(l3, A, l1, hp1, l2, hp2)
 
-  def eliminate(self, mapping, canvas):
-    d1, l1, d2, l2, d3, l3, l1_hp, l2_hp = map(mapping.get, self.for_eliminate)
+  def eliminate_angle(self, mapping, canvas, chain_pos):
+    d1, l1, d2, l2, d3, l3, l1_hp, l2_hp = map(mapping.get, self.for_angle_eliminate)
     d1.line = canvas.lines[l1]
     d2.line = canvas.lines[l2]
     d3.line = canvas.lines[l3]
-    return canvas.eliminate(
+    
+    return canvas.eliminate_angle(
         (d1, d3), 
         (d2, d3), 
-        same_sign=l1_hp.sign != l2_hp.sign)
+        same_sign=l1_hp.sign != l2_hp.sign,
+        chain_pos=chain_pos)
 
 
 class AutoAngleEqualConstant(FundamentalTheorem):
@@ -1061,10 +1168,13 @@ class AutoAngleEqualConstant(FundamentalTheorem):
     self.conclusion.add(*ab_def)
     m_const = AngleMeasure('m_const')
     m_const_sup = AngleMeasure('m_const_sup')
+
     self.conclusion.add(*have_measure(m_const, const))
     self.conclusion.add(*have_measure(m_const_sup, const_sup))
+
     self.conclusion.add_critical(*have_measure(m_const, ab_xo))
     self.conclusion.add_critical(*have_measure(m_const_sup, ab_xx))
+
     self._distinct = [(da, db)]
     self.input = [da, db, const, const_sup]
 
@@ -1086,6 +1196,7 @@ class AutoEqualAngles(FundamentalTheorem):
     self.conclusion.add(*mn_def)
     m_ab_xx = AngleMeasure('m_ab_xx')
     m_ab_xo = AngleMeasure('m_ab_xo')
+
     self.conclusion.add(*have_measure(m_ab_xx, ab_xx))
     self.conclusion.add(*have_measure(m_ab_xo, ab_xo))
     self.conclusion.add_critical(*have_measure(m_ab_xx, mn_xx))
@@ -1110,11 +1221,41 @@ class AutoEqualAnglesSup(FundamentalTheorem):
     self.conclusion.add(*mn_def)
     m_ab_xx = AngleMeasure('m_ab_xx')
     m_ab_xo = AngleMeasure('m_ab_xo')
+
     self.conclusion.add(*have_measure(m_ab_xx, ab_xx))
     self.conclusion.add(*have_measure(m_ab_xo, ab_xo))
+
     self.conclusion.add_critical(*have_measure(m_ab_xo, mn_xx))
     self.conclusion.add_critical(*have_measure(m_ab_xx, mn_xo))
     self.input = [da, db, dm, dn]
+
+
+class AutoEqualSegments(FundamentalTheorem):
+
+  def build_premise_and_conclusion(self):
+
+    self.premise = []
+
+    self.conclusion = Conclusion()
+    A, B, X, Y = Point('A'), Point('B'), Point('X'), Point('Y')
+    conclusion_add_equal_segments(self.conclusion, A, B, X, Y)
+    self.input = [A, B, X, Y]
+
+
+class AutoMergePointZeroDistance(MergeTheorem):
+
+  def build_premise_and_conclusion(self):
+    self.premise = []
+
+    self.conclusion = Conclusion()
+    A, B = Point('A'), Point('B')
+
+    self.merge_pair = A, B
+    self.conclusion.add_critical(Merge(A, B))
+    
+    self.input = [A, B]
+    self.names = dict(A=A, B=B)
+
 
 
 class ConstructMirrorAngle(FundamentalTheorem):
@@ -1205,6 +1346,7 @@ class ConstructLine(FundamentalTheorem):
 
     self.for_drawing = [ab, A, B]
     self.names = dict(A=A, B=B)
+    self.args = A, B
     self.short_name = 'line'
 
   def draw(self, mapping, canvas):
@@ -1282,7 +1424,7 @@ class ConstructThirdLine(FundamentalTheorem):
 #     super(OppositeAngles, self).__init__()
 
 
-class ParallelBecauseCorrespondingAngles(FundamentalTheorem):
+class ParallelBecauseCorrespondingAngles(MergeTheorem):
 
   def build_premise_and_conclusion(self):
     l1, l2, l = Line('l1'), Line('l2'), Line('l')
@@ -1302,46 +1444,10 @@ class ParallelBecauseCorrespondingAngles(FundamentalTheorem):
     )
 
     self.conclusion = Conclusion()
-    self.conclusion.add_critical(LineHasDirection(l1, d2))
+    self.conclusion.add_critical(Merge(d1, d2))
 
     self.names = dict(l=l, l1=l1, l2=l2)
     self.short_name = 'ang=>merge_d'
-
-
-class EqualAnglesBecauseParallel(FundamentalTheorem):
-
-  def build_premise_and_conclusion(self):
-    A, B = map(Point, 'AB')
-    l, l1, l2 = map(Line, 'l l1 l2'.split())
-    l_hp1, l_hp2 = HalfPlane('l_hp1'), HalfPlane('l_hp2')
-    l1_hp, l2_hp = HalfPlane('l1_hp'), HalfPlane('l2_hp')
-
-    self.premise = (
-        collinear(l, A, B) +
-        collinear(l1, A) +
-        collinear(l2, B) +
-        divides_halfplanes(l, l_hp1, l_hp2) +
-        divides_halfplanes(l1, l1_hp, p1=B) +  # l1 != l, l1 != l2
-        divides_halfplanes(l2, l2_hp, p1=A) +  # l2 != l, A != B
-        have_direction('d1', l1, l2)
-    )
-
-    angle11, angle12, angle21, angle22 = map(
-        Angle, '^11 ^12 ^21 ^22'.split())
-    self.conclusion = Conclusion()
-    self.conclusion.add(*angle_def(angle11, l_hp1, l1_hp))
-    self.conclusion.add(*angle_def(angle12, l_hp1, l2_hp))
-    self.conclusion.add(*angle_def(angle21, l_hp2, l1_hp))
-    self.conclusion.add(*angle_def(angle22, l_hp2, l2_hp))
-
-    m1, m2 = AngleMeasure('1"'), AngleMeasure('2"')
-    self.conclusion.add(AngleHasMeasure(angle11, m1))
-    self.conclusion.add_critical(AngleHasMeasure(angle22, m1))
-
-    self.conclusion.add(AngleHasMeasure(angle12, m2))
-    self.conclusion.add_critical(AngleHasMeasure(angle21, m2))
-
-    self.names = dict(l=l, l1=l1, l2=l2)
 
 
 class ConstructNormalTriangle(FundamentalTheorem):
@@ -1368,12 +1474,21 @@ class ConstructNormalTriangle(FundamentalTheorem):
 
     self.conclusion = conclusion
     self.for_drawing = [A, B, C, ab, bc, ca]
+    self.for_distance_eliminate = self.for_drawing
     self.names = {}
+    self.short_name = 'triangle'
 
   def draw(self, mapping, canvas):
     A, B, C, ab, bc, ca = map(mapping.get, self.for_drawing)
     return canvas.add_normal_triangle(A, B, C, ab, bc, ca)
 
+  def eliminate_distance(self, mapping, canvas, chain_pos):
+    A, B, C, ab, bc, ca= map(mapping.get, self.for_distance_eliminate)
+    canvas.add_free_points(ab, A, B)
+    canvas.add_free_points(bc, B, C)
+    canvas.add_free_points(ca, C, A)
+    return []
+    
 
 class ConstructSideIsoscelesTriangle(FundamentalTheorem):
 
@@ -1403,12 +1518,21 @@ class ConstructSideIsoscelesTriangle(FundamentalTheorem):
 
     self.conclusion = conclusion
     self.for_drawing = [A, B, C, ab, bc, ca]
+    self.for_distance_eliminate = [ab, ca, A, B, C]
     self.names = {}
     self.short_name = 'side_isos'
   
   def draw(self, mapping, canvas):
     A, B, C, ab, bc, ca = map(mapping.get, self.for_drawing)
     return canvas.add_isosceles_triangle(A, B, C, ab, bc, ca)
+
+  def eliminate_distance(self, mapping, canvas, chain_pos):
+    ab, ca, A, B, C = map(mapping.get, self.for_distance_eliminate)
+    canvas.add_free_points(ab, A, B)
+    canvas.add_free_points(ca, A)
+    canvas.add_points(ca, C)
+    return canvas.eliminate_distance((A, B), (A, C), chain_pos)
+
 
 
 class ConstructAngleIsoscelesTriangle(FundamentalTheorem):
@@ -1444,7 +1568,8 @@ class ConstructAngleIsoscelesTriangle(FundamentalTheorem):
 
     self.conclusion = conclusion
     self.for_drawing = [A, B, C, ab, bc, ca]
-    self.for_eliminate = [ab, d_ab, bc, d_bc, ca, d_ca]
+    self.for_angle_eliminate = [ab, d_ab, bc, d_bc, ca, d_ca]
+    self.for_distance_eliminate = [ab, bc, ca, A, B, C]
     self.names = {}
     self.short_name = 'ang_isos'
   
@@ -1452,13 +1577,27 @@ class ConstructAngleIsoscelesTriangle(FundamentalTheorem):
     A, B, C, ab, bc, ca = map(mapping.get, self.for_drawing)
     return canvas.add_isosceles_triangle(A, B, C, ab, bc, ca)
 
-  def eliminate(self, mapping, canvas):
-    ab, d_ab, bc, d_bc, ca, d_ca = map(mapping.get, self.for_eliminate)
+  def eliminate_angle(self, mapping, canvas, chain_pos):
+    ab, d_ab, bc, d_bc, ca, d_ca = map(mapping.get, self.for_angle_eliminate)
     d_ab.line = canvas.lines[ab]
     d_bc.line = canvas.lines[bc]
     d_ca.line = canvas.lines[ca]
-    canvas.add_free_variable(d_ab, d_bc)
-    return canvas.eliminate((d_ab, d_bc), (d_ca, d_bc), same_sign=False)
+    canvas.add_free_directions(d_ab, d_bc)
+    return canvas.eliminate_angle(
+        (d_ab, d_bc), (d_ca, d_bc), 
+        same_sign=False, 
+        chain_pos=chain_pos)
+  
+  def eliminate_distance(self, mapping, canvas, chain_pos):
+    ab, bc, ca, A, B, C = map(mapping.get, self.for_distance_eliminate)
+    # ab, bc, ca = map(canvas.lines.get, [ab, bc, ca])
+    # A, B, C = map(canvas.points.get, [A, B, C])
+    canvas.add_free_points(ab, A, B)
+    canvas.add_free_points(bc, B, C)
+    canvas.add_free_points(ca, A)
+    canvas.add_points(ca, C)
+    return []
+    
 
 
 class ConstructEquilateralTriangle(FundamentalTheorem):
@@ -1751,6 +1890,7 @@ class SAS(Congruences):
     self.for_drawing = [ca, A, C, fd, D, F]
 
     self.names = dict(A=A, B=B, C=C, D=D, E=E, F=F)
+    self.args = [B, A, C, E, D, F]
 
   def draw(self, mapping, canvas):
     ca, A, C, fd, D, F = map(mapping.get, self.for_drawing)
@@ -1815,7 +1955,9 @@ class SSS(Congruences):
 
     self.for_drawing = [ab, bc, ca, de, ef, fd,
                         A, B, C, D, E, F]
+    
     self.names = dict(A=A, B=B, C=C, D=D, E=E, F=F)
+    self.args = [A, B, C, D, E, F]
 
   def draw(self, mapping, canvas):
     (ab, bc, ca, de, ef, fd,
@@ -1901,12 +2043,22 @@ class ASA(Congruences):
 
     self.names = dict(A=A, B=B, C=C, D=D, F=F, de=de, ef=ef)
     self.for_drawing = [E, de, ef]
+    self.args = [A, C, B, D, F, de, ef]
+    self.for_distance_eliminate = [ab, A, B, de, D, E]
 
   def draw(self, mapping, canvas):
     E, de, ef = map(mapping.get, self.for_drawing)
     if E not in canvas.points:
       return canvas.add_intersect_line_line(E, de, ef)
     return {}
+
+  def eliminate_distance(self, mapping, canvas, chain_pos):
+    ab, A, B, de, D, E = map(mapping.get, self.for_distance_eliminate)
+    # ab, de = map(canvas.lines.get, [ab, de])
+    # A, B, D, E = map(canvas.points.get, [A, B, D, E])
+    canvas.add_points(ab, A, B)
+    canvas.add_points(de, D, E)
+    return canvas.eliminate_distance((A, B), (D, E), chain_pos)
 
   @property
   def timeout(self):
@@ -1917,14 +2069,82 @@ class ASA(Congruences):
     return 'Equal Triangles: Angle-Side-Angle'
 
 
+class ConstructFreePoint1Halfplane(FundamentalTheorem):
+
+  def build_premise_and_conclusion(self):
+    l = Line('l')
+    hp = HalfPlane('hp')
+
+    self.premise = [LineBordersHalfplane(l, hp)]
+
+    self.conclusion = Conclusion()
+
+    X = Point('X')
+    self.conclusion.add_critical(
+        HalfPlaneContainsPoint(hp, X))
+
+    self.for_drawing = [X, l, hp]
+
+    self.names = dict(l=l, hp=hp)
+    self.args = [l, hp]
+    self.short_name = 'p_on_1hp'
+
+  def draw(self, mapping, canvas):
+    X, l, hp = map(mapping.get, self.for_drawing)
+    return canvas.add_free_point_1hp(X, l, hp)
+
+
+class ConstructFreePoint2Halfplane(FundamentalTheorem):
+
+  def build_premise_and_conclusion(self):
+    A = Point('A')
+    l1, l2 = Line('l1'), Line('l2')
+    hp1, hp2 = HalfPlane('hp1'), HalfPlane('hp2')
+
+    self.premise = (
+        distinct(l1, l2) +
+        divides_halfplanes(l1, hp1) +
+        divides_halfplanes(l2, hp2) +
+        collinear(l1, A) +
+        collinear(l2, A)
+    )
+
+    self.conclusion = Conclusion()
+
+    X = Point('X')
+    self.conclusion.add_critical(
+        HalfPlaneContainsPoint(hp1, X),
+        HalfPlaneContainsPoint(hp2, X),
+        DistinctPoint(X, A))
+
+    self.for_drawing = [X, l1, l2, hp1, hp2]
+
+    self.names = dict(l1=l1, hp1=hp1, l2=l2, hp2=hp2)
+    self.args = [l1, hp1, l2, hp2]
+    self.short_name = 'p_on_2hp'
+
+  def draw(self, mapping, canvas):
+    X, l1, hp1, l2, hp2 = map(mapping.get, self.for_drawing)
+    return canvas.add_free_point_2hp(X, l1, hp1, l2, hp2)
+
 
 all_theorems = [
 # I. Construction elementary objects (18)
 #  A. Construct a Free Point (5)
 #   1. In N>=1 halfplane
+    # ConstructFreePoint1Halfplane(),
+    # ConstructFreePoint2Halfplane(),
+    # ConstructFreePoint3Halfplane(),
+    # ConstructFreePoint4Halfplane(),
 #   2. On a line
+    # ConstructFreePointOnLine(),
 #   3. On a line & In N>=1 halfplane
+    # ConstructFreePointLine1Halfplane(),
+    # ConstructFreePointLine2Halfplane(),
+    # ConstructFreePointLine3Halfplane(),
+    # ConstructFreePointLine4Halfplane(),
 #   4. On a segment
+    # ConstructFreePointSegment(),
 #   5. On a segment & In N>=1 halfplane
 #  B. Construct a Free Line  (5)
 #   1. Through a Point
@@ -1971,11 +2191,13 @@ all_theorems = [
     ConstructAngleBisector(),
 #   5. Mirror angle
 #   6. Copy angle.
-#   7. Parallel line through a point.
+#   7. Copy Ratio A-M-B => C-X-D
+#   8. Parallel line through a point.
     ConstructParallelLine(),
-#   8. Perpendicular line
-    ConstructPerpendicularLineFromPointOn(),
-    ConstructPerpendicularLineFromPointOut(),
+#   9. Perpendicular line
+    # ConstructPerpendicularLineFromPointOn(),
+    # ConstructPerpendicularLineFromPointOut(),
+    ConstructPerpendicularLineFromPoint(),
 #   9. Perpendicular bisector
 #   10. Segment bisector
 #   11. Rotate about Point A such that X -> Y (Given AX = AY)
@@ -1992,17 +2214,21 @@ all_theorems = [
 #   5. Ratio + Angle -> Ratios (RAR)
 #   6. Ratio -> Angles (RRR)
 #   6. Angles -> Ratio (AAA)
-#   9. Eq Angles -> Parallel
-#   10. Eq Ratios -> Same Length
+#   10. Eq Ratios -> Bisector?
 #  B. Gaussian Elimination deductions
+#   1.
     AutoEqualAngles(),
+#   2.
     AutoEqualAnglesSup(),
+#   3.
     AutoAngleEqualConstant(),
+    AutoEqualSegments(),
+    AutoMergePointZeroDistance(),
 # V. Merges (12)
             # Circle-HalfPlane
             #   |   /
             #   |  /
-            # Point--Segment--Length--Ratio--Value
+            # Point--Segment--Length  # --Ratio--Value
             #   |  \
             #   |   \
             # Line---HalfPlane
@@ -2020,19 +2246,19 @@ all_theorems = [
 #   5. Measure => Direction
     ParallelBecauseCorrespondingAngles(),
 #   6. Direction => Line
-    SameLineBecauseSameDirection(),
-#   7. Length => Point (2D)
-    # SamePointBecauseSameMidpoint(),
-    # SamePointBecauseEqualSegments(),
-#   8. Length => Point (3D)
+    SameLineBecauseSameDirectionPointTrigger(),
+    SameLineBecauseSameDirectionDirectionTrigger(),
 #  B. Auto Forward
 #   8. Point => Segment -> Length
-    # SameSegmentBecauseSamePoint()
+    SameSegmentBecauseSamePoint(),
 #   9. Length => Ratio -> Value
 #   10. Line => Halfplanes
-    # SameHalfplaneBecauseSameLine(),
+    SameHalfplaneBecauseSameLine(),
 #   11. Line -> Direction => FullAngles
-#   12. FullAngles => Angles -> Angle
+    SameDirectionBecauseSameLine(),
+    SameAngleXXBecauseSameDirection(),
+    SameAngleXOBecauseSameDirection(),
+#   12. FullAngles => Angles -> Measure
 # VI. High level theorems
 #   1. Thales
 #   2. Intersecting heights, angle/side/perp bisectors
@@ -2078,18 +2304,22 @@ def auto_merge_theorems_from_trigger_obj(obj):
     return [
         theorem_from_name[name]
         for name in ['SameSegmentBecauseSamePoint',
-                     'SameLineBecauseSamePoint']
+                     'SameLineBecauseSamePoint',
+                     'SameLineBecauseSameDirectionPointTrigger']
     ]
   if isinstance(obj, Line):
     return [
         theorem_from_name[name]
         for name in ['SameHalfplaneBecauseSameLine',
-                     'SamePointBecauseSameLine']
+                     'SamePointBecauseSameLine',
+                     'SameDirectionBecauseSameLine']
     ]
-  if isinstance(obj, HalfPlane):
+  if isinstance(obj, LineDirection):
     return [
         theorem_from_name[name]
-        for name in ['SameAngleBecauseSameHalfPlane']
+        for name in ['SameLineBecauseSameDirectionDirectionTrigger',
+                     'SameAngleXXBecauseSameDirection',
+                     'SameAngleXOBecauseSameDirection']
     ]
   return []
   
