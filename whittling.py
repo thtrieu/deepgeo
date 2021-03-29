@@ -218,7 +218,7 @@ def whittle_from(final_state, queue, action_chain,
   # and a list of constructions, if action is not needed but only
   # part of its conclusion.topological_list.
 
-  # Keep track of the head of the queue 
+  # i keeps track of the head of the queue 
   # we don't pop things from queue but move this pointer ahead.
   i = 0
   non_critical_count = 0  # count when the whole premise is not needed.
@@ -233,10 +233,12 @@ def whittle_from(final_state, queue, action_chain,
     i += 1  # move on.
 
     with open('whittle_save.txt', 'a') as f:
-      f.write('>>> {} =>  {}\n'.format(
-          name_map(prev_query),
-          name_map(queue[len(copy_queue):])
-      ))
+      from_q = final_state.name_map(prev_query)
+      to_q = final_state.name_map(queue[len(copy_queue):])
+      if to_q != [from_q] and to_q:
+        if len(to_q) == 1:
+          to_q = to_q[0]
+        f.write('>>> {} =>  {}\n'.format(from_q, to_q))
     copy_queue = list(queue)
     prev_query = query
 
@@ -275,7 +277,10 @@ def whittle_from(final_state, queue, action_chain,
       critical = True
       pos = query
     else:  # not an integer but an obj or rel.
-      pos = query.chain_position
+      try:
+        pos = query.chain_position
+      except:
+        import pdb; pdb.set_trace()
       if pos is None:    # at init state already
         continue
       critical = query.critical
@@ -284,6 +289,9 @@ def whittle_from(final_state, queue, action_chain,
     if (whittled_state and whittled_state[pos] == True  # by a prev whittle_from()
         or whittled[pos] == True):   # or by this one.
       continue
+
+    # if query.name == 'l5|d4':
+    #   import pdb; pdb.set_trace()
 
     action = action_chain[pos]
     state = action.state
@@ -308,18 +316,23 @@ def whittle_from(final_state, queue, action_chain,
       merges = ddict(lambda: [])
 
       # Add everything in the premise to dependents.
+      # premise_objects = critical
+      # if isinstance(premise_objects, bool):
+      #   premise_objects = action.premise_objects
       if not isinstance(critical, bool):
         premise_objects = action.other_premises[critical]
       else:
         premise_objects = action.premise_objects
+
+      # if query.name == 'P6':
+      #   import pdb; pdb.set_trace()
+      
       for obj in premise_objects:
         if isinstance(obj, int):
           dependents.append(obj)
           
-        elif not isinstance(obj, TransitiveRelation):
+        elif not isinstance(obj, tuple):
           rel = obj
-          # rel = action.mapping[obj]
-          # dependents.append(rel)
 
           if not hasattr(rel, '_init_list'):
             if rel not in dependents:
@@ -339,22 +352,8 @@ def whittle_from(final_state, queue, action_chain,
           if y not in merges[x] and x not in merges[y]:
             if rel not in dependents:
               dependents.append(rel)
-          
-        elif isinstance(obj, VALUE_RELATIONS):
-          val = obj.init_list[1]
-          if val not in valrels:
-            valrels[val] = set()
-          valrels[val].add(obj)
-
-      # This format (val, rel1, rel2) is for a later call
-      # val.dependency_path(rel1, rel2)
-      for val, rels in valrels.items():
-        rels = list(rels)
-        if len(rels) < 2:
-          continue
-        for i, rel1 in enumerate(rels[:-1]):
-          rel2 = rels[i+1]
-          dependents.append((val, rel1, rel2))
+        else:
+          dependents.append(obj)
 
       merge_positions = set()  # all positions of necessary merge actions
       
@@ -362,7 +361,7 @@ def whittle_from(final_state, queue, action_chain,
         merge_graph = obj.get_merge_graph(state)
         equivs = set()
         for other in others:
-          # TODO(thtrieu): for now we simply pick the first equiv.
+          # TODO(thtrieu): for now we simply pick the first equiv?
           equiv = merge_graph[other].keys()[0]
 
           rel = merge_graph[other][equiv]

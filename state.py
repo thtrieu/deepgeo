@@ -111,27 +111,35 @@ class State(object):
         r.update({key: value})
       return r
     else:
+      if struct is None:
+        return struct
+      pre = str(getattr(struct, 'chain_position', 'None'))
+      if pre != 'None':
+        pre += '.'
+      else:
+        pre = ''
       if isinstance(struct, Segment):
-        return self.segment_name(struct)
+        return pre + self.segment_name(struct)
       elif isinstance(struct, Angle):
-        return self.angle_name(struct)
+        ang1, ang2 = self.angle_name(struct)
+        return pre + ang1  # , pre + ang2
       elif isinstance(struct, HalfPlane):
-        return self.hp_name(struct)
+        return pre + self.hp_name(struct)
       elif isinstance(struct, PointEndsSegment):
         p, s = struct.init_list
-        return p.name + '[' + self.segment_name(s)
+        return pre + p.name + '[' + self.segment_name(s)
       elif isinstance(struct, SegmentHasLength):
         s, l = struct.init_list
-        return self.segment_name(s) + '=' + l.name
+        return pre + self.segment_name(s) + '=' + l.name
       # elif isinstance(struct, HalfplaneCoversAngle):
       #   hp, a = struct.init_list
       #   return self.hp_name(hp) + '/' + self.angle_name(a)
       elif isinstance(struct, Merge):
-        return 'merge({}=>{})'.format(
+        return pre + 'merge({}=>{})'.format(
             self.name_map(struct.from_obj), 
             self.name_map(struct.to_obj))
       elif hasattr(struct, 'name'):
-        return struct.name
+        return pre + struct.name
       else:
         return struct
 
@@ -539,7 +547,7 @@ class State(object):
       if isinstance(rel, Merge):
         self.add_one(rel)
 
-  def add_spatial_relations(self, line2pointgroups):
+  def add_spatial_relations(self, line2pointgroups, chain_pos=None):
     for line in line2pointgroups:
       points_neg, points_pos = line2pointgroups[line]
 

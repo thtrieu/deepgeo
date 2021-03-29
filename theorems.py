@@ -117,7 +117,7 @@ import geometry
 import trieu_graph_match
 import time
 
-from collections import OrderedDict as odict
+from collections import OrderedDict as odict, defaultdict
 from collections import defaultdict as ddict
 
 from profiling import Timer
@@ -129,13 +129,21 @@ from theorems_utils import segment_def, fangle_def
 from theorems_utils import diff_side, same_side, distinct
 from state import State, Conclusion
 
-from geometry import CausalValue, GeometryEntity, Merge, DistinctPoint, DistinctLine, start_name_scope
+from geometry import CausalValue, GeometryEntity, Merge, DistinctPoint, DistinctLine, TransitiveRelation, start_name_scope
 from geometry import Point, Line, Segment, Angle, HalfPlane, Circle, SelectAngle
 from geometry import AngleOfFullAngle
 from geometry import SegmentLength, AngleMeasure, LineDirection
 from geometry import SegmentHasLength, AngleHasMeasure, LineHasDirection
 from geometry import PointEndsSegment, LineBordersHalfplane
 from geometry import LineContainsPoint, CircleContainsPoint, HalfPlaneContainsPoint
+
+
+def maybe_select_and_map(x, mapping):
+  if isinstance(x, SelectAngle):
+    x = x.select(mapping)
+  if x in mapping:
+    return mapping[x]
+  return x
 
 
 class Action(object):
@@ -148,14 +156,21 @@ class Action(object):
     self.theorem = theorem
     self.state = state
     self.canvas = canvas
-    self.other_premises = []  # for subsequent auto actions
+
 
     self.premise_objects = []
     for x in theorem.premise_objects:
-      if isinstance(x, SelectAngle):
-        x = x.select(mapping)
-      if x in mapping:
-        self.premise_objects.append(mapping[x])
+      if isinstance(x, tuple):
+        x = tuple(map(lambda t: maybe_select_and_map(t, mapping), x))
+      else:
+        x = maybe_select_and_map(x, mapping)
+      self.premise_objects.append(x)
+
+    self.other_premises = []
+    
+    # for obj in self.new_objects:
+    #   if obj.critical:
+    #     obj.set_critical(self.premise_objects)
 
     # List of Merge() relations associcated with this action.
     self.merges = [
@@ -192,6 +207,8 @@ class Action(object):
         obj.set_critical(len(self.other_premises))
 
     self.other_premises += [other_action.premise_objects]
+
+    # self.premise_objects += [other_action.premise_objects]
     self.matched_conclusion.topological_list[0] += other_action.matched_conclusion.topological_list[0]
     self.new_objects += other_action.new_objects
     self.merges += other_action.merges
@@ -342,9 +359,23 @@ class FundamentalTheorem(object):
 
   def gather_objects(self):
     self.premise_objects = set()
+
+    val2rels = defaultdict(lambda: [])
     for rel in self.premise:
-      obj1, obj2 = rel.init_list
-      self.premise_objects.update([rel, obj1, obj2])
+      if isinstance(rel, TransitiveRelation):
+        _, val = rel.init_list
+        val2rels[val] += [rel]
+      else:
+        obj1, obj2 = rel.init_list
+        self.premise_objects.update([rel, obj1, obj2])
+
+    for val, rels in val2rels.items():
+      if len(rels) == 1:
+        obj1, obj2 = rels[0].init_list
+        self.premise_objects.update([rels[0], obj1, obj2])
+      else:
+        rel1, rel2 = rels
+        self.premise_objects.add((val, rel1, rel2))
 
     self.conclusion_objects = set()
     for constructions in self.conclusion.topological_list:
