@@ -392,10 +392,14 @@ def whittle(final_state, state_queue, proof_queue, action_chain,
 
   whittled_state = whittling.whittle_from(
       final_state, list(state_queue), action_chain)
+
+  # import pdb; pdb.set_trace()
+
   proof_whittled = whittling.whittle_from(
       final_state, list(proof_queue), action_chain, 
       goal_objects=state_queue, whittled_state=whittled_state)
 
+  # Transfer stuff from proof_whittled to whittled_state.
   for i, p in enumerate(proof_whittled):
     if not (p == [] or p == True):
       if whittled_state[i] != True:
@@ -430,11 +434,11 @@ def whittle(final_state, state_queue, proof_queue, action_chain,
         print(i, action.to_str())
       new_state = add_to_state(new_state, action.conclusion_objects)
     else:
-      all_constructions = sum(step, [])
-      # all_constructions = set()
-      # for x in step:
-      #   all_constructions.update(x)
-      # all_constructions = list(all_constructions)
+      # all_constructions = sum(step, [])
+      all_constructions = set()
+      for x in step:
+        all_constructions.update(x)
+      all_constructions = list(all_constructions)
       if verbose:
         print('{}. {} : {}'.format(
             i, action.theorem.name,
@@ -473,7 +477,7 @@ def test_isos_merge_whittle():
   init_canvas = sketch.Canvas()
   init_state = State()
 
-  print('\nRunning Isos Merge test:')
+  print('\nRunning Isos Merge Whittle v1 test:')
 
   steps = [
       'ang_isos:',
@@ -541,7 +545,7 @@ def test_isos_merge_whittle_v2():
   init_canvas = sketch.Canvas()
   init_state = State()
 
-  print('\nRunning Isos Merge test:')
+  print('\nRunning Isos Merge whittle v2 test:')
 
   steps = [
       'ang_isos:',
@@ -605,7 +609,7 @@ def test_isos_merge_whittle_v3():
   init_canvas = sketch.Canvas()
   init_state = State()
 
-  print('\nRunning Isos Merge test:')
+  print('\nRunning Isos Merge whittle v3 test:')
 
   steps = [
       'ang_isos:',
@@ -673,7 +677,7 @@ def test_isos_merge_whittle_all():
   init_canvas = sketch.Canvas()
   init_state = State()
 
-  print('\nRunning Isos Merge test:')
+  print('\nRunning Isos Merge whittle All test:')
 
   steps = [
       'ang_isos:',

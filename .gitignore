@@ -18,3 +18,8 @@ build/*
 *.pkl
 *sbatch*
 try.py
+imo_geo/IMO2019SL.pdf
+setupsym.py
+sym.c
+sym.pyx
+whittle_save.txt
