@@ -173,7 +173,7 @@ def execute_steps(steps, state, canvas, verbose=False, init_action_chain=None):
 
     # add spatial relations:
     line2pointgroups = action.draw(canvas)
-    state.add_spatial_relations(line2pointgroups)
+    state.add_spatial_relations(line2pointgroups, pos)
     canvas.update_hps(state.line2hps)
     
     # add auto equalities
