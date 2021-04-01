@@ -374,7 +374,7 @@ def create_new_rels_from_merge(obj1, obj2,
   assert obj1 not in merge_graph2
 
   # Copy merge_graph1 to merge_graph before adding info from merge_graph2
-  merge_graph = {k: dict(v) for k, v in merge_graph1.items()}
+  merge_graph = {k: type(v)(v) for k, v in merge_graph1.items()}
   merge_graph[obj2] = {obj1: None}
   merge_graph[obj1] = merge_graph.get(obj1, {})
   merge_graph[obj1].update({obj2: None})

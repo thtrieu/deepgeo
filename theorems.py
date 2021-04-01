@@ -168,9 +168,9 @@ class Action(object):
 
     self.other_premises = []
     
-    # for obj in self.new_objects:
-    #   if obj.critical:
-    #     obj.set_critical(self.premise_objects)
+    for obj in self.new_objects:
+      if obj.critical:
+        obj.set_critical(self.premise_objects)
 
     # List of Merge() relations associcated with this action.
     self.merges = [
@@ -202,11 +202,11 @@ class Action(object):
     assert isinstance(other_action.theorem, MergeTheorem)
     assert len(other_action.matched_conclusion.topological_list) == 1 
 
-    for obj in other_action.new_objects:
-      if obj.critical:
-        obj.set_critical(len(self.other_premises))
+    # for obj in other_action.new_objects:
+    #   if obj.critical:
+    #     obj.set_critical(len(self.other_premises))
 
-    self.other_premises += [other_action.premise_objects]
+    # self.other_premises += [other_action.premise_objects]
 
     # self.premise_objects += [other_action.premise_objects]
     self.matched_conclusion.topological_list[0] += other_action.matched_conclusion.topological_list[0]
@@ -225,15 +225,14 @@ class Action(object):
         theorem = theorem_from_type[AutoEqualSegments]
         mapping = {k: v for k, v in zip(theorem.input, [a, b, x, y])}
 
-        # print('{}{} == {}{} because {}'.format(a.name, b.name, x.name, y.name, pos))
+        print('>>> {}{} == {}{} because {}'.format(a.name, b.name, x.name, y.name, pos))
         auto_eq_theorem_and_map.append((theorem, mapping, pos))
       elif len(eq) == 3:
         _, (p1, p2), pos = eq
         theorem = theorem_from_type[AutoMergePointZeroDistance]
         mapping = {k: v for k, v in zip(theorem.input, [p1, p2])}
-        # print('Merging {} & {} because {}'.format(p1.name, p2.name, pos))
+        print('>>> Merging {} => {} because {}'.format(p2.name, p1.name, pos))
         auto_merge_points.append((theorem, mapping, pos))
-        # print('AUTO {} == {}'.format(p1.name, p2.name))
 
     for theorem, mapping, pos in auto_eq_theorem_and_map:
       for action in theorem.match_from_input_mapping(state, mapping, canvas=canvas):
@@ -254,11 +253,11 @@ class Action(object):
         theorem = theorem_from_type[AutoAngleEqualConstant]
         if len(a2) == 2:
           d1, d2 = a2  # d1 > d2.
-          # print('<{} {}> == {} pi because {}'.format(d1.name, d2.name, a1, p))
+          print('>>> <{} {}> == {} pi because {}'.format(d1.name, d2.name, a1, p))
           mapping = {k: v for k, v in zip(theorem.input, [d1, d2, angle, angle_sup])}
         else:
           _, d1, d2 = a2
-          # print('pi - <{} {}> == {} pi because {}'.format(d1.name, d2.name, a1, p))
+          print('>>> pi - <{} {}> == {} pi because {}'.format(d1.name, d2.name, a1, p))
           mapping = {k: v for k, v in zip(theorem.input, [d1, d2, angle_sup, angle])}
         results.append((theorem, mapping, p))
       else:
@@ -269,11 +268,11 @@ class Action(object):
         d11, d12 = a1[-2:]
         d21, d22 = a2[-2:]
 
-        # print('{}<{} {}> == {}<{} {}> because {}'.format(
-        #     'pi-' if len(a1)==3 else '',
-        #     d11.name, d12.name,
-        #     'pi-' if len(a2)==3 else '',
-        #      d21.name, d22.name, p))
+        print('>>> {}<{} {}> == {}<{} {}> because {}'.format(
+            'pi-' if len(a1)==3 else '',
+            d11.name, d12.name,
+            'pi-' if len(a2)==3 else '',
+             d21.name, d22.name, p))
         mapping = {k: v for k, v in zip(theorem.input, [d11, d12, d21, d22])}
         results.append((theorem, mapping, p))
 
@@ -625,6 +624,28 @@ class SamePointBecauseSameLine(MergeTheorem):
     )
 
     self.trigger_obj = l1
+    self.merge_pair = (A, B)
+
+    self.conclusion = Conclusion()
+    self.conclusion.add_critical(Merge(A, B))
+
+    self.for_drawing = []
+    self.names = dict(l1=l1, l2=l2, A=A, B=B)
+
+
+class SamePointBecauseSamePoint(MergeTheorem):
+
+  def build_premise_and_conclusion(self):
+    l1, l2 = Line('l1'), Line('l2')
+    A, B = Point('A'), Point('B')
+
+    self.premise = (
+      collinear(l1, A, B) +
+      collinear(l2, A, B) +
+      distinct(l1, l2)
+    )
+
+    self.trigger_obj = A
     self.merge_pair = (A, B)
 
     self.conclusion = Conclusion()
@@ -1173,10 +1194,12 @@ class ConstructAngleBisector(FundamentalTheorem):
 
   def eliminate_angle(self, mapping, canvas, chain_pos):
     d1, l1, d2, l2, d3, l3, l1_hp, l2_hp = map(mapping.get, self.for_angle_eliminate)
+    
+    if not hasattr(d3, 'line'):
+      d3.line = canvas.lines[l3]
     d1.line = canvas.lines[l1]
     d2.line = canvas.lines[l2]
-    d3.line = canvas.lines[l3]
-    
+
     return canvas.eliminate_angle(
         (d1, d3), 
         (d2, d3), 
@@ -2075,7 +2098,7 @@ class ASA(Congruences):
     self.names = dict(A=A, B=B, C=C, D=D, F=F, de=de, ef=ef)
     self.for_drawing = [E, de, ef]
     self.args = [A, C, B, D, F, de, ef]
-    self.for_distance_eliminate = [ab, A, B, de, D, E]
+    self.for_distance_eliminate = [ab, bc, A, B, C, de, ef, D, E, F]
 
   def draw(self, mapping, canvas):
     E, de, ef = map(mapping.get, self.for_drawing)
@@ -2084,12 +2107,16 @@ class ASA(Congruences):
     return {}
 
   def eliminate_distance(self, mapping, canvas, chain_pos):
-    ab, A, B, de, D, E = map(mapping.get, self.for_distance_eliminate)
+    ab, bc, A, B, C, de, ef, D, E, F = map(mapping.get, self.for_distance_eliminate)
     # ab, de = map(canvas.lines.get, [ab, de])
     # A, B, D, E = map(canvas.points.get, [A, B, D, E])
     canvas.add_points(ab, A, B)
+    canvas.add_points(bc, B, C)
     canvas.add_points(de, D, E)
-    return canvas.eliminate_distance((A, B), (D, E), chain_pos)
+    canvas.add_points(ef, E, F)
+    eq1 = canvas.eliminate_distance((A, B), (D, E), chain_pos)
+    eq2 = canvas.eliminate_distance((B, C), (E, F), chain_pos)
+    return eq1 + eq2
 
   @property
   def timeout(self):
@@ -2270,6 +2297,7 @@ all_theorems = [
 #  A. Triggers with Distincts
 #   1. Line => Point
     SamePointBecauseSameLine(),
+    SamePointBecauseSamePoint(),
 #   2. Point => Line -> Direction
     SameLineBecauseSamePoint(),
 #   3. Circle => Point
@@ -2336,6 +2364,7 @@ def auto_merge_theorems_from_trigger_obj(obj):
         theorem_from_name[name]
         for name in ['SameSegmentBecauseSamePoint',
                      'SameLineBecauseSamePoint',
+                     'SamePointBecauseSamePoint',
                      'SameLineBecauseSameDirectionPointTrigger']
     ]
   if isinstance(obj, Line):

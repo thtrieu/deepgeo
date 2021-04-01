@@ -32,6 +32,15 @@ def _copy(structure):
             for (key, val) in structure.items()}
 
 
+class SpatialDistinct(object):
+  """A simple hack to force everything go through state.add_one().
+  So we can have state.inc() saving everything it adds
+  """
+
+  def __init__(self, rel):
+    self.rel = rel
+
+
 class State(object):
 
   def __init__(self):
@@ -45,6 +54,7 @@ class State(object):
 
     self.all_points = []
     self.all_hps = []
+    self.inc = []
 
     # distinct relations does not go to self.relations
     # but goes here instead, for easy removal
@@ -97,6 +107,49 @@ class State(object):
     copied.line2hps = _copy(self.line2hps)
     copied.hp2points = _copy(self.hp2points)
     return copied
+
+  def angle_between(self, l1, l2):
+    if isinstance(l1, str):
+      l1 = self.name2obj[l1]
+    if isinstance(l2, str):
+      l2 = self.name2obj[l2]
+    d1, d2 = None, None
+    for rel in self.relations:
+      if isinstance(rel, LineHasDirection) and rel.init_list[0] == l1:
+        d1 = rel.init_list[1]
+      if isinstance(rel, LineHasDirection) and rel.init_list[0] == l2:
+        d2 = rel.init_list[1]
+    assert d1 and d2
+
+    fa1, fa2 = set(), set()
+    for rel in self.relations:
+      if isinstance(rel, DirectionOfFullAngle) and rel.init_list[0] == d1:
+        fa1.add(rel.init_list[1])
+      if isinstance(rel, DirectionOfFullAngle) and rel.init_list[0] == d2:
+        fa2.add(rel.init_list[1])
+    fa = list(fa1.intersection(fa2))[0]
+    assert fa
+
+    xx, xo = None, None
+    for rel in self.relations:
+      if isinstance(rel, AngleXXOfFullAngle) and rel.init_list[1] == fa:
+        xx = rel.init_list[0]
+      if isinstance(rel, AngleXOOfFullAngle) and rel.init_list[1] == fa:
+        xo = rel.init_list[0]
+
+    assert xx and xo
+    return xx, xo
+
+  def is_equal(self, obj1, obj2):
+    if isinstance(obj1, str):
+      obj1 = self.name2obj(obj1)
+    if isinstance(obj2, str):
+      obj2 = self.name2obj(obj2)
+    
+    assert isinstance(obj1, type(obj2))
+    val1 = self.obj2valrel[obj1].init_list[1]
+    valrel2 = self.obj2valrel[obj2]
+    return valrel2 in self.val2valrel[val1]
 
   def name_map(self, struct):
     if isinstance(struct, (list, tuple, set)):
@@ -330,6 +383,13 @@ class State(object):
     return '[{}]'.format(result)
 
   def add_one(self, entity):
+    self.inc += [entity]
+
+    if isinstance(entity, SpatialDistinct):
+      x, y = entity.rel.init_list
+      self.spatial_distincts[(x, y)] = entity.rel
+      return
+
     if not isinstance(entity, geometry.Relation):
       # if isinstance(entity, Point):
       #   self.all_points.append(entity)
@@ -398,7 +458,11 @@ class State(object):
           # print('{} has >= 3 hps: {}, {}, {}'.format(
           #     line.name, hp1.name, hp2.name, hp.name))
           # raise ValueError('More than 2 halfplanes.')
+          # ====> this is allowed *before* merging.
         self.line2hps[line].append(hp)
+      
+      if hp not in self.hp2points:
+        self.hp2points[hp] = []
 
     if isinstance(relation, HalfPlaneContainsPoint):
       hp, point = relation.init_list
@@ -535,13 +599,6 @@ class State(object):
     for rel in relations:
       if not isinstance(rel, Merge):
         self.add_one(rel)
-    
-    # This is copied for extracting proof related to transitive values
-    # But will not be copied to next state.
-    self.val2valrel_copy = {
-      key: list(value)
-      for key, value in self.val2valrel.items()
-    }
 
     for rel in relations:
       if isinstance(rel, Merge):
@@ -567,8 +624,8 @@ class State(object):
 
         self.add_one(LineBordersHalfplane(line, hp1))
         self.add_one(LineBordersHalfplane(line, hp2))
-        self.hp2points[hp1] = []
-        self.hp2points[hp2] = []
+        # self.hp2points[hp1] = []
+        # self.hp2points[hp2] = []
 
       elif len(hps) == 1:
         hp = HalfPlane(line.name + '_hp')
@@ -576,7 +633,7 @@ class State(object):
         hp.set_critical(line.critical)
         hp.set_conclusion_position(line.conclusion_position)
         self.add_one(LineBordersHalfplane(line, hp))
-        self.hp2points[hp] = []
+        # self.hp2points[hp] = []
 
       hp1, hp2 = self.line2hps[line]
       points_hp1 = self.hp2points.get(hp1, [])
@@ -642,7 +699,7 @@ class State(object):
     else:
       rel = DistinctPoint(x, y)
 
-    self.spatial_distincts[(x, y)] = rel
+    self.add_one(SpatialDistinct(rel))
 
 
 class Conclusion(object):

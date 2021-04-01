@@ -256,14 +256,15 @@ class AngleEngine(object):
 
 def point_greater(p1, p2):
   try:
-
     if round(p1.y, 12) > round(p2.y, 12):
       return True
     if round(p1.y, 12) < round(p2.y, 12):
       return False
     if round(p1.x, 12) > round(p2.x, 12):
       return True
-    return False
+    if round(p1.x, 12) < round(p2.x, 12):
+      return False
+    return p2.name > p1.name
   except AttributeError:
     return p1 > p2
 
@@ -339,7 +340,7 @@ class LineEngine(object):
       self.pos[a] = pos_d.union(self.pos[b])
       return self.auto(a)
 
-    elif a not in self.deps and b in self.deps:
+    elif a not in self.deps and b not in self.deps:
       autos = self.add_free(b)
       result = defaultdict(lambda: 0.0)
       result.update(self.deps[b])
@@ -350,13 +351,11 @@ class LineEngine(object):
 
     return {}
       
-  def add_eq(self, a, b, x, y, chain_pos):
+  def add_eq(self, a, b, x, y, chain_pos=-1):
     # a - b = x - y = > a - b - x + y = 0
     # if self.is_equal((a, b), (x, y)):
     if {(a, b), (x, y)} in self.eqs:
       return []
-
-    self.eqs.append({(a, b), (x, y)})
 
     pos = set([chain_pos])
     result = defaultdict(lambda: 0.)
@@ -369,20 +368,26 @@ class LineEngine(object):
       else:
         dep2div[t] += s
 
+    autos = {}
+    for t, s in dep2div.items():
+      if s == 0:
+        autos.update(self.add_free(t))
+    dep2div = dict((t, s) for t, s in dep2div.items() if s != 0)
+
     if dep2div:
       if len(dep2div) == 1:
         dep, div = dep2div.items()[0]
         self.deps[dep] = {k: v / div for k, v in result.items()}
         self.pos[dep] = pos
-        return self.auto(dep)
+        autos.update(self.auto(dep))
       elif len(dep2div) > 1:
-        autos = {}
         alldeps = list(dep2div.keys())
         for d in alldeps[:-1]:
           autos.update(self.add_free(d))
         autos.update(self.add_eq(a, b, x, y, chain_pos))
-        return autos
-    return {}
+
+    self.eqs.append({(a, b), (x, y)})
+    return autos
 
   def seg_name(self, s):
     p1, p2 = s
@@ -436,7 +441,6 @@ class LineEngine(object):
     if (a, b) not in self.deps:
       result = defaultdict(lambda: 0)
       result.update(self.deps[a])
-      # import pdb; pdb.set_trace()
       self.deps[(a, b)] = substract(result, self.deps[b])
       self.pos[(a, b)] = self.pos[a].union(self.pos[b])
 
@@ -503,7 +507,7 @@ class DistanceEngine(object):
     autos = self.lines[l].add_free(*v)
     self.add_autos(autos)
 
-  def add_eq(self, a, b, x, y, chain_pos):
+  def add_eq(self, a, b, x, y, chain_pos=-1):
 
     if point_greater(b, a):
       a, b = b, a
@@ -524,7 +528,7 @@ class DistanceEngine(object):
         autos = lab.add_free(a, b)
         autos.update(lxy.add_seg(
             x, y, lab.deps[(a, b)], lab.pos[(a, b)] | {chain_pos}))
-  
+
     v = lab.s2v[(a, b)]
     if v not in self.v2s:
       self.v2s[v] = set()
@@ -563,7 +567,7 @@ def test_mid_point():
   assert r == []
   e.add('az', 'N')
   r = e.add_eq('Z', 'N', 'N', 'A')
-  assert r == [(0.0, ('N', 'M'))]
+  assert r == [(0.0, ('N', 'M'), set([-1]))]
 
   assert e['az']['M'] == e['az']['N']
 
@@ -584,7 +588,7 @@ def test_equal_plus():
   r = e.add_eq('M', 'P', 'A', 'C')
   assert r == [
       ((('ab.A', 1.0), ('ab.B', -1.0), 
-        ('mn.M', -1.0), ('mn.P', 1.0)), ('P', 'N'), ('C', 'B'))
+        ('mn.M', -1.0), ('mn.P', 1.0)), ('P', 'N'), ('C', 'B'), set([-1]))
   ]
 
   assert e[('B', 'C')] == e[('N', 'P')]
@@ -612,11 +616,20 @@ def test_equal_bisects():
   assert e[('A', 'M')] == e[('M', 'Z')]
 
 
+def test_equal_dist():
+  print('test equal dist')
+  e = DistanceEngine()
+  e.add('az', 'A', 'B', 'Z')
+  r = e.add_eq('A', 'Z', 'B', 'Z')
+  assert r == [(0.0, ('B', 'A'), set([-1]))]
+
+
 if __name__ == '__main__':
   profiling.enable()
   with Timer('test'):
     test_mid_point()
     test_equal_plus()
     test_equal_bisects()
+    test_equal_dist()
   
   profiling.print_records()

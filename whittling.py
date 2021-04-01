@@ -4,6 +4,7 @@ from geometry import SegmentHasLength, AngleHasMeasure, LineHasDirection
 from geometry import Merge
 import geometry
 import traceback
+import numpy as np
 
 from collections import defaultdict as ddict
 
@@ -235,10 +236,14 @@ def whittle_from(final_state, queue, action_chain,
     with open('whittle_save.txt', 'a') as f:
       from_q = final_state.name_map(prev_query)
       to_q = final_state.name_map(queue[len(copy_queue):])
-      if to_q != [from_q] and to_q:
-        if len(to_q) == 1:
-          to_q = to_q[0]
+      # if to_q != [from_q] and to_q:
+      #   if len(to_q) == 1:
+      #     to_q = to_q[0]
+      if to_q == [from_q]:
+        to_q = 'defer'
+      if whittled_state is None:
         f.write('>>> {} =>  {}\n'.format(from_q, to_q))
+        f.write(str(whittled))
     copy_queue = list(queue)
     prev_query = query
 
@@ -277,10 +282,7 @@ def whittle_from(final_state, queue, action_chain,
       critical = True
       pos = query
     else:  # not an integer but an obj or rel.
-      try:
-        pos = query.chain_position
-      except:
-        import pdb; pdb.set_trace()
+      pos = query.chain_position
       if pos is None:    # at init state already
         continue
       critical = query.critical
@@ -312,20 +314,20 @@ def whittle_from(final_state, queue, action_chain,
       dependents = []
 
       # premise of type VALUE_RELATIONS is post-processed here:
-      valrels = {}
       merges = ddict(lambda: [])
 
       # Add everything in the premise to dependents.
       # premise_objects = critical
       # if isinstance(premise_objects, bool):
       #   premise_objects = action.premise_objects
-      if not isinstance(critical, bool):
-        premise_objects = action.other_premises[critical]
-      else:
+      if isinstance(critical, bool):
         premise_objects = action.premise_objects
-
-      # if query.name == 'P6':
-      #   import pdb; pdb.set_trace()
+      else:
+        premise_objects = critical
+      
+      # premise_objects = sorted(list(premise_objects))
+      premise_objects = list(premise_objects)
+      np.random.shuffle(premise_objects)
       
       for obj in premise_objects:
         if isinstance(obj, int):

@@ -176,7 +176,7 @@ def test_angle_bisect_isosceles():
       'SAS: A B P1 A C P1'
   ]
 
-  print('\nRunning bisector isosceles test:')
+  print('\nRunning test_angle_bisect_isosceles:')
   state, canvas, action_chain = action_chain_lib.execute_steps(steps, state, canvas)
   
 
@@ -216,7 +216,7 @@ def test_base_bisect_sss_isosceles():
       'SSS: B A P1 C A P1'
   ]
 
-  print('\nRunning bisector SSS isosceles test:')
+  print('\nRunning test_base_bisect_sss_isosceles:')
   action_chain_lib.execute_steps(steps, state, canvas)
 
 
@@ -231,7 +231,7 @@ def test_ang_isos_outer_bisect_parallel_to_base():
       'angle_bisect: l1_hp hp3'
   ]
 
-  print('\nRunning Angle Isosceles test:')
+  print('\nRunning test_ang_isos_outer_bisect_parallel_to_base:')
   state, canvas, action_chain = action_chain_lib.execute_steps(
       steps, init_state, init_canvas)
 
@@ -263,7 +263,7 @@ def test_ang_isos_bisect_is_perp():
       'angle_bisect: hp1 hp3'  # -> l4
   ]
 
-  print('\nRunning Angle Isosceles test:')
+  print('\nRunning test_ang_isos_bisect_is_perp:')
   state, canvas, action_chain = action_chain_lib.execute_steps(
       steps, init_state, init_canvas)
 
@@ -319,6 +319,31 @@ def test_ang_isos_bisect_is_perp():
   assert any([halfpi in state.obj2valrel])
   mhalfpi = state.obj2valrel[halfpi].init_list[1]
   assert len(state.val2valrel[mhalfpi]) == 3
+
+
+def test_ang_isos_perp_base_is_bisect():
+  geometry.reset()
+
+  init_canvas = sketch.Canvas()
+  init_state = State()
+
+  steps = [
+      'ang_isos:',
+      'midp: P2 P3',  # -> P4
+      'perp: P4 l2',  # l4
+  ]
+
+  print('Running test_ang_isos_perp_base_is_bisect')
+  state, canvas, action_chain = action_chain_lib.execute_steps(
+      steps, init_state, init_canvas)
+  
+  measures = [v for v in state.val2valrel 
+              if isinstance(v, AngleMeasure)]
+  assert len(measures) == 5
+
+  l14xx, l14xo = state.angle_between('l1', 'l4')
+  l34xx, l34xo = state.angle_between('l3', 'l4')
+  assert state.is_equal(l14xx, l34xx) and state.is_equal(l14xo, l34xo)
 
 
 def test_isos_merge_lines():
@@ -424,6 +449,8 @@ def whittle(final_state, state_queue, proof_queue, action_chain,
     action.action_eliminate_distance(state, new_canvas, None)
     return state
 
+  all_states = [action.state for action in action_chain] + [final_state]
+
   if verbose:
     print('\nWhittled state: ')
   for i, (step, action) in enumerate(zip(whittled_state, action_chain)):
@@ -432,7 +459,7 @@ def whittle(final_state, state_queue, proof_queue, action_chain,
     if step == True:
       if verbose:
         print(i, action.to_str())
-      new_state = add_to_state(new_state, action.conclusion_objects)
+      new_state = add_to_state(new_state, all_states[i+1].inc)
     else:
       # all_constructions = sum(step, [])
       all_constructions = set()
@@ -509,11 +536,24 @@ def test_isos_merge_whittle():
     name2goals[name] = state_queue, proof_queue
 
   all_target_goals = [
-      'l5{P4}', 'P4[P5P3', 'P4[P5P2', 
-      'l4{P5}', 'l5/l4_hp1', 'l5/l4_hp2', 
-      'l5{P1}', 'l4/l5_hp2', 'l4/l5_hp1']
-  for goal in all_target_goals:
+      ('l5{P4}', [5]), 
+      ('P4[P5P3', [5]), 
+      ('P4[P5P2', [5]), 
+      ('l4{P5}', [2, 5]), 
+      ('l5/l4_hp1', [2, 5]), 
+      ('l5/l4_hp2', [2, 5]), 
+      ('l5{P1}', [1, 2, 5]), 
+      ('l4/l5_hp2', [2, 5]), 
+      ('l4/l5_hp1', [2, 5])
+  ]
+  for goal, correct_proof_steps in all_target_goals:
     assert goal in name2goals, goal
+    state_queue, proof_queue = name2goals[goal]
+    _, _, proof_steps = whittle(
+        state, state_queue, proof_queue, action_chain,
+        init_state, init_canvas, canvas, verbose=False)
+    print('check whittle({}) = {}'.format(goal, correct_proof_steps))
+    assert correct_proof_steps == proof_steps
   
   state_queue, proof_queue = name2goals['l5{P1}']
   problem, problem_canvas, proof_steps = whittle(
@@ -595,12 +635,12 @@ def test_isos_merge_whittle_v2():
       steps, problem, problem_canvas)
 
   l4 = proved_problem.name2obj['l4']
-  P6 = proved_problem.name2obj['P6']
-  assert proved_problem.has_relation(LineContainsPoint(l4, P6))
+  P5 = proved_problem.name2obj['P5']
+  assert proved_problem.has_relation(LineContainsPoint(l4, P5))
 
   last_state = action_chain[-1].state
-  P5 = last_state.name2obj['P5']
-  assert P5 in P6.merge_graph[proved_problem]['equivalents']
+  P6 = last_state.name2obj['P6']
+  assert P6 in P5.merge_graph[proved_problem]['equivalents']
 
 
 def test_isos_merge_whittle_v3():
@@ -637,8 +677,6 @@ def test_isos_merge_whittle_v3():
       name = prev_state.name_map(proof_queue[0])
     name2goals[name] = state_queue, proof_queue
   
-  print(name2goals.keys())
-
   all_target_goals = [
       'l4{P6}', 'l3{P6}',
       'l5{P4}', 'P4[P5P3', 'P4[P5P2', 
@@ -646,53 +684,62 @@ def test_isos_merge_whittle_v3():
       'l5{P1}', 'l4/l5_hp2', 'l4/l5_hp1']
   for goal in all_target_goals:
     assert goal in name2goals, goal
+    state_queue, proof_queue = name2goals[goal]
+    problem, problem_canvas, proof_steps = whittle(
+        state, state_queue, proof_queue, action_chain,
+        init_state, init_canvas, canvas)
   
   state_queue, proof_queue = name2goals['l3{P6}']
+  # there will be fragments of 1. construct angle bisector
+  # in the whittled problem, but that's okay
+  # what we care is the aggregated problem, not its construction
+  # on the other hand, proof construction is what we really
+  # have to care about.
   problem, problem_canvas, proof_steps = whittle(
       state, state_queue, proof_queue, action_chain,
       init_state, init_canvas, canvas)
 
+  l3 = problem.name2obj['l3']
+  P6 = problem.name2obj['P6']
+  assert not problem.has_relation(LineContainsPoint(l3, P6))
+
   assert proof_steps == [1, 2, 6], proof_steps
 
   steps = [
-      'lineXline: l4 l2',  # -> P6
-      'ASA: P6 P1',  # -> Now l6 contains P1
+      'angle_bisect: hp1 hp3',  # -> l6
+      'lineXline: l6 l2',  # -> P7
+      'ASA: P7 P1',  # -> Now l5 contains P1, l4 contains P5
   ]
   print('Proof execution:')
   proved_problem, _, action_chain = action_chain_lib.execute_steps(
       steps, problem, problem_canvas)
 
-  l4 = proved_problem.name2obj['l4']
-  P6 = proved_problem.name2obj['P6']
-  assert proved_problem.has_relation(LineContainsPoint(l4, P6))
-
-  last_state = action_chain[-1].state
-  P5 = last_state.name2obj['P5']
-  assert P5 in P6.merge_graph[proved_problem]['equivalents']
+  assert proved_problem.has_relation(LineContainsPoint(l3, P6))
 
 
-def test_isos_merge_whittle_all():
+def test_isos_merge_whittle_v4():
   geometry.reset()
 
   init_canvas = sketch.Canvas()
   init_state = State()
 
-  print('\nRunning Isos Merge whittle All test:')
+  print('\nRunning Isos Merge whittle v3 test:')
 
   steps = [
       'ang_isos:',
-      'angle_bisect: hp1 hp3',  # -> l4
-      'lineXline: l4 l2',  # -> P4
-      'midp: P2 P3',  # -> P5
-      'perp: P5 l2',  # -> l5
-      'ASA: P4 P1',  # -> Now l5 contains P1, l4 contains P5
+      'midp: P2 P3',  # -> P4
+      'perp: P4 l2',  # -> l4
+      'lineXline: l4 l1',  # -> P5
+  ]
+  state3, canvas, action_chain = action_chain_lib.execute_steps(
+      steps, init_state, init_canvas)
+  steps = [
+      'ASA: P2 P4',  # -> Now l5 contains P1, l4 contains P5
   ]
   state, canvas, action_chain = action_chain_lib.execute_steps(
-      steps, init_state, init_canvas)
+      steps, state3, canvas, init_action_chain=action_chain)
 
-  # state.print_all_equal_segments()
   prev_state = action_chain[-1].state
-
   proof_goals = list(whittling.extract_all_proof_goals(action_chain, state))
   
   # Check if all the goals are here:
@@ -700,29 +747,42 @@ def test_isos_merge_whittle_all():
   for state_queue, proof_queue in proof_goals:
     if isinstance(proof_queue[0], tuple):
       name = prev_state.name_map(proof_queue[0][0])
+      name2goals[name] = state_queue, proof_queue
     else:
       name = prev_state.name_map(proof_queue[0])
-    name2goals[name] = state_queue, proof_queue
+  
+  l3 = state.name2obj['l3']
+  P5 = state.name2obj['P5']
+  assert state.has_relation(LineContainsPoint(l3, P5))
 
-  all_target_goals = [
-      ('l5{P4}', [5]), 
-      ('P4[P5P3', [5]), 
-      ('P4[P5P2', [5]), 
-      ('l4{P5}', [2, 5]), 
-      ('l5/l4_hp1', [2, 5]), 
-      ('l5/l4_hp2', [2, 5]), 
-      ('l5{P1}', [1, 2, 5]), 
-      ('l4/l5_hp2', [2, 5]), 
-      ('l4/l5_hp1', [2, 5])
-  ]
-  for goal, correct_proof_steps in all_target_goals:
+  all_target_goals = ['l3{P5}', '4.l_seg3', 'l4{P1}']
+  for goal in all_target_goals:
     assert goal in name2goals, goal
-    state_queue, proof_queue = name2goals[goal]
-    _, _, proof_steps = whittle(
-        state, state_queue, proof_queue, action_chain,
-        init_state, init_canvas, canvas, verbose=False)
-    print('check whittle({}) = {}'.format(goal, correct_proof_steps))
-    assert correct_proof_steps == proof_steps
+  
+  state_queue, proof_queue = name2goals['l3{P5}']
+  # there will be fragments of 1. construct angle bisector
+  # in the whittled problem, but that's okay
+  # what we care is the aggregated problem, not its construction
+  # on the other hand, proof construction is what we really
+  # have to care about.
+  problem, problem_canvas, proof_steps = whittle(
+      state, state_queue, proof_queue, action_chain,
+      init_state, init_canvas, canvas)
+
+  assert not problem.has_relation(LineContainsPoint(l3, P5))
+  assert proof_steps == [4], proof_steps
+
+  steps = [
+      'ASA: P4',
+  ]
+  print('Proof execution:')
+  proved_problem, _, action_chain = action_chain_lib.execute_steps(
+      steps, problem, problem_canvas)
+
+  P5_equivs = P5.merge_graph[proved_problem]['equivalents']
+  P5_equivs_name = map(lambda x: x.name, P5_equivs)
+  assert set(P5_equivs_name) == {'P1', 'P7'}
+  assert proved_problem.has_relation(LineContainsPoint(l3, P5))
 
 
 def test_thales():
@@ -737,9 +797,9 @@ def test_thales():
 
 
 if __name__ == '__main__':
-  np.random.seed(1234)
-  t = time.time()
+  np.random.seed(int(time.time()))
 
+  t = time.time()
   # Self-congruences:
   test_sss_isosceles()
   test_asa_isosceles()
@@ -754,13 +814,14 @@ if __name__ == '__main__':
   
   # Test gaussian elimination engine.
   test_ang_isos_bisect_is_perp()
+  test_ang_isos_perp_base_is_bisect()
   test_isos_merge_lines()
 
   # Test Whittling with merges
   test_isos_merge_whittle()
   test_isos_merge_whittle_v2()
-  test_isos_merge_whittle_all()
-  # test_isos_merge_whittle_v3()
+  test_isos_merge_whittle_v3()
+  test_isos_merge_whittle_v4()
 
   # TODO(thtrieu): test thales theorems & proof whittling
 

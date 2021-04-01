@@ -229,10 +229,13 @@ class GeometryEntity(object):
 
   def set_critical(self, critical):
     """Set this during exploration."""
-    # if hasattr(self, '_critical'):
-    #   raise ValueError(
-    #       'Cannot set critical for {} {} twice.'.format(
-    #             type(self).__name__,  self.name))
+    if hasattr(self, '_critical'):
+      # If self already has a list of deps then we do not set it twice.
+      # For example, self can be re-discovered by some later action
+      # we want to condition only on the first list of deps.
+      # The second list is ignored.
+      if isinstance(self._critical, list):
+        return
     self._critical = critical
 
   def copy(self, old_state, new_state):
