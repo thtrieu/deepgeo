@@ -143,7 +143,7 @@ def maybe_select_and_map(x, mapping):
     x = x.select(mapping)
   if x in mapping:
     return mapping[x]
-  return x
+  return None
 
 
 class Action(object):
@@ -157,20 +157,25 @@ class Action(object):
     self.state = state
     self.canvas = canvas
 
-
     self.premise_objects = []
     for x in theorem.premise_objects:
       if isinstance(x, tuple):
         x = tuple(map(lambda t: maybe_select_and_map(t, mapping), x))
+        if None in x:
+          continue
       else:
         x = maybe_select_and_map(x, mapping)
+        if x is None:
+          continue
       self.premise_objects.append(x)
 
-    self.other_premises = []
-    
     for obj in self.new_objects:
       if obj.critical:
-        obj.set_critical(self.premise_objects)
+        obj.set_deps(self.premise_objects)
+      else:
+        obj.set_deps(self.matched_conclusion.topological_list[
+            obj.conclusion_position])
+        # obj.set_critical(self.premise_objects)
 
     # List of Merge() relations associcated with this action.
     self.merges = [
@@ -202,14 +207,8 @@ class Action(object):
     assert isinstance(other_action.theorem, MergeTheorem)
     assert len(other_action.matched_conclusion.topological_list) == 1 
 
-    # for obj in other_action.new_objects:
-    #   if obj.critical:
-    #     obj.set_critical(len(self.other_premises))
-
-    # self.other_premises += [other_action.premise_objects]
-
     # self.premise_objects += [other_action.premise_objects]
-    self.matched_conclusion.topological_list[0] += other_action.matched_conclusion.topological_list[0]
+    # self.matched_conclusion.topological_list[0] += other_action.matched_conclusion.topological_list[0]
     self.new_objects += other_action.new_objects
     self.merges += other_action.merges
 
@@ -611,6 +610,28 @@ class SameLineBecauseSamePoint(MergeTheorem):
     self.names = dict(l1=l1, l2=l2, A=A, B=B)
 
 
+class SameLineBecauseSameLine(MergeTheorem):
+
+  def build_premise_and_conclusion(self):
+    l1, l2 = Line('l1'), Line('l2')
+    A, B = Point('A'), Point('B')
+
+    self.premise = (
+      collinear(l1, A, B) +
+      collinear(l2, A, B) +
+      distinct(A, B)
+    )
+
+    self.trigger_obj = l1
+    self.merge_pair = (l1, l2)
+
+    self.conclusion = Conclusion()
+    self.conclusion.add_critical(Merge(l1, l2))
+
+    self.for_drawing = []
+    self.names = dict(l1=l1, l2=l2, A=A, B=B)
+
+
 class SamePointBecauseSameLine(MergeTheorem):
 
   def build_premise_and_conclusion(self):
@@ -888,7 +909,7 @@ class ConstructMirrorPoint(FundamentalTheorem):
 #     return info
 
 
-class ConstructIntersectLineLine(FundamentalTheorem):
+class ConstructIntersectLineLineBecauseAngle(FundamentalTheorem):
 
   def build_premise_and_conclusion(self):
     l1, l2 = Line('l1'), Line('l2')
@@ -913,7 +934,44 @@ class ConstructIntersectLineLine(FundamentalTheorem):
 
     self.names = dict(l1=l1, l2=l2)
     self.args = [l1, l2]
-    self.short_name = 'lineXline'
+    self.short_name = 'lineXlineA'
+
+  def draw(self, mapping, canvas):
+    X, l1, l2 = map(mapping.get, self.for_drawing)
+    return canvas.add_intersect_line_line(X, l1, l2)
+
+  @property
+  def name(self):
+    return 'Construct Line-Line Intersection'
+
+
+class ConstructIntersectLineLineBecauseDirection(FundamentalTheorem):
+
+  def build_premise_and_conclusion(self):
+    l1, l2, l3 = Line('l1'), Line('l2'), Line('l3')
+    d1, d2 = LineDirection('d1'), LineDirection('d2')
+    A = Point('A')
+
+    _, _, a12_def = fangle_def(d1, d2)
+
+    self.premise = (
+        have_direction(d1, l1) +
+        have_direction(d1, l3) +
+        collinear(l3, A) + collinear(l2, A) + 
+        distinct(l2, l3)
+    )
+    self.conclusion = Conclusion()
+
+    X = Point('X')
+    self.conclusion.add_critical(*(
+        collinear(l1, X) + collinear(l2, X)
+    ))
+
+    self.for_drawing = [X, l1, l2]
+
+    self.names = dict(l1=l1, l2=l2)
+    self.args = [l1, l2]
+    self.short_name = 'lineXlineD'
 
   def draw(self, mapping, canvas):
     X, l1, l2 = map(mapping.get, self.for_drawing)
@@ -1372,13 +1430,11 @@ class ConstructParallelLine(FundamentalTheorem):
         DistinctLine(l, l2),
         LineContainsPoint(l2, A), 
         LineHasDirection(l2, d))
-    # self.conclusion.add_critical(
-    #     LineHasDirection(l, d),
-    #     LineContainsPoint(l2, A),
-    #     LineHasDirection(l2, d))
 
     self.for_drawing = [l2, A, l]
     self.names = dict(A=A, l=l)
+    self.args = A, l
+    self.short_name = 'parallel'
 
   def draw(self, mapping, canvas):
     l2, A, l = map(mapping.get, self.for_drawing)
@@ -1698,6 +1754,7 @@ class SamePairSkip(object):
   def __init__(self, a, b, x, y):
     self.pairs = a, b, x, y
     self.name = '{'+a.name+','+b.name+'}={'+x.name+','+y.name+'}'
+    self.numerical_check_objs = []
 
 
 def same_pair_skip(a, b, x, y, relations, add_skip=False):
@@ -1718,6 +1775,74 @@ def premise_equal_segments(A, B, X, Y):
                         have_length('l' + A.name + B.name, AB, XY))
 
 
+class NumericalCheck(object):
+
+  def __init__(self, fn, args):
+    self.fn = fn
+    self.args = args
+    self.name = 'check('+','.join([a.name for a in args])+')'
+
+  def is_available(self, mapping):
+    return all([a in mapping for a in self.args])
+
+  def check(self, mapping):
+    args = map(mapping.get, self.args)
+    return self.fn(*args)
+
+
+class SamePairSameSignSkip(object):
+
+  def __init__(self,
+               hpa, hpb, hpx, hpy,
+               la, lb, lx, ly,
+               da, db, dx, dy):
+    self.pairs = da, db, dx, dy
+
+    self.possible_same = [
+        (da, lb, dx, ly),
+        (da, lb, dy, lx),
+        (db, la, dx, ly),
+        (db, la, dy, lx),
+        (da, db, dx, dy),
+        (da, db, dy, dx),
+    ]
+    hps = hpa, hpb, hpx, hpy
+    
+    def fn(hpa, hpb, hpx, hpy):
+      return hpa.sign * hpb.sign == hpx.sign * hpy.sign
+
+    # During graph matching,
+    # try skipping all relations while adding this check
+    self.numerical_check_objs = [NumericalCheck(fn, hps)]
+    # or ignore this check and keep all relations.
+    self.name = 'samepairsign({},{},{},{})'.format(
+        la.name, lb.name, lx.name, ly.name)
+
+
+def same_pair_same_sign_skip(
+    hpa, hpb, hpx, hpy,
+    la, lb, lx, ly,
+    da, db, dx, dy,
+    relations,
+    add_skip=False):
+  
+  skip = SamePairSameSignSkip(
+      hpa, hpb, hpx, hpy,
+      la, lb, lx, ly,
+      da, db, dx, dy)
+
+  for rel in relations:
+    # if isinstance(rel, LineHasDirection):
+    #   continue
+    rel.post_skip = skip
+
+  if add_skip:
+    relations = [skip] + relations
+
+  return relations
+
+
+
 def premise_equal_angles(name, 
                          ab, bc, ab_hp, bc_hp, 
                          de, ef, de_hp, ef_hp):
@@ -1729,17 +1854,28 @@ def premise_equal_angles(name,
   B_xx, B_xo, B_def = fangle_def(dAB, dBC)
   E_xx, E_xo, E_def = fangle_def(dDE, dEF)
   
-  return same_pair_skip(
-      ab_hp, bc_hp, de_hp, ef_hp,
-      # If set(ab_hp, bc_hp) == set(de_hp, ef_hp), skip:
+  pre_relations = (  # need these before same pair same sign.
       have_direction(dAB, ab) +
       have_direction(dBC, bc) +
       have_direction(dDE, de) +
-      have_direction(dEF, ef) +
+      have_direction(dEF, ef)
+  )
+
+  skip_relations = (  # match these if not same pair same sign.
       B_def + E_def +
       have_measure('m' + name, 
-                   SelectAngle(B_xx, B_xo, ab_hp, bc_hp), 
-                   SelectAngle(E_xx, E_xo, de_hp, ef_hp))
+                  SelectAngle(B_xx, B_xo, ab_hp, bc_hp), 
+                  SelectAngle(E_xx, E_xo, de_hp, ef_hp))
+  )
+
+  return same_pair_skip(
+      ab_hp, bc_hp, de_hp, ef_hp,
+      # pre_relations + skip_relations
+      same_pair_same_sign_skip(
+          ab_hp, bc_hp, de_hp, ef_hp, 
+          ab, bc, de, ef,
+          dAB, dBC, dDE, dEF,
+          pre_relations + skip_relations)
   )
 
 
@@ -2212,7 +2348,8 @@ all_theorems = [
 #   5. Through two segments
 #  C. Construct a Point  (4)
 #   1. as intersection of 2 Lines with angle
-    ConstructIntersectLineLine(),
+    ConstructIntersectLineLineBecauseAngle(),
+    ConstructIntersectLineLineBecauseDirection(),
 #   2. as intersection of Line & Segment
     ConstructIntersectSegmentLine(),
 #   3. as intersection of Line & Circle
@@ -2300,6 +2437,7 @@ all_theorems = [
     SamePointBecauseSamePoint(),
 #   2. Point => Line -> Direction
     SameLineBecauseSamePoint(),
+    SameLineBecauseSameLine(),
 #   3. Circle => Point
 #   4. Point => Circle
 #   5. Measure => Direction
@@ -2372,6 +2510,7 @@ def auto_merge_theorems_from_trigger_obj(obj):
         theorem_from_name[name]
         for name in ['SameHalfplaneBecauseSameLine',
                      'SamePointBecauseSameLine',
+                     'SameLineBecauseSameLine',
                      'SameDirectionBecauseSameLine']
     ]
   if isinstance(obj, LineDirection):

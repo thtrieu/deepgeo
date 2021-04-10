@@ -35,7 +35,7 @@ from cython.parallel import prange
 cimport numpy as np
 cimport cython
 
-from theorems import SamePairSkip
+from theorems import SamePairSkip, SamePairSameSignSkip, NumericalCheck
 
 from geometry import SelectAngle
 from geometry import GeometryEntity
@@ -78,7 +78,9 @@ from geometry import LineContainsPoint, CircleContainsPoint, HalfPlaneContainsPo
 # test()
 
 
-def can_be_same(x, y, object_mappings):
+@cython.boundscheck(False)
+@cython.wraparound(False)
+cpdef tuple can_be_same(object x, object y, dict object_mappings):
   x_in = x in object_mappings
   y_in = y in object_mappings
   if x_in and y_in:
@@ -95,7 +97,9 @@ def can_be_same(x, y, object_mappings):
     return True, {x: object_mappings[y]}, []
 
 
-def maybe_skip(a, b, c, d, object_mappings):
+@cython.boundscheck(False)
+@cython.wraparound(False)
+cpdef tuple maybe_skip(object a, object b, object c, object d, dict object_mappings):
   can_be_same_ac, update_ac, same_ac = can_be_same(a, c, object_mappings)
   can_be_same_bd, update_bd, same_bd = can_be_same(b, d, object_mappings)
   
@@ -183,7 +187,76 @@ cpdef list recursively_match(
   cdef list match
   cdef tuple distinct_pair, same_pair
 
+  cdef list query_relations_skip
+  cdef object q
+
+  if isinstance(query0, SamePairSameSignSkip):
+    # Do not assume same pair, and try to match skip_relations.
+    match = recursively_match(
+        query_relations=query_relations[1:], 
+        state_candidates=state_candidates,
+        object_mappings=object_mappings,
+        distinct=distinct,
+        same=same,
+        return_all=return_all,
+        depth=depth+1)
+
+    if not return_all:
+      if match:
+        return match
+    else:
+      all_matches.extend(match)
+
+    for a, b, c, d in query0.possible_same:
+      # try a -> x, c -> x, b -> y, d -> y
+      new_mappings, appended_same = maybe_skip(a, b, c, d, object_mappings)
+
+      if new_mappings is not None and appended_same is not None:
+        query_relations_skip = []
+
+        for q in query_relations[1:]:
+          if getattr(q, 'post_skip', None) != query0:
+            query_relations_skip.append(q)
+          elif isinstance(q, LineHasDirection) and q._init_list[0] not in [b, d]:
+              query_relations_skip.append(q)
+
+        new_mappings[query0] = True
+        match = recursively_match(
+            query_relations=query0.numerical_check_objs + query_relations_skip, 
+            state_candidates=state_candidates,
+            object_mappings=dict(object_mappings, **new_mappings),
+            distinct=distinct,
+            same=same + appended_same,
+            return_all=return_all,
+            depth=depth+1)
+
+        # if not match:
+        #   print('fail {}={} & {}={}'.format(query0.name))
+        if not return_all:
+          if match:
+            return match
+        else:
+          all_matches.extend(match)
+
+    return all_matches
+
   if isinstance(query0, SamePairSkip):
+    # Finally without trying to skip anything (simply skip the skip)
+    match = recursively_match(
+        query_relations=query_relations[1:], 
+        state_candidates=state_candidates,
+        object_mappings=object_mappings,
+        distinct=distinct,
+        same=same,
+        return_all=return_all,
+        depth=depth+1)
+
+    if not return_all:
+      if match:
+        return match
+    else:
+      all_matches.extend(match)
+
     a, b, c, d = query0.pairs
     # try a -> x, c -> x, b -> y, d -> y
     new_mappings, appended_same = maybe_skip(a, b, c, d, object_mappings)
@@ -231,26 +304,36 @@ cpdef list recursively_match(
           return match
       else:
         all_matches.extend(match)
-
-    # Finally without trying to skip anything (simply skip the skip)
-    match = recursively_match(
-        query_relations=query_relations[1:], 
-        state_candidates=state_candidates,
-        object_mappings=object_mappings,
-        distinct=distinct,
-        same=same,
-        return_all=return_all,
-        depth=depth+1)
-
-    if not return_all:
-      if match:
-        return match
-    else:
-      all_matches.extend(match)
     
     return all_matches
+
+  # If query0 is a numerical check: check it for early pruning.
+  if isinstance(query0, NumericalCheck):
+    if query0.is_available(object_mappings):
+      if query0.check(object_mappings):
+        return recursively_match(
+            query_relations=query_relations[1:], 
+            state_candidates=state_candidates,
+            object_mappings=object_mappings,
+            distinct=distinct,
+            same=same,
+            return_all=return_all,
+            depth=depth+1)
+      else:
+        return []
+    else:
+      if len(query_relations) == 1:
+        return []
+      return recursively_match(
+          query_relations=query_relations[1:]+[query0], 
+          state_candidates=state_candidates,
+          object_mappings=object_mappings,
+          distinct=distinct,
+          same=same,
+          return_all=return_all,
+          depth=depth+1)
     
-  # If query0 is not a Skip, do as normal.
+  # If query0 is just a normal relation, do as normal.
   a, b = query0.init_list
 
   cdef int available = 1 
@@ -272,8 +355,8 @@ cpdef list recursively_match(
       available = 0
   
   if available == 0:
-    # If query0 is not available, then it is guaranteed that len(query_relations) >= 2
-    # print(query_relations)
+    if len(query_relations) == 1:
+      return []
     return recursively_match(
         query_relations=query_relations[1:]+[query0], 
         state_candidates=state_candidates,

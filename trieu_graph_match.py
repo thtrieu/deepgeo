@@ -1,17 +1,12 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-from action_chain_lib import recursively_auto_merge
 
 import numpy as np
 # import random
 
 from numpy.lib.arraysetops import isin
 import geometry
-# import time
-import profiling
-# import theorems_utils
-import debugging
 
 
 from state import Conclusion
@@ -39,7 +34,6 @@ def strip_match_relations(premise_relations, conclusion_relations, state_relatio
   # This also help with early pruning during recursive calls.
   relevant_state_candidates = {}
 
-
   for rel in premise_relations + conclusion_relations:
     rel_type = type(rel)
     if rel_type not in relevant_state_candidates:
@@ -64,14 +58,23 @@ def strip_match_relations(premise_relations, conclusion_relations, state_relatio
       zip(premise_relations, rel_branch_count), 
       reverse=True))  # very important speedup!
 
-  # Finally, we insert SamePairSkip before the first member of its group:
+  # Then, we insert SamePairSkip before the first member of its group:
   optimized_order_premise_relations = []  # return this.
-  all_skips = set()
+  all_pre_skips = set()
+  all_post_skips = set()
   for p in premise_relations:
     skip = getattr(p, 'skip', None)
-    if skip and skip not in all_skips:
-      all_skips.add(skip)
+    if skip and skip not in all_pre_skips:
+      all_pre_skips.add(skip)
       optimized_order_premise_relations.append(skip)
+
+    post_skip = getattr(p, 'post_skip', None)
+    if post_skip and post_skip not in all_post_skips:
+      all_post_skips.add(post_skip)
+      if skip:
+        post_skip.skip = skip
+      optimized_order_premise_relations.append(post_skip)
+
     optimized_order_premise_relations.append(p)
 
   return optimized_order_premise_relations, relevant_state_candidates
@@ -369,7 +372,6 @@ def create_new_rels_from_merge(obj1, obj2,
       for rel in state_relations 
       if not isinstance(rel, Merge) and obj2 in rel.init_list})
   
-
   assert obj2 not in merge_graph1
   assert obj1 not in merge_graph2
 
@@ -468,34 +470,7 @@ def create_new_rels_from_merge(obj1, obj2,
       new_rel.set_conclusion_position(conclusion_position)
       new_rels.append(new_rel)
 
-  # Now filter obj2 out of state_relations to recursively
-  # seek for consequently triggered merges.
-  # filtered_state_relations = filter(
-  #     lambda x: isinstance(x, Merge) or obj2 not in x.init_list, state_relations)
-
-  # theorem = None
-  # if isinstance(obj1, Point):
-  #   theorem = all_theorems['auto_seg']
-  # elif isinstance(obj1, Line):
-  #   theorem = all_theorems['auto_hp']
-  # elif isinstance(obj1, HalfPlane):
-  #   theorem = all_theorems['auto_angle']
-  
-  # new_rels = add_new_rels_from_auto_merge(
-  #   trigger_obj=obj1,
-  #   theorem=theorem, 
-  #   filtered_state_relations=filtered_state_relations, 
-  #   new_rels=new_rels, 
-  #   critical=critical, 
-  #   conclusion_position=conclusion_position,
-  #   current_state=current_state)
-  
-  # Finally remove obj2.
-  # But first remove obj2 in new_rels
-  # new_rels = filter(
-  #     lambda rel: isinstance(rel, Merge) or obj2 not in rel.init_list, 
-  #     new_rels)
-
+  # Finally remove the redundant object.
   new_rel = Merge(obj2, obj1, merge_graph)
   new_rel.set_critical(critical)
   new_rel.set_conclusion_position(conclusion_position)

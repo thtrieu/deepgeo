@@ -13,12 +13,12 @@ import whittling
 import action_chain_lib
 import theorems
 import sketch
-import explore
-import debugging
-import state
 
-from theorems_utils import *
-from theorems import *
+import profiling
+
+from theorems_utils import segment_def, collinear, fangle_def
+from theorems_utils import have_direction, have_measure, have_length
+from theorems_utils import divides_halfplanes, distinct
 
 from state import State, Conclusion
 
@@ -178,7 +178,6 @@ def test_angle_bisect_isosceles():
 
   print('\nRunning test_angle_bisect_isosceles:')
   state, canvas, action_chain = action_chain_lib.execute_steps(steps, state, canvas)
-  
 
 
 def test_base_bisect_sss_isosceles():
@@ -287,7 +286,7 @@ def test_ang_isos_bisect_is_perp():
   assert len(list(action_gen)) == 0
 
   steps = [
-      'lineXline: l4 l2',
+      'lineXlineA: l4 l2',
       'ASA: P1 P5'
   ]
 
@@ -357,7 +356,7 @@ def test_isos_merge_lines():
   steps = [
       'ang_isos:',
       'angle_bisect: hp1 hp3',  # -> l4
-      'lineXline: l4 l2',  # -> P4
+      'lineXlineA: l4 l2',  # -> P4
       'midp: P2 P3',  # -> P5
       'perp: P5 l2',  # -> l5
   ]
@@ -482,9 +481,9 @@ def whittle(final_state, state_queue, proof_queue, action_chain,
   if verbose:
     print()
     if isinstance(proof_queue[0], (list, tuple)):
-      print('Whittled Proof {}'.format([r.name for r in proof_queue[0]]))
+      print('Whittled Proof {}'.format(final_state.name_map(proof_queue[0])))
     else:
-      print('Whittled Proof {}'.format(proof_queue[0].name))
+      print('Whittled Proof {}'.format(final_state.name_map(proof_queue[0])))
 
     for i, (step, action) in enumerate(zip(proof_whittled, action_chain)):
       if step == []:
@@ -498,18 +497,37 @@ def whittle(final_state, state_queue, proof_queue, action_chain,
   return new_state, new_canvas, proof_steps
 
 
-def test_isos_merge_whittle():
+def extract_name2goals(proof_goals, state, prev_state):
+  # Check if all the goals are here:
+  name2goals = {}
+  for state_queue, proof_queue in proof_goals:
+    if isinstance(proof_queue[0], tuple):
+      repr = proof_queue[0][0]
+      if isinstance(repr, geometry.CausalValue):
+        rel1, rel2 = proof_queue[0][1:]
+        obj1 = rel1.init_list[0]
+        obj2 = rel2.init_list[0]
+        name = state.name_map(obj1) + ' == ' + state.name_map(obj2)
+      else:
+        name = prev_state.name_map(proof_queue[0][0])
+    else:
+      name = prev_state.name_map(proof_queue[0])
+    name2goals[name] = state_queue, proof_queue
+  return name2goals
+
+
+def test_isos_merge_whittle_goal1():
   geometry.reset()
 
   init_canvas = sketch.Canvas()
   init_state = State()
 
-  print('\nRunning Isos Merge Whittle v1 test:')
+  print('\nRunning Isos Merge Whittle goal1 test:')
 
   steps = [
       'ang_isos:',
       'angle_bisect: hp1 hp3',  # -> l4
-      'lineXline: l4 l2',  # -> P4
+      'lineXlineA: l4 l2',  # -> P4
       'midp: P2 P3',  # -> P5
       'perp: P5 l2',  # -> l5
       'ASA: P4 P1',  # -> Now l5 contains P1
@@ -527,13 +545,7 @@ def test_isos_merge_whittle():
   proof_goals = list(whittling.extract_all_proof_goals(action_chain, state))
   
   # Check if all the goals are here:
-  name2goals = {}
-  for state_queue, proof_queue in proof_goals:
-    if isinstance(proof_queue[0], tuple):
-      name = prev_state.name_map(proof_queue[0][0])
-    else:
-      name = prev_state.name_map(proof_queue[0])
-    name2goals[name] = state_queue, proof_queue
+  name2goals = extract_name2goals(proof_goals, state, prev_state)
 
   all_target_goals = [
       ('l5{P4}', [5]), 
@@ -563,7 +575,7 @@ def test_isos_merge_whittle():
   assert proof_steps == [1, 2, 5]
   steps = [
       'angle_bisect: hp1 hp3',  # -> l6
-      'lineXline: l6 l2',  # -> P6
+      'lineXlineA: l6 l2',  # -> P6
       'ASA: P6 P1',  # -> Now l6 contains P1
   ]
   print('Proof execution:')
@@ -579,18 +591,18 @@ def test_isos_merge_whittle():
   assert l5 in l6.merge_graph[proved_problem]['equivalents']
 
 
-def test_isos_merge_whittle_v2():
+def test_isos_merge_whittle_goal2():
   geometry.reset()
 
   init_canvas = sketch.Canvas()
   init_state = State()
 
-  print('\nRunning Isos Merge whittle v2 test:')
+  print('\nRunning Isos Merge whittle goal2 test:')
 
   steps = [
       'ang_isos:',
       'angle_bisect: hp1 hp3',  # -> l4
-      'lineXline: l4 l2',  # -> P4
+      'lineXlineA: l4 l2',  # -> P4
       'midp: P2 P3',  # -> P5
       'perp: P5 l2',  # -> l5
       'ASA: P4 P1',  # -> Now l5 contains P1, l4 contains P5
@@ -604,13 +616,7 @@ def test_isos_merge_whittle_v2():
   proof_goals = list(whittling.extract_all_proof_goals(action_chain, state))
   
   # Check if all the goals are here:
-  name2goals = {}
-  for state_queue, proof_queue in proof_goals:
-    if isinstance(proof_queue[0], tuple):
-      name = prev_state.name_map(proof_queue[0][0])
-    else:
-      name = prev_state.name_map(proof_queue[0])
-    name2goals[name] = state_queue, proof_queue
+  name2goals = extract_name2goals(proof_goals, state, prev_state)
 
   all_target_goals = [
       'l5{P4}', 'P4[P5P3', 'P4[P5P2', 
@@ -627,7 +633,7 @@ def test_isos_merge_whittle_v2():
   assert proof_steps == [2, 5]
 
   steps = [
-      'lineXline: l4 l2',  # -> P6
+      'lineXlineA: l4 l2',  # -> P6
       'ASA: P6 P1',  # -> Now l6 contains P1
   ]
   print('Proof execution:')
@@ -643,21 +649,21 @@ def test_isos_merge_whittle_v2():
   assert P6 in P5.merge_graph[proved_problem]['equivalents']
 
 
-def test_isos_merge_whittle_v3():
+def test_isos_merge_whittle_v2():
   geometry.reset()
 
   init_canvas = sketch.Canvas()
   init_state = State()
 
-  print('\nRunning Isos Merge whittle v3 test:')
+  print('\nRunning Isos Merge whittle v2 test:')
 
   steps = [
       'ang_isos:',
       'angle_bisect: hp1 hp3',  # -> l4
-      'lineXline: l4 l2',  # -> P4
+      'lineXlineA: l4 l2',  # -> P4
       'midp: P2 P3',  # -> P5
       'perp: P5 l2',  # -> l5
-      'lineXline: l5 l1',  # -> P6
+      'lineXlineA: l5 l1',  # -> P6
       'ASA: P4 P1',  # -> Now l5 contains P1, l4 contains P5
   ]
   state, canvas, action_chain = action_chain_lib.execute_steps(
@@ -669,14 +675,8 @@ def test_isos_merge_whittle_v3():
   proof_goals = list(whittling.extract_all_proof_goals(action_chain, state))
   
   # Check if all the goals are here:
-  name2goals = {}
-  for state_queue, proof_queue in proof_goals:
-    if isinstance(proof_queue[0], tuple):
-      name = prev_state.name_map(proof_queue[0][0])
-    else:
-      name = prev_state.name_map(proof_queue[0])
-    name2goals[name] = state_queue, proof_queue
-  
+  name2goals = extract_name2goals(proof_goals, state, prev_state)
+
   all_target_goals = [
       'l4{P6}', 'l3{P6}',
       'l5{P4}', 'P4[P5P3', 'P4[P5P2', 
@@ -707,7 +707,7 @@ def test_isos_merge_whittle_v3():
 
   steps = [
       'angle_bisect: hp1 hp3',  # -> l6
-      'lineXline: l6 l2',  # -> P7
+      'lineXlineA: l6 l2',  # -> P7
       'ASA: P7 P1',  # -> Now l5 contains P1, l4 contains P5
   ]
   print('Proof execution:')
@@ -717,7 +717,7 @@ def test_isos_merge_whittle_v3():
   assert proved_problem.has_relation(LineContainsPoint(l3, P6))
 
 
-def test_isos_merge_whittle_v4():
+def test_isos_merge_whittle_v3():
   geometry.reset()
 
   init_canvas = sketch.Canvas()
@@ -729,7 +729,7 @@ def test_isos_merge_whittle_v4():
       'ang_isos:',
       'midp: P2 P3',  # -> P4
       'perp: P4 l2',  # -> l4
-      'lineXline: l4 l1',  # -> P5
+      'lineXlineA: l4 l1',  # -> P5
   ]
   state3, canvas, action_chain = action_chain_lib.execute_steps(
       steps, init_state, init_canvas)
@@ -743,21 +743,19 @@ def test_isos_merge_whittle_v4():
   proof_goals = list(whittling.extract_all_proof_goals(action_chain, state))
   
   # Check if all the goals are here:
-  name2goals = {}
-  for state_queue, proof_queue in proof_goals:
-    if isinstance(proof_queue[0], tuple):
-      name = prev_state.name_map(proof_queue[0][0])
-      name2goals[name] = state_queue, proof_queue
-    else:
-      name = prev_state.name_map(proof_queue[0])
-  
+  name2goals = extract_name2goals(proof_goals, state, prev_state)
+
   l3 = state.name2obj['l3']
   P5 = state.name2obj['P5']
   assert state.has_relation(LineContainsPoint(l3, P5))
 
-  all_target_goals = ['l3{P5}', '4.l_seg3', 'l4{P1}']
+  all_target_goals = ['l3{P5}', '4.P2P5 == 4.P3P5', 'l4{P1}']
   for goal in all_target_goals:
     assert goal in name2goals, goal
+    state_queue, proof_queue = name2goals[goal]
+    problem, problem_canvas, proof_steps = whittle(
+        state, state_queue, proof_queue, action_chain,
+        init_state, init_canvas, canvas)
   
   state_queue, proof_queue = name2goals['l3{P5}']
   # there will be fragments of 1. construct angle bisector
@@ -786,18 +784,256 @@ def test_isos_merge_whittle_v4():
 
 
 def test_thales():
+  geometry.reset()
+
+  init_canvas = sketch.Canvas()
+  init_state = State()
+
+  print('\nRunning test_thales:')
+
   steps = [
-      'triangle:',
-      'angle_bisect: hp1 hp3',  # -> l4
-      'lineXline: l4 l2',  # -> P4
-      'midp: P2 P3',  # -> P5
-      'perp: P5 l2',  # -> l5
-      'ASA: P4 P1',  # -> Now l5 contains P1, l4 contains P5
+      'triangle:',  # P1 P2 P3
+      'midp: P1 P2',  # -> P4
+      'parallel: P4 l2',  # -> l4
+      'lineXlineD: l4 l3',  # -> P5
+      'parallel: P3 l1',  # -> l5
+      'line: P4 P3',  # -> l6
+      'ASA: P4 P3 P2 P3 P4',  # -> P6
+      'ASA: P1 P4 P5 P3 P6'  # P7 == P5
   ]
+
+  state, canvas, action_chain = action_chain_lib.execute_steps(
+      steps, init_state, init_canvas)
+
+  prev_state = action_chain[-1].state
+  proof_goals = list(whittling.extract_all_proof_goals(action_chain, state))
+  
+  # Check if all the goals are here:
+  name2goals = extract_name2goals(proof_goals, state, prev_state)
+  all_target_goals = ['7.P5P4 == 7.P5P6', '7.P1P5 == 7.P3P5']
+  for goal in all_target_goals:
+    assert goal in name2goals, goal
+    state_queue, proof_queue = name2goals[goal]
+    problem, problem_canvas, proof_steps = whittle(
+        state, state_queue, proof_queue, action_chain,
+        init_state, init_canvas, canvas, verbose=False)
+
+  state_queue, proof_queue = name2goals['7.P1P5 == 7.P3P5']
+  problem, problem_canvas, proof_steps = whittle(
+      state, state_queue, proof_queue, action_chain,
+      init_state, init_canvas, canvas)
+  
+  assert proof_steps == [4, 5, 6, 7]
+  P1P5 = problem.segment_between('P1', 'P5')
+  P3P5 = problem.segment_between('P3', 'P5')
+  assert not problem.is_equal(P1P5, P3P5)
+
+  # assert not problem.has_relation(LineContainsPoint(l3, P5))
+  # assert proof_steps == [4], proof_steps
+
+  steps = [
+      'parallel: P3 l1',  # --> l7
+      'line: P4 P3',
+      'ASA: P4 P3 P2 P3 P4',  # --> P7
+      'ASA: P1 P4 P5 P3 P7',
+  ]
+  print('Proof execution:')
+  proved_problem, _, action_chain = action_chain_lib.execute_steps(
+      steps, problem, problem_canvas)
+  assert proved_problem.is_equal(P1P5, P3P5)
+
+
+def test_thales_noise_shuffle():
+  geometry.reset()
+
+  init_canvas = sketch.Canvas()
+  init_state = State()
+
+  print('\nRunning test_thales:')
+
+  steps = [
+      'triangle:',  # P1 P2 P3
+      'parallel: P1 l2',  # -> l4
+      'parallel: P3 l1',  # -> l5
+      'midp: P1 P2',  # -> P4
+      'line: P4 P3',  # -> l6
+      'parallel: P4 l2',  # -> l7
+      'midp: P2 P3',  # -> P5
+      'lineXlineD: l7 l3',  # -> P6
+      'ASA: P4 P3 P2 P3 P4',  # -> P7
+      'ASA: P1 P4 P6 P3 P7'  # P7 == P5
+  ]
+
+  state, canvas, action_chain = action_chain_lib.execute_steps(
+      steps, init_state, init_canvas)
+
+  prev_state = action_chain[-1].state
+  proof_goals = list(whittling.extract_all_proof_goals(action_chain, state))
+  
+  # Check if all the goals are here:
+  name2goals = extract_name2goals(proof_goals, state, prev_state)
+  all_target_goals = ['9.P6P4 == 9.P6P7', '9.P1P6 == 9.P3P6']
+  for goal in all_target_goals:
+    assert goal in name2goals, goal
+    state_queue, proof_queue = name2goals[goal]
+    problem, problem_canvas, proof_steps = whittle(
+        state, state_queue, proof_queue, action_chain,
+        init_state, init_canvas, canvas, verbose=False)
+
+  state_queue, proof_queue = name2goals['9.P1P6 == 9.P3P6']
+  problem, problem_canvas, proof_steps = whittle(
+      state, state_queue, proof_queue, action_chain,
+      init_state, init_canvas, canvas)
+  
+  assert proof_steps == [2, 4, 8, 9]
+  P1P6 = problem.segment_between('P1', 'P6')
+  P3P6 = problem.segment_between('P3', 'P6')
+  assert not problem.is_equal(P1P6, P3P6)
+
+  steps = [
+      'parallel: P3 l1',  # --> l8
+      'line: P4 P3',  # --> l9
+      'ASA: P4 P3 P2 P3 P4',  # --> P8
+      'ASA: P1 P4 P6 P3 P8',
+  ]
+  print('Proof execution:')
+  proved_problem, _, action_chain = action_chain_lib.execute_steps(
+      steps, problem, problem_canvas)
+  assert proved_problem.is_equal(P1P6, P3P6)
+
+
+def test_thales_noise_shuffle_merge_goal1():
+  geometry.reset()
+
+  init_canvas = sketch.Canvas()
+  init_state = State()
+
+  print('\nRunning test_thales:')
+
+  steps = [
+      'triangle:',  # P1 P2 P3
+      'parallel: P1 l2',  # -> l4
+      'parallel: P3 l1',  # -> l5
+      'midp: P1 P2',  # -> P4
+      'line: P4 P3',  # -> l6
+      'parallel: P4 l2',  # -> l7
+      'midp: P2 P3',  # -> P5
+      'lineXlineD: l7 l3',  # -> P6
+      'ASA: P4 P3 P2 P3 P4 l5 l7',  # -> P7
+      'midp: P1 P3',  # -> P8
+      'parallel: P8 l2',  # l8
+      'ASA: P1 P4 P6 P3 P7 l3 l7',  # P7 == P5
+  ]
+
+  state, canvas, action_chain = action_chain_lib.execute_steps(
+      steps, init_state, init_canvas)
+
+  prev_state = action_chain[-1].state
+  proof_goals = list(whittling.extract_all_proof_goals(action_chain, state))
+  
+  # Check if all the goals are here:
+  name2goals = extract_name2goals(proof_goals, state, prev_state)
+  print(name2goals.keys())
+  # exit()
+
+  all_target_goals = [
+      ('11.P1P6 == 11.P3P6', [2, 4, 8, 11]), 
+      ('11.P6P4 == 11.P6P7', [11]),
+      ('l7{P8}', [2, 4, 7, 8, 11]), 
+      ('l8{P4}', [2, 4, 5, 7, 8, 11]), 
+      ('l8{P6}', [2, 4, 8, 11]), 
+      ('l8{P7}', [7, 11])
+  ]
+  for goal, target_proof_steps in all_target_goals:
+    assert goal in name2goals, goal
+    state_queue, proof_queue = name2goals[goal]
+    problem, problem_canvas, proof_steps = whittle(
+        state, state_queue, proof_queue, action_chain,
+        init_state, init_canvas, canvas, verbose=False)
+    assert target_proof_steps == proof_steps
+
+  state_queue, proof_queue = name2goals['11.P1P6 == 11.P3P6']
+  problem, problem_canvas, proof_steps = whittle(
+      state, state_queue, proof_queue, action_chain,
+      init_state, init_canvas, canvas)
+  
+  assert proof_steps == [2, 4, 8, 11]
+  P1P6 = problem.segment_between('P1', 'P6')
+  P3P6 = problem.segment_between('P3', 'P6')
+  assert not problem.is_equal(P1P6, P3P6)
+
+  steps = [
+      'parallel: P3 l1',  # --> l9
+      'line: P4 P3',  # --> l10
+      'ASA: P4 P3 P2 P3 P4',  # --> P9
+      'ASA: P1 P4 P6 P3 P9',
+  ]
+  print('Proof execution:')
+  proved_problem, _, action_chain = action_chain_lib.execute_steps(
+      steps, problem, problem_canvas)
+  assert proved_problem.is_equal(P1P6, P3P6)
+
+
+def test_thales_noise_shuffle_merge_goal2():
+  geometry.reset()
+
+  init_canvas = sketch.Canvas()
+  init_state = State()
+
+  print('\nRunning test_thales:')
+
+  steps = [
+      'triangle:',  # P1 P2 P3
+      'parallel: P1 l2',  # -> l4
+      'parallel: P3 l1',  # -> l5
+      'midp: P1 P2',  # -> P4
+      'line: P4 P3',  # -> l6
+      'parallel: P4 l2',  # -> l7
+      'midp: P2 P3',  # -> P5
+      'lineXlineD: l7 l3',  # -> P6
+      'ASA: P4 P3 P2 P3 P4 l5 l7',  # -> P7
+      'midp: P1 P3',  # -> P8
+      'parallel: P8 l2',  # l8
+      'ASA: P1 P4 P6 P3 P7 l3 l7',  # P7 == P5
+  ]
+
+  state, canvas, action_chain = action_chain_lib.execute_steps(
+      steps, init_state, init_canvas)
+
+  prev_state = action_chain[-1].state
+  proof_goals = list(whittling.extract_all_proof_goals(action_chain, state))
+  
+  # Check if all the goals are here:
+  name2goals = extract_name2goals(proof_goals, state, prev_state)
+  
+  state_queue, proof_queue = name2goals['l8{P4}']
+  problem, problem_canvas, proof_steps = whittle(
+      state, state_queue, proof_queue, action_chain,
+      init_state, init_canvas, canvas)
+  
+  assert proof_steps == [2, 4, 5, 7, 8, 11]
+  l8 = problem.name2obj['l8']
+  P4 = problem.name2obj['P4']
+  assert not problem.has_relation(LineContainsPoint(l8, P4))
+
+  steps = [
+      'parallel: P3 l1',  # --> l9
+      'line: P4 P3',  # --> l10
+      'parallel: P4 l2',  # l11
+      'lineXlineD: l11 l3',  # P9
+      'ASA: P4 P3 P2 P3 P4',  # --> P10
+      'ASA: P1 P4 P9 P3 P10',
+  ]
+  print('Proof execution:')
+  proved_problem, _, action_chain = action_chain_lib.execute_steps(
+      steps, problem, problem_canvas)
+  assert proved_problem.has_relation(LineContainsPoint(l8, P4))
 
 
 if __name__ == '__main__':
   np.random.seed(int(time.time()))
+
+  profiling.enable()
 
   t = time.time()
   # Self-congruences:
@@ -818,14 +1054,22 @@ if __name__ == '__main__':
   test_isos_merge_lines()
 
   # Test Whittling with merges
-  test_isos_merge_whittle()
+  test_isos_merge_whittle_goal1()
+  test_isos_merge_whittle_goal2()
   test_isos_merge_whittle_v2()
   test_isos_merge_whittle_v3()
-  test_isos_merge_whittle_v4()
 
-  # TODO(thtrieu): test thales theorems & proof whittling
+  # Test thales theorems & proof whittling
+  test_thales()
+  test_thales_noise_shuffle()
+  test_thales_noise_shuffle_merge_goal1()
+  test_thales_noise_shuffle_merge_goal2()
 
-  # TODO(thtrieu): think about reapplying facts in the current tree.
+  # TODO(thtrieu): think about reapplying facts across symmetries in the graph.
+
+  # TODO(thtrieu): IMO 2018 SL G5
+  # for all tricky concepts in their full glory: 
+  # length/angle ratios, repeated symmetry.
 
   print('\n [OK!]')
-  print('Total time = {}'.format(time.time()-t))
+  profiling.print_records()

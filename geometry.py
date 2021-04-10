@@ -237,6 +237,15 @@ class GeometryEntity(object):
       if isinstance(self._critical, list):
         return
     self._critical = critical
+  
+  @property
+  def deps(self):
+    return getattr(self, '_deps', [])
+
+  def set_deps(self, deps):
+    if hasattr(self, '_deps'):
+      return
+    self._deps = deps
 
   def copy(self, old_state, new_state):
     if hasattr(self, 'merge_graph') and old_state in self.merge_graph:
@@ -342,6 +351,8 @@ class CausalValue(GeometryEntity):
 
   def dependency_path(self, obj1, obj2, state):
     # perform a BFS
+    if obj1 == obj2:
+      return []
     edges = self.edges[state]
     path = _bfs(edges, obj1, [obj2])
     result = [
@@ -353,13 +364,6 @@ class CausalValue(GeometryEntity):
         r += list(p)
       else:
         r.append(p)
-
-    # print('{}: {} <-> {} = {}'.format(
-    #     self.name, 
-    #     state.name_map(obj1), 
-    #     state.name_map(obj2) 
-    #     r
-    # ))
     return r
 
   def set_chain_position(self, pos, auto_pos=None):

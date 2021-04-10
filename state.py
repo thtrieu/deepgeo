@@ -108,6 +108,20 @@ class State(object):
     copied.hp2points = _copy(self.hp2points)
     return copied
 
+  def segment_between(self, p1, p2):
+    if isinstance(p1, str):
+      p1 = self.name2obj[p1]
+    if isinstance(p2, str):
+      p2 = self.name2obj[p2]
+    
+    point2seg = {p1: set(), p2: set()}
+    for r in self.relations:
+      if isinstance(r, PointEndsSegment) and r.init_list[0] in [p1, p2]:
+        point2seg[r.init_list[0]].add(r.init_list[1])
+    seg = list(point2seg[p1].intersection(point2seg[p2]))[0]
+    return seg
+
+
   def angle_between(self, l1, l2):
     if isinstance(l1, str):
       l1 = self.name2obj[l1]
@@ -146,6 +160,9 @@ class State(object):
     if isinstance(obj2, str):
       obj2 = self.name2obj(obj2)
     
+    if obj1 not in self.obj2valrel or obj2 not in self.obj2valrel:
+      return False
+
     assert isinstance(obj1, type(obj2))
     val1 = self.obj2valrel[obj1].init_list[1]
     valrel2 = self.obj2valrel[obj2]
@@ -476,11 +493,15 @@ class State(object):
 
   def has_relation(self, rel):
     a, b = rel.init_list
-    return any([
-      x == a and y == b
-      for x, y in [r.init_list for r in 
-                   self.type2rel[type(rel)]]
-    ])
+    for r in self.type2rel[type(rel)]:
+      x, y = r.init_list
+      try:
+        if a == x or a in x.merge_graph[self]['equivalents']:
+          if b == y or b in y.merge_graph[self]['equivalents']:
+            return True
+      except:
+        continue
+    return False
 
   def remove(self, obj):
     # mask = [True] * len(self.relations)
@@ -707,7 +728,6 @@ class Conclusion(object):
 
   def __init__(self, *initial_list):
     if list(initial_list):
-      # A list of lists
       self.topological_list = [list(initial_list)]
       self.critical = [True]
     else:

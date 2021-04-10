@@ -172,13 +172,6 @@ def get_state_and_proof_objects(last_action, state):
       if not val in state.val2valrel:
         val = state.obj2valrel[obj].init_list[1]
       val2objs[val] = state.val2valrel[val]
-      
-      # Old code, run into error. See debug_001.pkl
-      # try:
-      #   val2objs[val] = state.val2valrel[val]
-      # except:
-      #   import pdb; pdb.set_trace()
-      #   raise Exception
   
   # At this point:
   # new_objs = [b, d]
@@ -224,8 +217,8 @@ def whittle_from(final_state, queue, action_chain,
   i = 0
   non_critical_count = 0  # count when the whole premise is not needed.
 
-  copy_queue = []
-  prev_query = None
+  # copy_queue = []
+  # prev_query = None
   # The idea is to look at the head of the queue,
   # see what are its dependents, add those to the queue tail, and move on.
   while i < len(queue):
@@ -233,19 +226,16 @@ def whittle_from(final_state, queue, action_chain,
     query = queue[i]
     i += 1  # move on.
 
-    with open('whittle_save.txt', 'a') as f:
-      from_q = final_state.name_map(prev_query)
-      to_q = final_state.name_map(queue[len(copy_queue):])
-      # if to_q != [from_q] and to_q:
-      #   if len(to_q) == 1:
-      #     to_q = to_q[0]
-      if to_q == [from_q]:
-        to_q = 'defer'
-      if whittled_state is None:
-        f.write('>>> {} =>  {}\n'.format(from_q, to_q))
-        f.write(str(whittled))
-    copy_queue = list(queue)
-    prev_query = query
+    # with open('whittle_save.txt', 'a') as f:
+    #   from_q = final_state.name_map(prev_query)
+    #   to_q = final_state.name_map(queue[len(copy_queue):])
+    #   if to_q == [from_q]:
+    #     to_q = 'defer'
+    #   if whittled_state is None and to_q not in ['defer', []]:
+    #     f.write('>>> {} =>  {}\n'.format(from_q, to_q))
+    #     # f.write(str(whittled))
+    # copy_queue = list(queue)
+    # prev_query = query
 
     # Case 1: the query is a tuple (val, rel1, rel2)
     if isinstance(query, tuple) and isinstance(query[0], VALUE_ENTITIES):
@@ -257,7 +247,10 @@ def whittle_from(final_state, queue, action_chain,
       # Then there are also others that connects why obj1 == obj2
       # through transitivity
 
-      dependents = val.dependency_path(obj1, obj2, final_state) + [obj1, obj2]
+      try:
+        dependents = val.dependency_path(obj1, obj2, final_state) + [obj1, obj2]
+      except:
+        import pdb; pdb.set_trace()
       # dependents are now [int, int, int, ..., obj1, obj2]
 
       # Add these dependents to the queue.
@@ -291,8 +284,8 @@ def whittle_from(final_state, queue, action_chain,
     if (whittled_state and whittled_state[pos] == True  # by a prev whittle_from()
         or whittled[pos] == True):   # or by this one.
       continue
-
-    # if query.name == 'l5|d4':
+    
+    # if final_state.name_map(query) == '9.P1P5':
     #   import pdb; pdb.set_trace()
 
     action = action_chain[pos]
@@ -317,23 +310,18 @@ def whittle_from(final_state, queue, action_chain,
       merges = ddict(lambda: [])
 
       # Add everything in the premise to dependents.
-      # premise_objects = critical
-      # if isinstance(premise_objects, bool):
-      #   premise_objects = action.premise_objects
-      if isinstance(critical, bool):
+      if isinstance(query, int):
         premise_objects = action.premise_objects
       else:
-        premise_objects = critical
-      
-      # premise_objects = sorted(list(premise_objects))
+        premise_objects = query.deps
       premise_objects = list(premise_objects)
-      np.random.shuffle(premise_objects)
       
       for obj in premise_objects:
         if isinstance(obj, int):
           dependents.append(obj)
-          
-        elif not isinstance(obj, tuple):
+          continue
+        
+        if not isinstance(obj, tuple):
           rel = obj
 
           if not hasattr(rel, '_init_list'):
@@ -378,13 +366,14 @@ def whittle_from(final_state, queue, action_chain,
           dependents.append(pos)
       
     else:  # Non critical
-      found = action.matched_conclusion.topological_list[
-          query.conclusion_position]
-      whittled[pos].append(found)
+      deps = query.deps
+      # found = action.matched_conclusion.topological_list[
+      #     query.conclusion_position]
+      whittled[pos].append(deps)
       # Here we ignore the relations in `found` themselves
       # because we know that they are created at chain_pos = pos
       # there is no need to go further. Only init_list are concerned.
-      dependents = sum([c.init_list for c in found
+      dependents = sum([c.init_list for c in deps
                         if hasattr(c, 'init_list')], tuple())
       non_critical_count -= 1
 

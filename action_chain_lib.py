@@ -1,8 +1,8 @@
 import sketch
-import theorems_utils
 import geometry
 import theorems
 import debugging
+import profiling
 
 from theorems_utils import collinear, concyclic, in_halfplane
 from theorems_utils import divides_halfplanes, line_and_halfplanes
@@ -141,6 +141,8 @@ def execute_steps(steps, state, canvas, verbose=False, init_action_chain=None):
 
   for i, theorem_command in enumerate(steps):
     theorem, mapping = extract_theorem_mapping(theorem_command, state)
+
+    # with profiling.Timer(theorem.__class__.__name__):
     action_gen = theorem.match_from_input_mapping(
         state, mapping, randomize=False, canvas=canvas)
 
@@ -152,6 +154,8 @@ def execute_steps(steps, state, canvas, verbose=False, init_action_chain=None):
       best, miss = debugging.why_fail_to_match(
           theorem, state, mapping=mapping)
       import pdb; pdb.set_trace()
+      # Use state.name_map(best) or state.name_map(miss)
+      # to investigate why this matching fail.
       raise ValueError('Matching not found {} {}'.format(
           theorem, theorem_command))
 
