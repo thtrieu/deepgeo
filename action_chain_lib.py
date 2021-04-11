@@ -142,7 +142,6 @@ def execute_steps(steps, state, canvas, verbose=False, init_action_chain=None):
   for i, theorem_command in enumerate(steps):
     theorem, mapping = extract_theorem_mapping(theorem_command, state)
 
-    # with profiling.Timer(theorem.__class__.__name__):
     action_gen = theorem.match_from_input_mapping(
         state, mapping, randomize=False, canvas=canvas)
 
@@ -181,13 +180,13 @@ def execute_steps(steps, state, canvas, verbose=False, init_action_chain=None):
     canvas.update_hps(state.line2hps)
     
     # add auto equalities
-    state = action.action_eliminate_angle(state, canvas, pos)
+    state, auto_merge_directions = action.action_eliminate_angle(state, canvas, pos)
     state, auto_merge_points = action.action_eliminate_distance(state, canvas, pos)
     
     # add auto merges
-    if auto_merge_points:
+    if auto_merge_points + auto_merge_directions:
       # Loop through actions and update state.
-      for theorem, mapping, auto_pos in auto_merge_points:
+      for theorem, mapping, auto_pos in auto_merge_points + auto_merge_directions:
         for merge_action in theorem.match_from_input_mapping(state, mapping, canvas=canvas):
           merge_action.set_chain_position(pos, auto_pos)
           break

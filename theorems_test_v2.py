@@ -538,7 +538,7 @@ def test_isos_merge_whittle_goal1():
   # state.print_all_equal_segments()
   prev_state = action_chain[-1].state
 
-  l5 = state.name2obj['l5']
+  l5 = state.name2obj['l4']
   P1 = state.name2obj['P1']
   assert state.has_relation(LineContainsPoint(l5, P1))
 
@@ -582,13 +582,13 @@ def test_isos_merge_whittle_goal1():
   proved_problem, _, action_chain = action_chain_lib.execute_steps(
       steps, problem, problem_canvas)
 
-  l6 = proved_problem.name2obj['l6']
+  l5 = proved_problem.name2obj['l5']
   P1 = proved_problem.name2obj['P1']
-  assert proved_problem.has_relation(LineContainsPoint(l6, P1))
+  assert proved_problem.has_relation(LineContainsPoint(l5, P1))
 
   last_state = action_chain[-1].state
-  l5 = last_state.name2obj['l5']
-  assert l5 in l6.merge_graph[proved_problem]['equivalents']
+  l6 = last_state.name2obj['l6']
+  assert l6 in l5.merge_graph[proved_problem]['equivalents']
 
 
 def test_isos_merge_whittle_goal2():
@@ -1071,5 +1071,8 @@ if __name__ == '__main__':
   # for all tricky concepts in their full glory: 
   # length/angle ratios, repeated symmetry.
 
+  # TODO(thtrieu): IMO 2018 SL G7
+
   print('\n [OK!]')
   profiling.print_records()
+  print(time.time()-t)

@@ -170,14 +170,14 @@ class Action(object):
       self.premise_objects.append(x)
 
     for obj in self.new_objects:
-      if obj.critical:
+      if obj.deps:
+        continue
+      if obj.critical: 
         obj.set_deps(self.premise_objects)
       else:
         obj.set_deps(self.matched_conclusion.topological_list[
             obj.conclusion_position])
-        # obj.set_critical(self.premise_objects)
 
-    # List of Merge() relations associcated with this action.
     self.merges = [
         (obj, state) for obj in self.new_objects 
         if isinstance(obj, Merge)
@@ -246,11 +246,20 @@ class Action(object):
     eqs = self.theorem.eliminate_angle(self.mapping, canvas, chain_position)
 
     results = []
+    auto_merge_directions = []
     for (a1, a2, p) in eqs:
       if isinstance(a1, float):
         angle, angle_sup = geometry.get_constant_angles(a1)
         theorem = theorem_from_type[AutoAngleEqualConstant]
-        if len(a2) == 2:
+        if int(a1) == a1:  
+          if len(a2) == 2:
+            d1, d2 = a2
+          else:
+            _, d1, d2 = a2
+          theorem = theorem_from_type[AutoMergeDirectionZeroAngle]
+          print('>>> Merge {} => {} because {}'.format(d2.name, d1.name, p))
+          auto_merge_directions.append(theorem, mapping, p)
+        elif len(a2) == 2:
           d1, d2 = a2  # d1 > d2.
           print('>>> <{} {}> == {} pi because {}'.format(d1.name, d2.name, a1, p))
           mapping = {k: v for k, v in zip(theorem.input, [d1, d2, angle, angle_sup])}
@@ -281,7 +290,7 @@ class Action(object):
         state.add_relations(action.new_objects)
         break
 
-    return state
+    return state, auto_merge_directions
 
   def set_chain_position(self, pos, auto_pos=None):
     vals = {}
@@ -552,6 +561,9 @@ class MergeTheorem(FundamentalTheorem):
       for m in l:
         assert isinstance(m, Merge), 'MergeTheorem only accepts Merge Conclusions'
         self._distinct.append((m.from_obj, m.to_obj))
+  
+  def draw(self, mapping, canvas):
+    return {}
 
 
 class SameSegmentBecauseSamePoint(MergeTheorem):
@@ -695,9 +707,6 @@ class SameLineBecauseSameDirectionPointTrigger(MergeTheorem):
     self.for_drawing = []
     self.names = dict(l1=l1, l2=l2)
 
-  def draw(self, mapping, canvas):
-    return {}
-
 
 class SameLineBecauseSameDirectionDirectionTrigger(MergeTheorem):
 
@@ -719,9 +728,6 @@ class SameLineBecauseSameDirectionDirectionTrigger(MergeTheorem):
     self.for_drawing = []
     self.names = dict(l1=l1, l2=l2)
 
-  def draw(self, mapping, canvas):
-    return {}
-
 
 class SameDirectionBecauseSameLine(MergeTheorem):
 
@@ -739,9 +745,6 @@ class SameDirectionBecauseSameLine(MergeTheorem):
 
     self.for_drawing = []
     self.names = dict(d1=d1, d2=d2)
-
-  def draw(self, mapping, canvas):
-    return {}
 
 
 class SameAngleXXBecauseSameDirection(MergeTheorem):
@@ -764,9 +767,6 @@ class SameAngleXXBecauseSameDirection(MergeTheorem):
     self.for_drawing = []
     self.names = dict(d1=d1, d2=d2)
 
-  def draw(self, mapping, canvas):
-    return {}
-
 
 class SameAngleXOBecauseSameDirection(MergeTheorem):
 
@@ -787,9 +787,6 @@ class SameAngleXOBecauseSameDirection(MergeTheorem):
 
     self.for_drawing = []
     self.names = dict(d1=d1, d2=d2)
-
-  def draw(self, mapping, canvas):
-    return {}
 
 
 # class ConstructRightAngle(FundamentalTheorem):
@@ -1340,6 +1337,21 @@ class AutoEqualAnglesSup(FundamentalTheorem):
     self.conclusion.add_critical(*have_measure(m_ab_xo, mn_xx))
     self.conclusion.add_critical(*have_measure(m_ab_xx, mn_xo))
     self.input = [da, db, dm, dn]
+
+
+class AutoMergeDirectionZeroAngle(MergeTheorem):
+
+  def build_premise_and_conclusion(self):
+    self.premise = []
+
+    self.conclusion = Conclusion()
+    d1, d2 = LineDirection('d1'), LineDirection('d2')
+
+    self.merge_pair = d1, d2
+    self.conclusion.add_critical(Merge(d1, d2))
+    
+    self.input = [d1, d2]
+    self.names = dict(d1=d1, d2=d2)
 
 
 class AutoEqualSegments(FundamentalTheorem):
@@ -2413,10 +2425,9 @@ all_theorems = [
 #  B. Gaussian Elimination deductions
 #   1.
     AutoEqualAngles(),
-#   2.
     AutoEqualAnglesSup(),
-#   3.
     AutoAngleEqualConstant(),
+    AutoMergeDirectionZeroAngle(),
     AutoEqualSegments(),
     AutoMergePointZeroDistance(),
 # V. Merges (12)

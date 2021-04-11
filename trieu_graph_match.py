@@ -19,6 +19,7 @@ import cython_graph_match
 from theorems import FundamentalTheorem, SamePairSkip, all_theorems
 
 from geometry import AngleXX, FullAngle, Point, Line, Segment, Angle, HalfPlane, Circle, SelectAngle, TransitiveRelation 
+from geometry import DirectionOfFullAngle, AngleXXOfFullAngle, AngleXOOfFullAngle
 from geometry import SegmentLength, AngleMeasure, LineDirection
 from geometry import SegmentHasLength, AngleHasMeasure, LineHasDirection
 from geometry import PointEndsSegment, LineBordersHalfplane
@@ -43,41 +44,29 @@ def strip_match_relations(premise_relations, conclusion_relations, state_relatio
     if type(state_rel) in relevant_state_candidates:
       relevant_state_candidates[type(state_rel)].append(state_rel)
 
-  rel_branch_count = []
-  for rel in premise_relations:
-    branch_count = len(relevant_state_candidates[type(rel)])
-    if isinstance(rel, Distinct):
-      branch_count *= 2
-    rel_branch_count.append(branch_count)
-
   if premise_relations == []:
     return premise_relations, relevant_state_candidates
 
-  # Sort according to branch_count
-  premise_relations, _ = zip(*sorted(
-      zip(premise_relations, rel_branch_count), 
-      reverse=True))  # very important speedup!
-
   # Then, we insert SamePairSkip before the first member of its group:
-  optimized_order_premise_relations = []  # return this.
+  augmented_premise_relations = []  # return this.
   all_pre_skips = set()
   all_post_skips = set()
   for p in premise_relations:
     skip = getattr(p, 'skip', None)
     if skip and skip not in all_pre_skips:
       all_pre_skips.add(skip)
-      optimized_order_premise_relations.append(skip)
+      augmented_premise_relations.append(skip)
 
     post_skip = getattr(p, 'post_skip', None)
     if post_skip and post_skip not in all_post_skips:
       all_post_skips.add(post_skip)
       if skip:
         post_skip.skip = skip
-      optimized_order_premise_relations.append(post_skip)
+      augmented_premise_relations.append(post_skip)
 
-    optimized_order_premise_relations.append(p)
+    augmented_premise_relations.append(p)
 
-  return optimized_order_premise_relations, relevant_state_candidates
+  return augmented_premise_relations, relevant_state_candidates
 
 
 def _print_match(m, s):
@@ -100,15 +89,6 @@ def recursively_match(
     timeout=None,
     match_all=False,):  
 
-  # profiling.enable()
-  # query_relations_copy = list(query_relations)
-  # state_candidates_copy = {k: list(v) for k, v in 
-  #                          state_candidates.items()}
-  # object_mappings_copy = {k: v for k, v in object_mappings.items()}
-  # distinct_copy = list(distinct)
-
-  # average time: 23,967,474e-8
-  # with Timer('match'):
   matches = cython_graph_match.recursively_match(
       query_relations,
       state_candidates,
@@ -116,35 +96,6 @@ def recursively_match(
       distinct=distinct or [],
       return_all=match_all)
 
-
-  # average time: 98,308,578e-8
-  # matches = recursively_match_slow(
-  #   query_relations,
-  #   state_candidates,
-  #   object_mappings,
-  #   distinct=distinct or [],
-  #   timeout=None)
-  # with Timer('match'):
-  #   matches = list(matches)
-
-  # with Timer('match'):
-  #   matches = parallel_graph_match.recursively_match(
-  #       query_relations,
-  #       state_candidates,
-  #       object_mappings,
-  #       distinct=distinct or [],
-  #       parallel_depth=1,
-  #       return_all=match_all)
-
-  # print(len(matches), len(query_relations), [len(x) for x in matches])
-  # m = matches[0]
-  # keys = [(k.name, k) for k in m.keys()]
-  # for _, k in sorted(keys):
-  #   v = m[k]
-  #   print(k.name, v.name)
-  # profiling.print_records()
-
-  # exit()
   return matches
 
 
@@ -271,42 +222,6 @@ def create_new_obj_and_rels_for_conclusion(
       val2objs[val] = conclusion.val2objs[val]
 
   return new_objs_and_rels
-
-
-# def add_new_rels_from_auto_merge(
-#       trigger_obj,
-#       theorem, 
-#       filtered_state_relations, 
-#       new_rels, 
-#       critical, 
-#       conclusion_position,
-#       current_state):
-#   if theorem is None:
-#     return new_rels
-
-#   while True:
-#     found = False
-
-#     state_candidates = {}
-#     for rel in filtered_state_relations + new_rels:
-#       state_candidates[type(rel)] = state_candidates.get(type(rel), []) + [rel]
-
-#     auto_merges = theorem.find_auto_merge_from_trigger(
-#         state_candidates, {theorem.trigger_obj: trigger_obj})
-#     # import pdb; pdb.set_trace()
-#     for (obj1, obj2) in auto_merges:
-#       # print('because {}, merging {} and {}'.format(trigger_obj.name, obj1.name, obj2.name))
-#       # import pdb; pdb.set_trace()
-#       new_rels += create_new_rels_from_merge(
-#           obj1, obj2, 
-#           filtered_state_relations + new_rels,
-#           critical,
-#           conclusion_position,
-#           current_state)
-#       found = False
-#     if not found:
-#       break
-#   return new_rels
 
 
 def other_obj(rel, obj):
