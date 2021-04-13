@@ -853,7 +853,7 @@ def test_thales_noise_shuffle():
   init_canvas = sketch.Canvas()
   init_state = State()
 
-  print('\nRunning test_thales:')
+  print('\nRunning test_thales_noise_shuffle:')
 
   steps = [
       'triangle:',  # P1 P2 P3
@@ -912,7 +912,7 @@ def test_thales_noise_shuffle_merge_goal1():
   init_canvas = sketch.Canvas()
   init_state = State()
 
-  print('\nRunning test_thales:')
+  print('\nRunning test_thales_noise_shuffle_merge_goal1:')
 
   steps = [
       'triangle:',  # P1 P2 P3
@@ -984,7 +984,7 @@ def test_thales_noise_shuffle_merge_goal2():
   init_canvas = sketch.Canvas()
   init_state = State()
 
-  print('\nRunning test_thales:')
+  print('\nRunning test_thales_noise_shuffle_merge_goal2:')
 
   steps = [
       'triangle:',  # P1 P2 P3
@@ -1068,6 +1068,8 @@ if __name__ == '__main__':
   test_thales_noise_shuffle()
   test_thales_noise_shuffle_merge_goal1()
   test_thales_noise_shuffle_merge_goal2()
+
+  # TODO(thtrieu): log elimination
 
   # TODO(thtrieu): think about reapplying facts across symmetries in the graph.
 
