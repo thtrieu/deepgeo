@@ -505,23 +505,71 @@ l contains Ob : ObO = ObP
 l contains Oa : OaO = OaP
 l contains Oc : OcO = OcP
 {2}
-OcO = OcP : SSS {OcOP} = {OcPO}
-OaOOc = OaPOc : SAS {OaOcO} = {OaOcP}
-OaOOc = APC : autoelim
-ABC = OcLbOa : autoelim
-APC = ABC : [O] contains A B P C 
-[Wb] contains Lb Oa Oc P : OaLbOc = OaPOc
-{3:2 Lb:Lc Oa:Ob Oc:Oa P}
-  [Wc] contains Lc Ob Oa P
-{4:2 Lb:La Oa:Oc Oc:Ob P}
-  [Wa] contains La Oc Ob P
+ : SSS {OCP} = {OPC}
+ : SSS {OcCO} = {OcPO}
+OOc perp PC : autoelim
+{3:2 C:A Oc:Oa}
+  OOa perp PA : autoelim
+{4:2 C:B Oc:Ob}
+  OOb perp PB : autoelim
 {5}
+OaPOc = OaOOc : SSS {POaOc} = {OcOaO}
+OaOOc = APC : autoelim
+APC = ABC : [O] contains A B P C 
+ABC = OcLbOa : autoelim
+[Wb] contains Lb Oa Oc P : OcLbOa = OaPOc
+{6:5 Lb:Lc Ob:Oc B:C}
+  [Wc] contains Lc Ob Oa P
+{7:5 Lb:La Oa:Ob A:B}
+  [Wa] contains La Oc Ob P
+{8}
 LaLcP = OcOaP : [Wc] contains Lc Ob Oa P
 OcOaP = LaLbP : [Wb] contains Lb Oa Oc P
 [I] contains P : LaLcP = LaLbP
-{6}
-
+{9}
+AOOa = POOa = pi - ACP : [O] contains A P C
+PLcLa = POaOc : [Wc] contains Lc Ob Oa P
+POaOc = OcOaO : SSS {POaOc} = {OcOaO}
+OcOaO = APO : autoelim
+APO = pi/2 - (AOP/2) = pi/2 - (pi - ACP) = ACP - pi/2 : autoelim
+ACP - pi/2 = <LaLc, pc> : autoelim
+dCP == dLcP : autoelim
+pc contains Lc, APO = PLcLA : dCP == dLcP
+{10}
+OP tangent [I] : APO = PLcLA
 ```
+
+# 13. IMO 2017 SL G1
+
+Let ABCDE be a convex pentagon such that AB = BC = CD, EAB = BCD, and EDC = CBA. Prove that the perpendicular line from E to BC and the line segments AC and BD are concurrent.
+
+```java
+convex {ABCDE} :
+AB = BC = CD :
+EAB = BCD :
+EDC = CBA :
+line ei : perp E bc
+point H : intersect bd ac
+ei contains H : ?
+{1}
+line bi : perp B AC
+line ci : perp C BD
+point I : intersect bi ci
+point T : intersect ih bc
+ih perp bc : bh perp ic, ch perp ib
+_ : SSS {BAC} = {BCA}
+_ : SSS {CBD} = {CDB}
+_ : SAS {IBA} = {IBC}
+_ : SAS {ICB} = {ICD}
+IAB = IAE : autoelim
+IDE = IDC : autoelim
+IEA = IED : AI bisect A, BI bisect B, CI bisect C, DI bisect D
+ie perp bc : autoelim
+ie == ih : perp bc
+ei contains H
+```
+
+
 
 
 

@@ -231,7 +231,7 @@ def whittle_from(final_state, queue, action_chain,
     #   to_q = final_state.name_map(queue[len(copy_queue):])
     #   if to_q == [from_q]:
     #     to_q = 'defer'
-    #   if whittled_state is None and to_q not in ['defer', []]:
+    #   if to_q not in ['defer', []]:
     #     f.write('>>> {} =>  {}\n'.format(from_q, to_q))
     #     # f.write(str(whittled))
     # copy_queue = list(queue)
@@ -246,7 +246,6 @@ def whittle_from(final_state, queue, action_chain,
 
       # Then there are also others that connects why obj1 == obj2
       # through transitivity
-
       try:
         dependents = val.dependency_path(obj1, obj2, final_state) + [obj1, obj2]
       except:

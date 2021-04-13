@@ -749,7 +749,14 @@ class Conclusion(object):
   def gather_val2objs(self):
     self.val2objs = ddict(lambda: [])
     for constructions in self.topological_list:
+      all_constructions = []
       for rel in constructions:
+        if hasattr(rel, 'alternatives'):
+          all_constructions += sum(rel.alternatives, [])
+        else:
+          all_constructions += [rel]
+      
+      for rel in all_constructions:
         if isinstance(rel, (SegmentHasLength, AngleHasMeasure, LineHasDirection)):
           obj, val = rel.init_list
           self.val2objs[val].append(obj)

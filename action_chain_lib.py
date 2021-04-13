@@ -21,6 +21,7 @@ from geometry import LineContainsPoint, CircleContainsPoint, HalfPlaneContainsPo
 
 
 def add_action(state, action, full_state):
+  assert False
   for obj in action.conclusion_objects:
     state.add_one(obj)
     if isinstance(obj, Line):
@@ -142,21 +143,22 @@ def execute_steps(steps, state, canvas, verbose=False, init_action_chain=None):
   for i, theorem_command in enumerate(steps):
     theorem, mapping = extract_theorem_mapping(theorem_command, state)
 
-    action_gen = theorem.match_from_input_mapping(
-        state, mapping, randomize=False, canvas=canvas)
+    with profiling.Timer(theorem.__class__.__name__):
+      action_gen = theorem.match_from_input_mapping(
+          state, mapping, randomize=False, canvas=canvas)
 
-    pos = i + len(init_action_chain)
+      pos = i + len(init_action_chain)
 
-    try:
-      action = action_gen.next()
-    except StopIteration:
-      best, miss = debugging.why_fail_to_match(
-          theorem, state, mapping=mapping)
-      import pdb; pdb.set_trace()
-      # Use state.name_map(best) or state.name_map(miss)
-      # to investigate why this matching fail.
-      raise ValueError('Matching not found {} {}'.format(
-          theorem, theorem_command))
+      try:
+        action = action_gen.next()
+      except StopIteration:
+        best, miss = debugging.why_fail_to_match(
+            theorem, state, mapping=mapping)
+        import pdb; pdb.set_trace()
+        # Use state.name_map(best) or state.name_map(miss)
+        # to investigate why this matching fail.
+        raise ValueError('Matching not found {} {}'.format(
+            theorem, theorem_command))
 
     print(pos+1, action.to_str())
     action.set_chain_position(pos)

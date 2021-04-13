@@ -293,6 +293,7 @@ def test_ang_isos_bisect_is_perp():
   state, canvas, action_chain = action_chain_lib.execute_steps(
       steps, state, canvas, init_action_chain=action_chain)
 
+  # import pdb; pdb.set_trace()
   assert len([v for v in state.val2valrel 
               if isinstance(v, SegmentLength)]) == 2
   
@@ -367,8 +368,11 @@ def test_isos_merge_lines():
   assert any([halfpi in state.obj2valrel])
   mhalfpi = state.obj2valrel[halfpi].init_list[1]
 
+  state.print_all_equal_angles()
   measure2angles = state.all_equal_angles()
-  assert len(measure2angles[mhalfpi]) == 9
+  state.print_all_equal_angles()
+  assert len(measure2angles[mhalfpi]) == 9, len(measure2angles[mhalfpi])
+  # exit()
 
   d4 = state.name2obj['d4']
   assert len(state.val2valrel[d4]) == 2
@@ -687,7 +691,7 @@ def test_isos_merge_whittle_v2():
     state_queue, proof_queue = name2goals[goal]
     problem, problem_canvas, proof_steps = whittle(
         state, state_queue, proof_queue, action_chain,
-        init_state, init_canvas, canvas)
+        init_state, init_canvas, canvas, verbose=False)
   
   state_queue, proof_queue = name2goals['l3{P6}']
   # there will be fragments of 1. construct angle bisector
@@ -755,7 +759,7 @@ def test_isos_merge_whittle_v3():
     state_queue, proof_queue = name2goals[goal]
     problem, problem_canvas, proof_steps = whittle(
         state, state_queue, proof_queue, action_chain,
-        init_state, init_canvas, canvas)
+        init_state, init_canvas, canvas, verbose=False)
   
   state_queue, proof_queue = name2goals['l3{P5}']
   # there will be fragments of 1. construct angle bisector
@@ -823,7 +827,7 @@ def test_thales():
       state, state_queue, proof_queue, action_chain,
       init_state, init_canvas, canvas)
   
-  assert proof_steps == [4, 5, 6, 7]
+  assert proof_steps == [4, 5, 6, 7], proof_steps
   P1P5 = problem.segment_between('P1', 'P5')
   P3P5 = problem.segment_between('P3', 'P5')
   assert not problem.is_equal(P1P5, P3P5)
@@ -1072,6 +1076,8 @@ if __name__ == '__main__':
   # length/angle ratios, repeated symmetry.
 
   # TODO(thtrieu): IMO 2018 SL G7
+
+  # TODO(thtrieu): IMO 2017 SL G1
 
   print('\n [OK!]')
   profiling.print_records()

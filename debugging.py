@@ -16,7 +16,7 @@ import trieu_graph_match
 
 import geometry 
 
-from theorems import SamePairSkip
+from theorems import Alternatives, EnforceSame, NumericalCheck
 
 from geometry import Point, Line, Segment, Angle, HalfPlane, Circle
 from geometry import SegmentLength, AngleMeasure, LineDirection, SelectAngle
@@ -105,6 +105,36 @@ def maybe_skip(a, b, c, d, object_mappings):
     return None, None
 
 
+def can_be_same(x, y, object_mappings):
+  x_in = x in object_mappings
+  y_in = y in object_mappings
+  if x_in and y_in:
+    if object_mappings[x] != object_mappings[y]:
+      return False, {}, []
+    else:
+      # already same, move on
+      return True, {}, []
+  elif not x_in and not y_in:
+    return True, {}, [(x, y)]
+  elif x_in:
+    return True, {y: object_mappings[x]}, []
+  else:  # y_in
+    return True, {x: object_mappings[y]}, []
+
+
+def maybe_enforce_same(pairs, object_mappings):
+  sames = []
+
+  for a, b in pairs:
+    can_be, new_mapping, new_same = can_be_same(
+        a, b, object_mappings)
+    if can_be == False:
+      return None, None
+    object_mappings.update(new_mapping)
+    sames += new_same
+  return object_mappings, sames
+
+
 # Then match recursively
 def recursively_match_best_effort(
     query_relations,
@@ -177,6 +207,36 @@ def recursively_match_best_effort(
   all_matches = []
   query0 = query_relations[0]
   
+  if isinstance(query0, Alternatives):
+    for i, alt in enumerate(query0.alternatives):
+      match = recursively_match_best_effort(
+          query_relations=alt + query_relations[1:], 
+          state_candidates=state_candidates,
+          object_mappings=dict(object_mappings, **{query0: i}),
+          distinct=distinct,
+          same=same,
+          best=best,
+          pdb_at=pdb_at)
+      # print(match)
+      all_matches.extend(match)
+    return all_matches
+
+  if isinstance(query0, EnforceSame):
+    # Do not assume same pair, and try to match skip_relations.
+    object_mappings, new_same = maybe_enforce_same(
+        query0.pairs, dict(object_mappings))
+    if object_mappings is not None:
+      match = recursively_match_best_effort(
+          query_relations=query_relations[1:], 
+          state_candidates=state_candidates,
+          object_mappings=object_mappings,
+          distinct=distinct,
+          same=same + new_same,
+          best=best,
+          pdb_at=pdb_at)
+      all_matches.extend(match)
+    return all_matches
+
   if isinstance(query0, SamePairSkip):
     a, b, c, d = query0.pairs
     # try a -> x, c -> x, b -> y, d -> y
@@ -218,6 +278,31 @@ def recursively_match_best_effort(
         best=best,
         pdb_at=pdb_at)
     return all_matches
+
+  # if isinstance(query0, NumericalCheck):
+  #   if query0.is_available(object_mappings):
+  #     if query0.check(object_mappings):
+  #       return recursively_match_best_effort(
+  #           query_relations=query_relations[1:], 
+  #           state_candidates=state_candidates,
+  #           object_mappings=dict(object_mappings, **{query0: True}),
+  #           distinct=distinct,
+  #           same=same,
+  #       best=best,
+  #       pdb_at=pdb_at)
+  #     else:
+  #       return []
+  #   else:
+  #     if len(query_relations) == 1:
+  #       return []
+  #     return recursively_match_best_effort(
+  #         query_relations=query_relations[1:]+[query0], 
+  #         state_candidates=state_candidates,
+  #         object_mappings=object_mappings,
+  #         distinct=distinct,
+  #         same=same,
+  #       best=best,
+  #       pdb_at=pdb_at)
     
   # If query0 is not a Skip, do as normal.
   a, b = query0.init_list
@@ -451,7 +536,7 @@ def why_fail_to_match(
     type2rel[type(rel)].append(rel)
 
   best = [{}]
-  recursively_match_best_effort(
+  matches = recursively_match_best_effort(
       theorem.premise,
       type2rel,
       mapping,
@@ -461,6 +546,13 @@ def why_fail_to_match(
   best = best[0] 
   miss = [rel for rel in theorem.premise 
           if rel not in best]
+  best = {
+      k: v
+      for k, v in best.items()
+      if v in state.name2obj.values() or 
+      v in state.val2valrel or
+      isinstance(k, Alternatives)
+  }
 
   return best, miss
 

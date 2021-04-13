@@ -117,9 +117,9 @@ class _NullTimer(object):
     pass
 
 
-def Timer(name, start=False):
+def Timer(name, start=False, disable=False):
   global _ENABLE_PROFILING
-  if _ENABLE_PROFILING:
+  if _ENABLE_PROFILING and not disable:
     return _Timer(name, start=start)
   else:
     return _NullTimer(name, start=start)

@@ -106,6 +106,8 @@ class Line(object):
     # b/a > y/x
     return b*x < a*y
 
+  def intersect(self, line):
+    return line_line_intersection(self, line)
 
 
 class Segment(object):
@@ -458,6 +460,7 @@ class Canvas(object):
     if line in self.lines:
       return
     
+    line.sym = sym_line
     # sym_line.name = line.name
     self.lines[line] = sym_line
     a, b, c = sym_line.coefficients 

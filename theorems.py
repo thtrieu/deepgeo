@@ -372,6 +372,9 @@ class FundamentalTheorem(object):
       if isinstance(rel, TransitiveRelation):
         _, val = rel.init_list
         val2rels[val] += [rel]
+      elif isinstance(rel, Alternatives):
+        for alt in rel.alternatives:
+          self.premise_objects.update(alt)
       else:
         obj1, obj2 = rel.init_list
         self.premise_objects.update([rel, obj1, obj2])
@@ -385,12 +388,12 @@ class FundamentalTheorem(object):
         self.premise_objects.add((val, rel1, rel2))
 
     self.conclusion_objects = set()
-    for constructions in self.conclusion.topological_list:
-      for rel in constructions:
-        if isinstance(rel, SamePairSkip):
-          continue
-        obj1, obj2 = rel.init_list
-        self.conclusion_objects.update([rel, obj1, obj2])
+    # for constructions in self.conclusion.topological_list:
+    #   for rel in constructions:
+    #     if isinstance(rel, SamePairSkip):
+    #       continue
+    #     obj1, obj2 = rel.init_list
+    #     self.conclusion_objects.update([rel, obj1, obj2])
 
   def match_premise(self, state, mapping=None, canvas=None):
     try:
@@ -1761,21 +1764,13 @@ class Congruences(FundamentalTheorem):
   pass
 
 
-class SamePairSkip(object):
-
-  def __init__(self, a, b, x, y):
-    self.pairs = a, b, x, y
-    self.name = '{'+a.name+','+b.name+'}={'+x.name+','+y.name+'}'
-    self.numerical_check_objs = []
-
-
 def same_pair_skip(a, b, x, y, relations, add_skip=False):
-  skip = SamePairSkip(a, b, x, y)
-  for rel in relations:
-    rel.skip = skip
-  if add_skip:
-    relations = [skip] + relations
-  return relations
+  """skip matching relations if set(a, b) == set(x, y)."""
+  return [Alternatives(
+      [EnforceSame((a, x), (b, y))],
+      [EnforceSame((a, y), (b, x))],
+      relations
+  )]
 
 
 def premise_equal_segments(A, B, X, Y):
@@ -1802,33 +1797,33 @@ class NumericalCheck(object):
     return self.fn(*args)
 
 
-class SamePairSameSignSkip(object):
+# class SamePairSameSignSkip(object):
 
-  def __init__(self,
-               hpa, hpb, hpx, hpy,
-               la, lb, lx, ly,
-               da, db, dx, dy):
-    self.pairs = da, db, dx, dy
+#   def __init__(self,
+#                hpa, hpb, hpx, hpy,
+#                la, lb, lx, ly,
+#                da, db, dx, dy):
+#     self.pairs = da, db, dx, dy
 
-    self.possible_same = [
-        (da, lb, dx, ly),
-        (da, lb, dy, lx),
-        (db, la, dx, ly),
-        (db, la, dy, lx),
-        (da, db, dx, dy),
-        (da, db, dy, dx),
-    ]
-    hps = hpa, hpb, hpx, hpy
+#     self.possible_same = [
+#         (da, db, dx, dy),
+#         (da, db, dy, dx),
+#         (da, lb, dx, ly),
+#         (da, lb, dy, lx),
+#         (db, la, dx, ly),
+#         (db, la, dy, lx),
+#     ]
+#     hps = hpa, hpb, hpx, hpy
     
-    def fn(hpa, hpb, hpx, hpy):
-      return hpa.sign * hpb.sign == hpx.sign * hpy.sign
+#     def fn(hpa, hpb, hpx, hpy):
+#       return hpa.sign * hpb.sign == hpx.sign * hpy.sign
 
-    # During graph matching,
-    # try skipping all relations while adding this check
-    self.numerical_check_objs = [NumericalCheck(fn, hps)]
-    # or ignore this check and keep all relations.
-    self.name = 'samepairsign({},{},{},{})'.format(
-        la.name, lb.name, lx.name, ly.name)
+#     # During graph matching,
+#     # try skipping all relations while adding this check
+#     self.numerical_check_objs = [NumericalCheck(fn, hps)]
+#     # or ignore this check and keep all relations.
+#     self.name = 'samepairsign({},{},{},{})'.format(
+#         la.name, lb.name, lx.name, ly.name)
 
 
 def same_pair_same_sign_skip(
@@ -1837,22 +1832,45 @@ def same_pair_same_sign_skip(
     da, db, dx, dy,
     relations,
     add_skip=False):
+
+  alts = [
+      have_direction(da, la, lx) + [EnforceSame((lb, ly))],
+      have_direction(da, la, ly) + [EnforceSame((lb, lx))],
+      have_direction(db, lb, lx) + [EnforceSame((la, ly))],
+      have_direction(db, lb, ly) + [EnforceSame((la, lx))],
+      have_direction(da, la, lx) + have_direction(db, lb, ly),
+      have_direction(da, la, ly) + have_direction(db, lb, lx),
+  ]
+  hps = hpa, hpb, hpx, hpy
   
-  skip = SamePairSameSignSkip(
-      hpa, hpb, hpx, hpy,
-      la, lb, lx, ly,
-      da, db, dx, dy)
+  def fn(hpa, hpb, hpx, hpy):
+    return hpa.sign * hpb.sign == hpx.sign * hpy.sign
 
-  for rel in relations:
-    # if isinstance(rel, LineHasDirection):
-    #   continue
-    rel.post_skip = skip
+  # During graph matching,
+  # try skipping all relations while adding this check
+  numerical_check = NumericalCheck(fn, hps)
+  alts = [
+      [numerical_check] + alt
+      for alt in alts
+  ] + [relations]
+  return Alternatives(*alts)
 
-  if add_skip:
-    relations = [skip] + relations
 
-  return relations
+class EnforceSame(object):
 
+  def __init__(self, *pairs):
+    self.pairs = list(pairs)
+
+
+class Alternatives(object):
+
+  def __init__(self, *alternatives):
+    self.alternatives = []
+    for alt in list(alternatives):
+      if isinstance(alt, Alternatives):
+        self.alternatives += alt.alternatives
+      else:
+        self.alternatives += [alt]
 
 
 def premise_equal_angles(name, 
@@ -1866,14 +1884,11 @@ def premise_equal_angles(name,
   B_xx, B_xo, B_def = fangle_def(dAB, dBC)
   E_xx, E_xo, E_def = fangle_def(dDE, dEF)
   
-  pre_relations = (  # need these before same pair same sign.
+  relations = (  # need these before same pair same sign.
       have_direction(dAB, ab) +
       have_direction(dBC, bc) +
       have_direction(dDE, de) +
-      have_direction(dEF, ef)
-  )
-
-  skip_relations = (  # match these if not same pair same sign.
+      have_direction(dEF, ef) +
       B_def + E_def +
       have_measure('m' + name, 
                   SelectAngle(B_xx, B_xo, ab_hp, bc_hp), 
@@ -1882,12 +1897,11 @@ def premise_equal_angles(name,
 
   return same_pair_skip(
       ab_hp, bc_hp, de_hp, ef_hp,
-      # pre_relations + skip_relations
       same_pair_same_sign_skip(
           ab_hp, bc_hp, de_hp, ef_hp, 
           ab, bc, de, ef,
           dAB, dBC, dDE, dEF,
-          pre_relations + skip_relations)
+          relations)
   )
 
 
@@ -2120,7 +2134,6 @@ class SSS(Congruences):
     self.premise = (
         distinct(A, B, C) +
         distinct(D, E, F) +
-
         premise_equal_segments(A, B, D, E) +
         premise_equal_segments(B, C, E, F) +
         premise_equal_segments(C, A, F, D)
@@ -2203,6 +2216,7 @@ class ASA(Congruences):
     fd_hp.name_def = F, D, E
 
     self.premise = (
+        premise_equal_segments(C, A, F, D) +
         collinear(ab, A, B) +
         collinear(bc, B, C) +
         collinear(ca, C, A) +
@@ -2220,8 +2234,6 @@ class ASA(Congruences):
         divides_halfplanes(de, de_hp, p1=F) +
         divides_halfplanes(ef, ef_hp, p1=D) +
         divides_halfplanes(fd, fd_hp) +
-
-        premise_equal_segments(C, A, F, D) +
 
         premise_equal_angles('C', ca, bc, ca_hp, bc_hp, fd, ef, fd_hp, ef_hp) +
         premise_equal_angles('A', ca, ab, ca_hp, ab_hp, fd, de, fd_hp, de_hp)

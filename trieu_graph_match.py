@@ -16,7 +16,7 @@ from profiling import Timer
 import cython_graph_match
 # import parallel_graph_match
 
-from theorems import FundamentalTheorem, SamePairSkip, all_theorems
+from theorems import Alternatives, all_theorems
 
 from geometry import AngleXX, FullAngle, Point, Line, Segment, Angle, HalfPlane, Circle, SelectAngle, TransitiveRelation 
 from geometry import DirectionOfFullAngle, AngleXXOfFullAngle, AngleXOOfFullAngle
@@ -35,38 +35,44 @@ def strip_match_relations(premise_relations, conclusion_relations, state_relatio
   # This also help with early pruning during recursive calls.
   relevant_state_candidates = {}
 
-  for rel in premise_relations + conclusion_relations:
-    rel_type = type(rel)
-    if rel_type not in relevant_state_candidates:
-      relevant_state_candidates[rel_type] = []
+  # for rel in premise_relations + conclusion_relations:
+  #   rel_type = type(rel)
+  #   if rel_type not in relevant_state_candidates:
+  #     relevant_state_candidates[rel_type] = []
+
+  # for state_rel in state_relations:
+  #   if type(state_rel) in relevant_state_candidates:
+  #     relevant_state_candidates[type(state_rel)].append(state_rel)
 
   for state_rel in state_relations:
     if type(state_rel) in relevant_state_candidates:
       relevant_state_candidates[type(state_rel)].append(state_rel)
+    else:
+      relevant_state_candidates[type(state_rel)] = [state_rel]
 
   if premise_relations == []:
     return premise_relations, relevant_state_candidates
 
   # Then, we insert SamePairSkip before the first member of its group:
-  augmented_premise_relations = []  # return this.
-  all_pre_skips = set()
-  all_post_skips = set()
-  for p in premise_relations:
-    skip = getattr(p, 'skip', None)
-    if skip and skip not in all_pre_skips:
-      all_pre_skips.add(skip)
-      augmented_premise_relations.append(skip)
+  # augmented_premise_relations = []  # return this.
+  # all_pre_skips = set()
+  # all_post_skips = set()
+  # for p in premise_relations:
+  #   skip = getattr(p, 'skip', None)
+  #   if skip and skip not in all_pre_skips:
+  #     all_pre_skips.add(skip)
+  #     augmented_premise_relations.append(skip)
 
-    post_skip = getattr(p, 'post_skip', None)
-    if post_skip and post_skip not in all_post_skips:
-      all_post_skips.add(post_skip)
-      if skip:
-        post_skip.skip = skip
-      augmented_premise_relations.append(post_skip)
+  #   post_skip = getattr(p, 'post_skip', None)
+  #   if post_skip and post_skip not in all_post_skips:
+  #     all_post_skips.add(post_skip)
+  #     if skip:
+  #       post_skip.skip = skip
+  #     augmented_premise_relations.append(post_skip)
 
-    augmented_premise_relations.append(p)
+  #   augmented_premise_relations.append(p)
 
-  return augmented_premise_relations, relevant_state_candidates
+  return premise_relations, relevant_state_candidates
 
 
 def _print_match(m, s):
@@ -161,10 +167,18 @@ def create_new_obj_and_rels_for_conclusion(
   """
   new_objs_and_rels = []  # return this
   # Loop through the relation (in the conclusion) and create new objects on demand:
-  for rel in relations:
-    if isinstance(rel, SamePairSkip):
-      continue
+  rels_to_add = []
 
+  for rel in relations:
+    if isinstance(rel, Alternatives):
+      if rel in premise_match:
+        rels_to_add += rel.alternatives[premise_match[rel]]
+      else:
+        rels_to_add += rel.alternatives[-1]
+    else:
+      rels_to_add += [rel]
+  
+  for rel in rels_to_add:
     new_init_list = []
     for obj in rel.init_list:
       if isinstance(obj, SelectAngle):
@@ -216,10 +230,11 @@ def create_new_obj_and_rels_for_conclusion(
     # will need to update its dependency graph by adding the clique of 
     # equal nodes presented in the *current* conclusion.
     if isinstance(rel, (SegmentHasLength, AngleHasMeasure, LineHasDirection)):
-      _, val = rel.init_list
+      obj, val = rel.init_list
       # This list is conclusion objects, 
       # will need to be mapped to state objects.
       val2objs[val] = conclusion.val2objs[val]
+      # val2objs[val].append(obj)
 
   return new_objs_and_rels
 
@@ -295,19 +310,10 @@ def create_new_rels_from_merge(obj1, obj2,
   merge_graph[obj2] = {obj1: None}
   merge_graph[obj1] = merge_graph.get(obj1, {})
   merge_graph[obj1].update({obj2: None})
-
-  # merge_graph_second = copy_merge_graph(merge_graph)
-
   merge_graph['equivalents'] = list(merge_graph1['equivalents'])
   merge_graph['equivalents'] += list(merge_graph2['equivalents'])
   merge_graph['equivalents'] += [obj2]
   
-  # merge_graph_second['equivalents'] = list(merge_graph2['equivalents'])
-  # merge_graph_second['equivalents'] += list(merge_graph1['equivalents'])
-  # merge_graph_second['equivalents'] += [obj1]
-
-  # merge_graph2['equivalents'] += [obj1]
-
   # Copy info from merge_graph2
   for obj_a, obj_b_dict in merge_graph2.items():
     if obj_a == 'equivalents':
@@ -447,7 +453,7 @@ def match_conclusions(conclusion, state_candidates,
         match = match[0]
       else:
         match = match.next()
-    except:
+    except (StopIteration, IndexError):
       total_match = False
 
     if total_match:  # if yes, move on, nothing to do here.
@@ -468,7 +474,7 @@ def match_conclusions(conclusion, state_candidates,
           conclusion_position=conclusion_position,
           current_state=state)
 
-      # Now we remove all relations related to merged_objs
+        # Now we remove all relations related to merged_objs
       all_merged_objs = [
           rel.from_obj for rel in new_objs_and_rels 
           if isinstance(rel, Merge)]
@@ -476,9 +482,9 @@ def match_conclusions(conclusion, state_candidates,
       # Filter them out, except TransitiveRelations
       new_objs_and_rels = filter(
           lambda rel: (isinstance(rel, Merge) or
-                       isinstance(rel, TransitiveRelation) or
-                       rel.init_list[0] not in all_merged_objs and 
-                       rel.init_list[1] not in all_merged_objs),
+                      isinstance(rel, TransitiveRelation) or
+                      rel.init_list[0] not in all_merged_objs and 
+                      rel.init_list[1] not in all_merged_objs),
           new_objs_and_rels
       )
     else:
@@ -548,7 +554,8 @@ def match_relations(premise_relations,
     conclusion_relations = []
 
   # Rearrage relations to optimize recursion branching
-  with Timer('action/prepare'):
+  with Timer('action/prepare', disable=True):
+  # if True:
     sorted_premise_relations, state_candidates = strip_match_relations(
         premise_relations, conclusion_relations, state_relations)
 
@@ -556,7 +563,8 @@ def match_relations(premise_relations,
       for rel_type in state_candidates:
         np.random.shuffle(state_candidates[rel_type])
 
-  with Timer('action/premise_match'):
+  with Timer('action/premise_match', disable=True):
+  # if True:
     premise_matches = recursively_match(
         query_relations=sorted_premise_relations,
         state_candidates=state_candidates,
@@ -575,7 +583,7 @@ def match_relations(premise_relations,
     # Because each of them will put in a different set of new objects 
     # into state_candidates.
     state_candidates_copy = {x: list(y) for x, y in state_candidates.items()}
-    with Timer('action/conclusion_match'):
+    with Timer('action/conclusion_match', disable=True):
       matched_conclusion, all_match = match_conclusions(
           conclusion=conclusion, 
           state_candidates=state_candidates_copy, 
