@@ -1081,6 +1081,8 @@ if __name__ == '__main__':
 
   # TODO(thtrieu): IMO 2017 SL G1
 
+  # TODO(thtrieu): not sure what to think of 15. IMO 2017 SL G3 ...
+
   print('\n [OK!]')
   profiling.print_records()
   print(time.time()-t)

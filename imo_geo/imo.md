@@ -569,6 +569,86 @@ ie == ih : perp bc
 ei contains H
 ```
 
+# 14. IMO 2017 SL G2
+
+Let R and S be distinct points on circle O, and let t denote the tangent line to O at R. Point R' is the reflection of R w.r.t S. A point I is chosen on the smaller arc RS of O so that the circumcircle W of triangle ISR' intersect t at two different points. Denote by A the common point of W and t that is closest to R. Line AI meets O again at J. Show that JR' is tangent to W.
+
+```java
+circle [O] :
+point R : free [O]
+point P : mirror R O
+point S : free [O]
+line t : tangent [O] R
+point R0 : mirror R S
+point I : free [O] rs_hp[!P]
+circle [W] : I S R0
+point A, B : intersect [W] t
+A != B : 
+point J : intersect ai [O]
+jr0 tangent [O] : ?
+{1}
+JRS = JIS : [0] contains J R I S
+JIS = AR0S : [W] contains A I S R0
+SJR = SRA : ra tangent [O]
+R0R/RJ = AR0/SR : AAA {ARR0} ~ {SJR}
+// Rearrange: R0R/AR0 = RJ/SR0 because SR = SR0
+RR0J = R0AS : RAR {RR0J} ~ {R0AS}
+jr0 tangent [W] : RR0J = R0AS
+```
+
+Solution 2:
+
+```java
+JRS = JIS : [0] contains J R I S
+JIS = AR0S : [W] contains A I S R0
+RJ \\ AR0 : JRS = AR0S
+A0 : mirror A S
+SRA0 = SR0A : SAS {RSA0} = {R0SA}
+ra0 == rj : autoelim
+SR0A0 = SRA : SAS {R0SA0} = {RSA}
+SRA = SJR : ra tangent [O]
+cirlce [T] contains J S A0 R0 : SR0A0 = SJR
+SR0J = SA0J : cirlce [T] contains J S A0 R0
+SA0J = SAR0 : autoelim
+jr0 tangent [W]: SR0J = SAR0
+```
+
+# 15. IMO 2017 SL G3
+
+Let O be the circumcenter of an acute scalene triangle ABC. Line OA intersects the altitudes of ABC through B and C at P and Q respectively. The altitudes meet at H. Prove that the circumcenter of triangle PQH lies on a median of triangle ABC.
+
+```java
+normal triangle ABC :
+circle [O] : A B C
+line bh : perp B ca
+line ch : perp C ab
+point H : intersect bh ch
+point P : intersect oa bh
+point Q : intersect oa ch
+circle [T] : O P H
+point N : midpoint B C
+an contains T : ?
+{1}
+PQH = pi/2 - OAB : autoelim
+OAB = pi/2 - AOB/2 : autoelim
+AOB/2 = ACB : [O] contains A B C
+// PQH = ACB
+{2:1 B:C P:Q}
+  PHQ = ABC
+{3}
+perp ah bc : perp bh ca, perp ch ab
+AHP = ACB = PQH : autoelim
+ah tangent [T] : AHP = PQH
+point M : intersect at bc
+line as : tangent [O] A
+point S : intersect as BC
+OSM = OAT : ?
+circle [X] : O A S M
+OAS = pi/2 : tangent as [O]
+OMS = pi - OAS : cirlce [X] contains O A S M
+MB = MC : rSAS {OBM} = {OCM}
+N == M, an == am, an contains T : autoelim
+```
 
 
 
