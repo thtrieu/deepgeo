@@ -1120,37 +1120,37 @@ if __name__ == '__main__':
   profiling.enable()
 
   t = time.time()
-  # # Self-congruences:
-  # test_sss_isosceles()
-  # test_asa_isosceles()
-  # test_sas_isosceles()
+  # Self-congruences:
+  test_sss_isosceles()
+  test_asa_isosceles()
+  test_sas_isosceles()
   
-  # # Aux point/lines
-  # test_angle_bisect_isosceles()
-  # test_base_bisect_sss_isosceles()
+  # Aux point/lines
+  test_angle_bisect_isosceles()
+  test_base_bisect_sss_isosceles()
       
-  # # Test uniqueness of direction.
-  # test_ang_isos_outer_bisect_parallel_to_base()
+  # Test uniqueness of direction.
+  test_ang_isos_outer_bisect_parallel_to_base()
   
-  # # Test gaussian elimination engine.
-  # test_ang_isos_bisect_is_perp()
-  # test_ang_isos_perp_base_is_bisect()
-  # test_isos_merge_lines()
+  # Test gaussian elimination engine.
+  test_ang_isos_bisect_is_perp()
+  test_ang_isos_perp_base_is_bisect()
+  test_isos_merge_lines()
 
-  # # Test Whittling with merges
-  # test_isos_merge_whittle_goal1()
-  # test_isos_merge_whittle_goal2()
-  # test_isos_merge_whittle_v2()
-  # test_isos_merge_whittle_v3()
+  # Test Whittling with merges
+  test_isos_merge_whittle_goal1()
+  test_isos_merge_whittle_goal2()
+  test_isos_merge_whittle_v2()
+  test_isos_merge_whittle_v3()
 
-  # # Test thales theorems & proof whittling
-  # test_thales()
-  # test_thales_noise_shuffle()
-  # test_thales_noise_shuffle_merge_goal1()
-  # test_thales_noise_shuffle_merge_goal2()
+  # Test thales theorems & proof whittling
+  test_thales()
+  test_thales_noise_shuffle()
+  test_thales_noise_shuffle_merge_goal1()
+  test_thales_noise_shuffle_merge_goal2()
 
-  # # gelernter
-  # test_gelernter_equidistance()
+  # gelernter
+  test_gelernter_equidistance()
   test_gelernter_trapezoid()
 
   # TODO(thtrieu): log elimination

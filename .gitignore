@@ -2,7 +2,7 @@ untitled.py
 *.pyc
 test.py
 data*
-test*
+test_dir/*
 local_ckpt*
 .DS_Store
 bert_code*
@@ -23,3 +23,5 @@ setupsym.py
 sym.c
 sym.pyx
 whittle_save.txt
+*.pdf
+tgtp.webpagedata
