@@ -402,7 +402,10 @@ def create_new_rels_from_merge(obj1, obj2,
 
 def match_conclusions(conclusion, state_candidates, 
                       premise_match, state_relations, 
-                      distinct=None, state=None, canvas=None):
+                      distinct=None, 
+                      state=None, 
+                      canvas=None,
+                      unique=True):
   """Given that premise is matched, see if the conclusion is already there.
 
   Args:
@@ -441,24 +444,25 @@ def match_conclusions(conclusion, state_candidates,
 
   # Loop through relation
   for relations, critical in conclusion:
-    # For each of the construction step in the conclusion
-    # we check if it is already in the state
-    total_match = True
-    try:
-      match = recursively_match(query_relations=relations,
-                                state_candidates=state_candidates,
-                                object_mappings=premise_match,
-                                distinct=distinct)
-      if isinstance(match, list):
-        match = match[0]
-      else:
-        match = match.next()
-    except (StopIteration, IndexError):
-      total_match = False
+    if unique:
+      # For each of the construction step in the conclusion
+      # we check if it is already in the state
+      total_match = True
+      try:
+        match = recursively_match(query_relations=relations,
+                                  state_candidates=state_candidates,
+                                  object_mappings=premise_match,
+                                  distinct=distinct)
+        if isinstance(match, list):
+          match = match[0]
+        else:
+          match = match.next()
+      except (StopIteration, IndexError):
+        total_match = False
 
-    if total_match:  # if yes, move on, nothing to do here.
-      premise_match = match
-      continue
+      if total_match:  # if yes, move on, nothing to do here.
+        premise_match = match
+        continue
 
     # Otherwise, we need to add new objects into the state.
     if isinstance(relations[0], Merge):
@@ -531,7 +535,8 @@ def match_relations(premise_relations,
                     mapping=None,
                     timeout=None,
                     match_all=False,
-                    canvas=None):
+                    canvas=None,
+                    unique=True):
   """Yield list of matched list of relations in state_relation.
   
   Args:
@@ -593,7 +598,8 @@ def match_relations(premise_relations,
           # by rotating the match.
           distinct=distinct,
           state=state,  # needed for merging merge_graphs
-          canvas=canvas  # needed for knowing the sign of new hps right away.
+          canvas=canvas,  # needed for knowing the sign of new hps right away.
+          unique=unique
       )
     if any(matched_conclusion.critical):
     # if matched_conclusion.topological_list:

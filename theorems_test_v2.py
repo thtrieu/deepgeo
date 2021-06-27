@@ -259,6 +259,7 @@ def test_ang_isos_bisect_is_perp():
 
   steps = [
       'ang_isos:',
+      # hp = halfplane
       'angle_bisect: hp1 hp3'  # -> l4
   ]
 
@@ -268,6 +269,9 @@ def test_ang_isos_bisect_is_perp():
 
   assert len([v for v in state.val2valrel 
               if isinstance(v, LineDirection)]) == 4
+
+  print([v.name for v in state.val2valrel 
+              if isinstance(v, AngleMeasure)])
 
   assert len([v for v in state.val2valrel 
               if isinstance(v, AngleMeasure)]) == 5
@@ -1029,9 +1033,85 @@ def test_thales_noise_shuffle_merge_goal2():
       'ASA: P1 P4 P9 P3 P10',
   ]
   print('Proof execution:')
-  proved_problem, _, action_chain = action_chain_lib.execute_steps(
+  proved_problem, proved_canvas, action_chain = action_chain_lib.execute_steps(
       steps, problem, problem_canvas)
   assert proved_problem.has_relation(LineContainsPoint(l8, P4))
+
+
+def test_gelernter_equidistance():
+  geometry.reset()
+
+  init_canvas = sketch.Canvas()
+  init_state = State()
+
+  X = Point()
+  l1, l2 = Line(), Line()
+  hp11, hp12, hp21, hp22 = map(HalfPlane, 'hp11 hp12 hp21 hp22'.split())
+
+  init_state.add_relations(
+      divides_halfplanes(l1, hp11, hp12) +
+      divides_halfplanes(l2, hp21, hp22) +
+      collinear(l1, X) +
+      collinear(l2, X) +
+      distinct(l1, l2)
+  )
+
+  info = init_canvas.add_random_angle(X, l1, l2)
+  init_state.add_spatial_relations(info)
+  init_canvas.update_hps(init_state.line2hps)
+
+  steps = [
+      'angle_bisect: hp11 hp21',  # l3
+      'free_p_on_l: l3',
+      'perp: P2 l1',
+      'perp: P2 l2',
+      'ASA:'
+  ]
+
+  state, canvas, action_chain = action_chain_lib.execute_steps(
+      steps, init_state, init_canvas)
+
+  prev_state = action_chain[-1].state
+  proof_goals = list(whittling.extract_all_proof_goals(action_chain, state))
+  
+  # Check if all the goals are here:
+  name2goals = extract_name2goals(proof_goals, state, prev_state)
+
+  all_target_goals = ['4.P1P3 == 4.P1P4', '4.P3P2 == 4.P4P2']
+
+  for goal in all_target_goals:
+    assert goal in name2goals, goal
+    state_queue, proof_queue = name2goals[goal]
+    _, _, proof_steps = whittle(
+        state, state_queue, proof_queue, action_chain,
+        init_state, init_canvas, canvas, verbose=False)
+    assert proof_steps == [4], proof_steps
+
+
+def test_gelernter_trapezoid():
+  geometry.reset()
+
+  init_canvas = sketch.Canvas()
+  init_state = State()
+
+  steps = [
+      'trapezoid: ',
+      'midp: P1 P3',  # P5 l5
+      'midp: P2 P4',  # P6 l6
+      'line: P5 P6',  # l7
+      'lineXsegment: l7 P1 P4',  # P7
+      'line: P3 P6',  # l8
+      'ASA: P4 P6 P3 P2 P6',
+  ]
+
+  state, canvas, action_chain = action_chain_lib.execute_steps(
+      steps, init_state, init_canvas)
+  # canvas.show_now()
+
+
+
+def test_in_out_circle_symmetry():
+  pass
 
 
 if __name__ == '__main__':
@@ -1040,36 +1120,43 @@ if __name__ == '__main__':
   profiling.enable()
 
   t = time.time()
-  # Self-congruences:
-  test_sss_isosceles()
-  test_asa_isosceles()
-  test_sas_isosceles()
+  # # Self-congruences:
+  # test_sss_isosceles()
+  # test_asa_isosceles()
+  # test_sas_isosceles()
   
-  # Aux point/lines
-  test_angle_bisect_isosceles()
-  test_base_bisect_sss_isosceles()
-
-  # Test uniqueness of direction.
-  test_ang_isos_outer_bisect_parallel_to_base()
+  # # Aux point/lines
+  # test_angle_bisect_isosceles()
+  # test_base_bisect_sss_isosceles()
+      
+  # # Test uniqueness of direction.
+  # test_ang_isos_outer_bisect_parallel_to_base()
   
-  # Test gaussian elimination engine.
-  test_ang_isos_bisect_is_perp()
-  test_ang_isos_perp_base_is_bisect()
-  test_isos_merge_lines()
+  # # Test gaussian elimination engine.
+  # test_ang_isos_bisect_is_perp()
+  # test_ang_isos_perp_base_is_bisect()
+  # test_isos_merge_lines()
 
-  # Test Whittling with merges
-  test_isos_merge_whittle_goal1()
-  test_isos_merge_whittle_goal2()
-  test_isos_merge_whittle_v2()
-  test_isos_merge_whittle_v3()
+  # # Test Whittling with merges
+  # test_isos_merge_whittle_goal1()
+  # test_isos_merge_whittle_goal2()
+  # test_isos_merge_whittle_v2()
+  # test_isos_merge_whittle_v3()
 
-  # Test thales theorems & proof whittling
-  test_thales()
-  test_thales_noise_shuffle()
-  test_thales_noise_shuffle_merge_goal1()
-  test_thales_noise_shuffle_merge_goal2()
+  # # Test thales theorems & proof whittling
+  # test_thales()
+  # test_thales_noise_shuffle()
+  # test_thales_noise_shuffle_merge_goal1()
+  # test_thales_noise_shuffle_merge_goal2()
+
+  # # gelernter
+  # test_gelernter_equidistance()
+  test_gelernter_trapezoid()
 
   # TODO(thtrieu): log elimination
+
+  # TODO(thtrieu): see if we can prove the symmetry
+  # of touch point of incircle and outer-circle.
 
   # TODO(thtrieu): think about reapplying facts across symmetries in the graph.
 

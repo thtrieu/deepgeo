@@ -68,6 +68,8 @@ class AngleEngine(object):
 
   def add_free(self, *vars):
     for v in list(vars):
+      if v in self.deps:
+        continue
       self.deps[v] = {v: 1.0}
       self.pos[v] = set()
 
@@ -624,12 +626,30 @@ def test_equal_dist():
   assert r == [(0.0, ('B', 'A'), set([-1]))]
 
 
+def test_three_medians():
+  e = DistanceEngine()
+  e.add_free('ab', 'A', 'B')
+  e.add_free('bc', 'B', 'C')
+  e.add_free('ca', 'C', 'A')
+  e.add('ab', 'A0')
+  e.add('bc', 'B0')
+  e.add('ca', 'C0')
+  e.add_eq('A', 'A0', 'A0', 'B')
+  e.add_eq('B', 'B0', 'B0', 'C')
+  e.add_eq('C', 'C0', 'C0', 'A')
+  e.add('ab0', 'A', 'G1', 'G2', 'B0')
+  e.add('bc0', 'B', 'G1', 'C0')
+  e.add('ca0', 'C', 'G2', 'A0')
+  e.add_eq_ratio('')
+
+
 if __name__ == '__main__':
   profiling.enable()
   with Timer('test'):
-    test_mid_point()
-    test_equal_plus()
-    test_equal_bisects()
-    test_equal_dist()
+    # test_mid_point()
+    # test_equal_plus()
+    # test_equal_bisects()
+    # test_equal_dist()
+    test_three_medians()
   
   profiling.print_records()

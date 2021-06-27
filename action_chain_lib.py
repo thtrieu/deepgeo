@@ -160,7 +160,7 @@ def execute_steps(steps, state, canvas, verbose=False, init_action_chain=None):
         raise ValueError('Matching not found {} {}'.format(
             theorem, theorem_command))
 
-    print(pos+1, action.to_str())
+    print('{:2d}. {}'.format(pos, action.to_str()))
     action.set_chain_position(pos)
     action_chain.append(action)
 

@@ -26,9 +26,17 @@ def divides_halfplanes(line, hp1, hp2=None, p1=None, p2=None):
   if hp2:
     result.append(LineBordersHalfplane(line, hp2))
   if p1:
-    result.append(HalfPlaneContainsPoint(hp1, p1))
+    if isinstance(p1, Point):
+      result.append(HalfPlaneContainsPoint(hp1, p1))
+    elif isinstance(p1, list):
+      for p in p1:
+        result.append(HalfPlaneContainsPoint(hp1, p))
   if p2:
-    result.append(HalfPlaneContainsPoint(hp2, p2))
+    if isinstance(p2, Point):
+      result.append(HalfPlaneContainsPoint(hp2, p2))
+    elif isinstance(p2, list):
+      for p in p2:
+        result.append(HalfPlaneContainsPoint(hp2, p))
   return result
 
 

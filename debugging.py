@@ -143,7 +143,8 @@ def recursively_match_best_effort(
     distinct=None,
     same=[],
     best=[{}],
-    pdb_at=None):
+    pdb_at=None,
+    depth=0):
   """Python generator that yields dict({premise_object: state_object}).
 
   Here we are trying to perform the edge-induced subgraph isomorphism
@@ -206,21 +207,21 @@ def recursively_match_best_effort(
 
   all_matches = []
   query0 = query_relations[0]
-  
-  if isinstance(query0, Alternatives):
-    for i, alt in enumerate(query0.alternatives):
-      match = recursively_match_best_effort(
-          query_relations=alt + query_relations[1:], 
-          state_candidates=state_candidates,
-          object_mappings=dict(object_mappings, **{query0: i}),
-          distinct=distinct,
-          same=same,
-          best=best,
-          pdb_at=pdb_at)
-      # print(match)
-      all_matches.extend(match)
+
+  if isinstance(query0, str):
+    print(query0)
+    match = recursively_match_best_effort(
+        query_relations=query_relations[1:], 
+        state_candidates=state_candidates,
+        object_mappings=object_mappings,
+        distinct=distinct,
+        same=same,
+        best=best,
+        pdb_at=pdb_at)
+    all_matches.extend(match)
     return all_matches
 
+  
   if isinstance(query0, EnforceSame):
     # Do not assume same pair, and try to match skip_relations.
     object_mappings, new_same = maybe_enforce_same(
@@ -237,72 +238,45 @@ def recursively_match_best_effort(
       all_matches.extend(match)
     return all_matches
 
-  if isinstance(query0, SamePairSkip):
-    a, b, c, d = query0.pairs
-    # try a -> x, c -> x, b -> y, d -> y
-    new_mappings, appended_same = maybe_skip(a, b, c, d, object_mappings)
-
-    if new_mappings is not None and appended_same is not None:
-      query_relations_skip = [q for q in query_relations[1:]
-                              if getattr(q, 'skip', None) != query0]
-      all_matches += recursively_match_best_effort(
-          query_relations=query_relations_skip, 
+  if isinstance(query0, Alternatives):
+    for i, alt in enumerate(query0.alternatives):
+      signal = query0.name + ' ' + str(i+1) + '/' + str(len(query0.alternatives)) + ' OK!'
+      match = recursively_match_best_effort(
+          query_relations=alt + [signal] + query_relations[1:], 
           state_candidates=state_candidates,
-          object_mappings=dict(object_mappings, **new_mappings),
+          object_mappings=dict(object_mappings, **{query0: i}),
           distinct=distinct,
-          same=same + appended_same,
+          same=same,
           best=best,
           pdb_at=pdb_at)
-    
-    # try a -> x, d -> x, b -> y, c -> y
-    new_mappings, appended_same = maybe_skip(a, b, d, c, object_mappings)
-    if new_mappings is not None and appended_same is not None:
-      query_relations_skip = [q for q in query_relations[1:]
-                              if getattr(q, 'skip', None) != query0]
-      all_matches += recursively_match_best_effort(
-          query_relations=query_relations_skip, 
-          state_candidates=state_candidates,
-          object_mappings=dict(object_mappings, **new_mappings),
-          distinct=distinct,
-          same=same + appended_same,
-          best=best,
-          pdb_at=pdb_at)
-
-    # Finally without trying to skip anything (simply skip the skip)
-    all_matches += recursively_match_best_effort(
-        query_relations=query_relations[1:], 
-        state_candidates=state_candidates,
-        object_mappings=object_mappings,
-        distinct=distinct,
-        same=same,
-        best=best,
-        pdb_at=pdb_at)
+      # print(match)
+      all_matches.extend(match)
     return all_matches
 
-  # if isinstance(query0, NumericalCheck):
-  #   if query0.is_available(object_mappings):
-  #     if query0.check(object_mappings):
-  #       return recursively_match_best_effort(
-  #           query_relations=query_relations[1:], 
-  #           state_candidates=state_candidates,
-  #           object_mappings=dict(object_mappings, **{query0: True}),
-  #           distinct=distinct,
-  #           same=same,
-  #       best=best,
-  #       pdb_at=pdb_at)
-  #     else:
-  #       return []
-  #   else:
-  #     if len(query_relations) == 1:
-  #       return []
-  #     return recursively_match_best_effort(
-  #         query_relations=query_relations[1:]+[query0], 
-  #         state_candidates=state_candidates,
-  #         object_mappings=object_mappings,
-  #         distinct=distinct,
-  #         same=same,
-  #       best=best,
-  #       pdb_at=pdb_at)
+  if isinstance(query0, NumericalCheck):
+    if query0.is_available(object_mappings):
+      if query0.check(object_mappings):
+        return recursively_match_best_effort(
+            query_relations=query_relations[1:], 
+            state_candidates=state_candidates,
+            object_mappings=dict(object_mappings, **{query0: True}),
+            distinct=distinct,
+            same=same,
+            best=best,
+            pdb_at=pdb_at)
+      else:
+        return []
+    else:
+      if len(query_relations) == 1:
+        return []
+      return recursively_match_best_effort(
+          query_relations=query_relations[1:]+[query0], 
+          state_candidates=state_candidates,
+          object_mappings=object_mappings,
+          distinct=distinct,
+          same=same,
+        best=best,
+        pdb_at=pdb_at)
     
   # If query0 is not a Skip, do as normal.
   a, b = query0.init_list
@@ -535,15 +509,27 @@ def why_fail_to_match(
   for rel in state.relations + state.distinct_relations():
     type2rel[type(rel)].append(rel)
 
-  best = [{}]
+  best = [{}, state]
   matches = recursively_match_best_effort(
       theorem.premise,
       type2rel,
       mapping,
       distinct=theorem.distinct,
-      best=best
+      best=best,
+      pdb_at={
+          '19.D': '0.P2', 
+          '19.F': '2.P6', 
+          '19.A': '0.P4', 
+          '19.B': '0.P3', 
+          '19.C': '2.P6',
+          'same_segment_19.C19.A_19.F19.D': 2,
+          'same_pair_skip_C': 2,
+      }
   )
   best = best[0] 
+  # miss = []
+  # for rel in theorem.premise:
+  #   if 
   miss = [rel for rel in theorem.premise 
           if rel not in best]
   best = {

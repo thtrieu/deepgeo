@@ -57,6 +57,11 @@ class Point(object):
 
   def midpoint(self, p):
     return Point(0.5*(self.x + p.x), 0.5*(self.y + p.y))
+  
+  def distance(self, p):
+    dx = self.x - p.x
+    dy = self.y - p.y
+    return np.sqrt(dx*dx + dy*dy)
 
 
 class Line(object):
@@ -362,6 +367,12 @@ class Canvas(object):
     self.angle_engine = angle_engine
     self.distance_engine = distance_engine
 
+  def show_now(self):
+    fig, ax = plt.subplots()
+    self.plt_show(ax, None)
+    plt.axis('equal')
+    plt.show()
+
   def plt_show(self, ax, state, obj_hightlights=[], mark_segment=False):
     lines = self.lines.keys()
     all_points = self.points.keys()
@@ -406,11 +417,11 @@ class Canvas(object):
 
       lx, ly = (lp1.x, lp2.x), (lp1.y, lp2.y)
       ax.plot(lx, ly, color='black')
-      ax.annotate(line_name, (lp1.x + 0.1, lp1.y + 0.1))
+      ax.annotate(line_name, (lp1.x + 0.01, lp1.y + 0.01))
 
       for name, p in zip(p_names, sym_points):
         ax.scatter(p.x, p.y, color='black')
-        ax.annotate(name, (p.x + 0.1, p.y + 0.1))
+        ax.annotate(name, (p.x + 0.01, p.y + 0.01))
 
     for obj, color, alpha in obj_hightlights:
       if isinstance(obj, geometry.Point):
@@ -506,6 +517,177 @@ class Canvas(object):
         self.line2points[line][1].append(node_point)
       elif v < -ATOM:
         self.line2points[line][0].append(node_point)
+
+  def _get_bound(self, l, hp):
+    hp = self.line2hps[l].index(hp)  # 0 if neg, 1 if pos
+    l = self.lines[l]
+    a, b, c = l.coefficients  # ax + by + c = 0
+    if hp == 0:  # or a*p.x + b*p.y + c < 0
+      a, b, c = -a, -b, -c
+    # Now ax + by + c > ATOM, i.e.:
+    # by > (ATOM-c) - ax
+    # ax > (ATOM-c) - by
+
+    lower_x, upper_x = -np.inf, np.inf
+    lower_y, upper_y = -np.inf, np.inf
+
+    if b == 0:  # ax > ATOM-c
+      if a > 0:
+        lower_x = (ATOM-c)/a
+      else:
+        upper_x = (ATOM-c)/a
+      return [lower_x, upper_x], [lower_y, upper_y]
+
+    if a == 0:  # by > ATOM-c
+      if b > 0:
+        lower_y = (ATOM-c)/b
+      else:
+        upper_y = (ATOM-c)/b
+      return [lower_x, upper_x], [lower_y, upper_y]
+    
+    # Now a != 0 and b != 0
+    if a > 0:
+      lower_x = -b/a, ATOM-c  # x > -b/a * y + ATOM-c
+    else:
+      upper_x = -b/a, ATOM-c
+    return [lower_x, upper_x], [lower_y, upper_y]
+
+  def _sample_from(self, lower, upper):
+    if lower == -np.inf:
+      if upper == np.inf:
+        y = np.random.rand()*2.0 - 1.0
+      else:
+        y = upper - 2*np.random.rand()
+    else:
+      if upper == np.inf:
+        y = lower + 2*np.random.rand()
+      else:
+        y = lower + np.random.rand() * (upper-lower)
+    return y
+
+  def _add_free_point_l_and_hps(self, p, l_and_hps):
+
+    lower_xs, upper_xs = [], []
+    lower_y, upper_y = -np.inf, np.inf
+
+    for l, hp in l_and_hps:
+      [lx, ux], [ly, uy] = self._get_bound(l, hp)
+      lower_xs.append(lx)
+      upper_xs.append(ux)
+      lower_y = max(lower_y, ly)
+      upper_y = min(upper_y, uy)
+    
+    y = self._sample_from(lower_y, upper_y)
+
+    lower_x, upper_x = -np.inf, np.inf
+    for lx in lower_xs:
+      if isinstance(lx, tuple):
+        a, b = lx
+        lx = a * y + b
+      lower_x = max(lower_x, lx)
+
+    for ux in upper_xs:
+      if isinstance(ux, tuple):
+        a, b = ux
+        ux = a * y + b
+      upper_x = min(upper_x, ux)
+
+    x = self._sample_from(lower_x, upper_x)
+    self.update_point(p, Point(x, y))
+    return self.line2points
+
+  def add_free_point_1hp(self, p, l, hp):
+    return self._add_free_point_l_and_hps(p, [(l, hp)])
+
+  def add_free_point_2hp(self, p, l1, hp1, l2, hp2):
+    return self._add_free_point_l_and_hps(
+        p, [
+            (l1, hp1),
+            (l2, hp2)])
+
+  def add_free_point_3hp(self, p, l1, hp1, l2, hp2, l3, hp3):
+    return self._add_free_point_l_and_hps(
+        p, [
+            (l1, hp1),
+            (l2, hp2),
+            (l3, hp3)])
+
+  def add_free_point_4hp(self, p, l1, hp1, l2, hp2, l3, hp3, l4, hp4):
+    return self._add_free_point_l_and_hps(
+        p, [
+            (l1, hp1),
+            (l2, hp2),
+            (l3, hp3),
+            (l4, hp4)])
+  
+  def add_free_point_on_line(self, point, line):
+    a, b, c = self.lines[line].coefficients
+    # ax + by = -c
+    x = np.random.uniform(-1, 1)
+    y = np.random.uniform(-1, 1)
+
+    if a == 0:
+      y = -c/b
+    elif b == 0:
+      x = -c/a
+    else:
+      y = (-c-a*x)/b
+
+    symp = Point(x, y)
+    self.update_point(point, symp)
+    return self.line2points
+
+  def add_trapezoid(self, A, B, C, D, ab, bc, cd, da):
+    sA = Point(np.random.uniform(-1, 1),
+              np.random.uniform(-1, 1))
+    sB = Point(np.random.uniform(-1, 1),
+              np.random.uniform(-1, 1))
+    sC = Point(np.random.uniform(-1, 1),
+              np.random.uniform(-1, 1))
+
+    lAB = np.random.uniform(0.5, 1.5)
+    lCA = np.random.uniform(0.5, 1.5)
+    lCD = np.random.uniform(0.5, 1.5)
+
+    diff = lCD - lAB
+    if np.abs(diff) < 0.2:
+      sign = -1 if diff < 0 else 1
+      lCD += sign * 0.2
+
+    sB = sA + (sB-sA) / sB.distance(sA) * lAB
+    sC = sA + (sC-sA) / sC.distance(sA) * lCA
+    sD = sC + (sA-sB) / sB.distance(sA) * lCD
+
+    sab = Line(sA, sB)
+    sbc = Line(sB, sC)
+    scd = Line(sC, sD)
+    sda = Line(sD, sA)
+    
+    self.update_point(A, sA)
+    self.update_point(B, sB)
+    self.update_point(C, sC)
+    self.update_point(D, sD)
+    self.update_line(ab, sab)
+    self.update_line(bc, sbc)
+    self.update_line(cd, scd)
+    self.update_line(da, sda)
+    return self.line2points
+    
+  def add_random_angle(self, point, l1, l2):
+    ang1 = np.random.uniform(0, 2 * np.pi)
+    ang2 = ang1 + .1 * np.pi + np.random.uniform(0, 1.8 * np.pi)
+    a1, b1 = np.sin(ang1), np.cos(ang1)
+    a2, b2 = np.sin(ang2), np.cos(ang2)
+    c1 = np.random.uniform(-1, 1)
+    c2 = np.random.uniform(-1, 1)
+
+    syml1 = Line(coefficients=(a1, b1, c1))
+    syml2 = Line(coefficients=(a2, b2, c2))
+    symp = line_line_intersection(syml1, syml2)
+    self.update_point(point, symp)
+    self.update_line(l1, syml1)
+    self.update_line(l2, syml2)
+    return self.line2points
 
   def add_angle_bisector(self, new_line, point, l1, hp1, l2, hp2):
     # Here we try to figure out the Line that bisects angle
@@ -613,6 +795,12 @@ class Canvas(object):
     
     C = Point(np.cos(c), np.sin(c))
 
+    shift = Point(np.random.uniform(-1, 1),
+                  np.random.uniform(-1, 1))
+    A = A + shift
+    B = B + shift
+    C = C + shift
+
     self.update_point(p1, A)
     self.update_point(p2, B)
     self.update_point(p3, C)
@@ -637,6 +825,12 @@ class Canvas(object):
     
     C = Point(np.cos(c), np.sin(c))
 
+    shift = Point(np.random.uniform(-1, 1),
+                  np.random.uniform(-1, 1))
+    A = A + shift
+    B = B + shift
+    C = C + shift
+
     self.update_point(p1, A)
     self.update_point(p2, B)
     self.update_point(p3, C)
@@ -654,6 +848,12 @@ class Canvas(object):
 
     B = Point(Bx, By)
     C = Point(-Bx, By)
+
+    shift = Point(np.random.uniform(-1, 1),
+                  np.random.uniform(-1, 1))
+    A = A + shift
+    B = B + shift
+    C = C + shift
 
     self.update_point(p1, A)
     self.update_point(p2, B)

@@ -112,6 +112,8 @@ from __future__ import division
 from __future__ import print_function
 from typing import Mapping
 
+from numpy.lib.histograms import _histogram_dispatcher
+
 import theorems_utils
 import geometry
 import trieu_graph_match
@@ -194,9 +196,6 @@ class Action(object):
           x = x.select(mapping)
         if x in mapping:
           self.conclusion_objects.append(mapping[x])
-      # self.conclusion_objects = [
-      #     mapping[x.select(mapping)] if isinstance(x, SelectAngle) 
-      #     else mapping[x] for x in theorem.conclusion_objects]
     self.duration = None
 
   def update(self, other_action):
@@ -224,13 +223,13 @@ class Action(object):
         theorem = theorem_from_type[AutoEqualSegments]
         mapping = {k: v for k, v in zip(theorem.input, [a, b, x, y])}
 
-        print('>>> {}{} == {}{} because {}'.format(a.name, b.name, x.name, y.name, pos))
+        # print('>>> {}{} == {}{} because {}'.format(a.name, b.name, x.name, y.name, pos))
         auto_eq_theorem_and_map.append((theorem, mapping, pos))
       elif len(eq) == 3:
         _, (p1, p2), pos = eq
         theorem = theorem_from_type[AutoMergePointZeroDistance]
         mapping = {k: v for k, v in zip(theorem.input, [p1, p2])}
-        print('>>> Merging {} => {} because {}'.format(p2.name, p1.name, pos))
+        # print('>>> Merging {} => {} because {}'.format(p2.name, p1.name, pos))
         auto_merge_points.append((theorem, mapping, pos))
 
     for theorem, mapping, pos in auto_eq_theorem_and_map:
@@ -353,7 +352,9 @@ class FundamentalTheorem(object):
       self._distinct = []
     if not hasattr(self, 'names'):
       self.names = {}
-
+    if not hasattr(self, 'unique'):
+      self.unique = True
+      
     self.post_process_premise_and_conclusion()
     self.gather_objects()
     self.conclusion.gather_val2objs()
@@ -404,7 +405,8 @@ class FundamentalTheorem(object):
           randomize=False,
           mapping=None,
           distinct=self.distinct,
-          canvas=canvas
+          canvas=canvas,
+          unique=self.unique
       ).next()
     except StopIteration:
       return None
@@ -419,7 +421,8 @@ class FundamentalTheorem(object):
           conclusion=self.conclusion,
           randomize=True,
           distinct=self.distinct,
-          canvas=canvas
+          canvas=canvas,
+          unique=self.unique
       ).next()
     except StopIteration:
       return None
@@ -435,7 +438,8 @@ class FundamentalTheorem(object):
         randomize=randomize,
         distinct=self.distinct,
         timeout=timeout,
-        canvas=canvas
+        canvas=canvas,
+        unique=self.unique
     )
 
     try:
@@ -457,7 +461,8 @@ class FundamentalTheorem(object):
         randomize=randomize,
         mapping=mapping,
         timeout=None,
-        canvas=canvas
+        canvas=canvas,
+        unique=self.unique
     )
     timeout.append(time.time() + self.timeout)
     for matched_conclusion, mapping in matches:
@@ -487,6 +492,181 @@ class FundamentalTheorem(object):
   def timeout(self):
     return 0.1
 
+
+class FreeConstruction(FundamentalTheorem):
+
+  def __init__(self):
+    super(FreeConstruction, self).__init__()
+    self.unique = False
+
+
+class ConstructFreePoint1HP(FreeConstruction):
+
+  def build_premise_and_conclusion(self):
+    hp = HalfPlane('hp')
+    l = Line('l')
+
+    self.premise = [LineBordersHalfplane(l, hp)]
+
+    self.conclusion = Conclusion()
+    P = Point('P')
+    self.conclusion.add_critical(HalfPlaneContainsPoint(hp, P))
+
+    self.for_drawing = [l, hp, P]
+    self.names = dict(l=l, hp=hp)
+    self.args = [l, hp]
+    self.short_name = 'point_1hp'
+
+  def draw(self, mapping, canvas):
+    l, hp, P = map(mapping.get, self.for_drawing)
+    info = canvas.add_free_point_1hp(
+        P, l, hp)
+    return info
+
+
+
+class ConstructFreePoint2HP(FreeConstruction):
+
+  def build_premise_and_conclusion(self):
+    hp1, hp2 = HalfPlane('hp1'), HalfPlane('hp2')
+    l1, l2 = Line('l1'), Line('l2')
+
+    self.premise = [
+        LineBordersHalfplane(l1, hp1),
+        LineBordersHalfplane(l2, hp2),
+        DistinctLine(l1, l2)
+    ]
+
+    self.conclusion = Conclusion()
+    P = Point('P')
+    self.conclusion.add_critical(
+        HalfPlaneContainsPoint(hp1, P),
+        HalfPlaneContainsPoint(hp2, P))
+
+    self.for_drawing = [l1, hp1, l2, hp2, P]
+    self.args = [l1, hp1, l2, hp2]
+    self.names = dict(l1=l1, hp1=hp1,
+                      l2=l2, hp2=hp2)
+    self.short_name = 'point_2hp'
+
+  def draw(self, mapping, canvas):
+    l1, hp1, l2, hp2, P = map(mapping.get, self.for_drawing)
+    info = canvas.add_free_point_2hp(
+        P, l1, hp1, l2, hp2)
+    return info
+
+
+class ConstructFreePoint3HP(FreeConstruction):
+
+  def build_premise_and_conclusion(self):
+    hp1, hp2, hp3 = HalfPlane('hp1'), HalfPlane('hp2'), HalfPlane('hp3')
+    l1, l2, l3 = Line('l1'), Line('l2'), Line('l3')
+
+    self.premise = [
+        LineBordersHalfplane(l1, hp1),
+        LineBordersHalfplane(l2, hp2),
+        LineBordersHalfplane(l3, hp3),
+        DistinctLine(l1, l2),
+        DistinctLine(l2, l3),
+        DistinctLine(l3, l1)
+    ]
+
+    self.conclusion = Conclusion()
+    P = Point('P')
+    self.conclusion.add_critical(
+        HalfPlaneContainsPoint(hp1, P),
+        HalfPlaneContainsPoint(hp2, P),
+        HalfPlaneContainsPoint(hp3, P))
+
+    self.for_drawing = [l1, hp1, l2, hp2, l3, hp3, P]
+    self.args = [l1, hp1, l2, hp2, l3, hp3]
+    self.names = dict(l1=l1, hp1=hp1,
+                      l2=l2, hp2=hp2,
+                      l3=l3, hp3=hp3)
+    self.short_name = 'point_3hp'
+
+  def draw(self, mapping, canvas):
+    l1, hp1, l2, hp2, l3, hp3, P = map(mapping.get, self.for_drawing)
+    info = canvas.add_free_point_3hp(
+        P, l1, hp1, l2, hp2, l3, hp3)
+    return info
+
+
+class ConstructFreePoint4HP(FreeConstruction):
+
+  def build_premise_and_conclusion(self):
+    hp1, hp2 = HalfPlane('hp1'), HalfPlane('hp2'),
+    hp3, hp4 =  HalfPlane('hp3'),  HalfPlane('hp4')
+    l1, l2, l3, l4 = Line('l1'), Line('l2'), Line('l3'), Line('l4')
+
+    self.premise = [
+        LineBordersHalfplane(l1, hp1),
+        LineBordersHalfplane(l2, hp2),
+        LineBordersHalfplane(l3, hp3),
+        LineBordersHalfplane(l4, hp4),
+        DistinctLine(l1, l2),
+        DistinctLine(l2, l3),
+        DistinctLine(l3, l1),
+        DistinctLine(l4, l1),
+        DistinctLine(l4, l2),
+        DistinctLine(l4, l3)
+    ]
+
+    self.conclusion = Conclusion()
+    P = Point('P')
+    self.conclusion.add_critical(
+        HalfPlaneContainsPoint(hp1, P),
+        HalfPlaneContainsPoint(hp2, P),
+        HalfPlaneContainsPoint(hp3, P),
+        HalfPlaneContainsPoint(hp4, P))
+
+    self.for_drawing = [l1, hp1, l2, hp2, l3, hp3, l4, hp4, P]
+    self.args = [l1, hp1, l2, hp2, l3, hp3, l4, hp4]
+    self.names = dict(l1=l1, hp1=hp1,
+                      l2=l2, hp2=hp2,
+                      l3=l3, hp3=hp3,
+                      l4=l4, hp4=hp4)
+    self.short_name = 'point_4hp'
+
+  def draw(self, mapping, canvas):
+    l1, hp1, l2, hp2, l3, hp3, l4, hp4, P = map(mapping.get, self.for_drawing)
+    info = canvas.add_free_point_4hp(
+        P, l1, hp1, l2, hp2, l3, hp3, l4, hp4)
+    return info
+
+
+class ConstructFreePointOnLine(FreeConstruction):
+
+  def build_premise_and_conclusion(self):
+    l = Line('l')
+    hp = HalfPlane('hp')
+
+    self.premise = [
+        LineBordersHalfplane(l, hp)]
+
+    self.conclusion = Conclusion()
+    P = Point('P')
+    self.conclusion.add_critical(
+        LineContainsPoint(l, P)
+    )
+
+    self.for_drawing = [l, P]
+    self.for_distance_eliminate = [l, P]
+    self.args = [l]
+    self.names = dict(l=l)
+    self.short_name = 'free_p_on_l'
+
+  def draw(self, mapping, canvas):
+    l, P = map(mapping.get, self.for_drawing)
+    info = canvas.add_free_point_on_line(
+        P, l)
+    return info
+  
+  def eliminate_distance(self, mapping, canvas, chain_pos):
+    l, P = map(mapping.get, self.for_distance_eliminate)
+    canvas.add_points(l, P)
+    return []
+    
 
 # class Check(object):
 
@@ -1258,6 +1438,8 @@ class ConstructAngleBisector(FundamentalTheorem):
     d1.line = canvas.lines[l1]
     d2.line = canvas.lines[l2]
 
+    canvas.add_free_directions(d1, d2)
+
     return canvas.eliminate_angle(
         (d1, d3), 
         (d2, d3), 
@@ -1464,6 +1646,7 @@ class ConstructLine(FundamentalTheorem):
     self.premise = distinct(A, B)
 
     ab = Line('ab')
+    d = LineDirection('d')
 
     self.conclusion = Conclusion()
     self.conclusion.add_critical(*  # ab related.
@@ -1575,7 +1758,7 @@ class ParallelBecauseCorrespondingAngles(MergeTheorem):
     self.short_name = 'ang=>merge_d'
 
 
-class ConstructNormalTriangle(FundamentalTheorem):
+class ConstructNormalTriangle(FreeConstruction):
   
   def build_premise_and_conclusion(self):
 
@@ -1615,7 +1798,7 @@ class ConstructNormalTriangle(FundamentalTheorem):
     return []
     
 
-class ConstructSideIsoscelesTriangle(FundamentalTheorem):
+class ConstructSideIsoscelesTriangle(FreeConstruction):
 
   def build_premise_and_conclusion(self):
 
@@ -1660,7 +1843,7 @@ class ConstructSideIsoscelesTriangle(FundamentalTheorem):
 
 
 
-class ConstructAngleIsoscelesTriangle(FundamentalTheorem):
+class ConstructAngleIsoscelesTriangle(FreeConstruction):
 
   def build_premise_and_conclusion(self):
 
@@ -1724,8 +1907,7 @@ class ConstructAngleIsoscelesTriangle(FundamentalTheorem):
     return []
     
 
-
-class ConstructEquilateralTriangle(FundamentalTheorem):
+class ConstructEquilateralTriangle(FreeConstruction):
   
   def build_premise_and_conclusion(self):
 
@@ -1752,6 +1934,7 @@ class ConstructEquilateralTriangle(FundamentalTheorem):
 
     self.conclusion = conclusion
     self.for_drawing = [A, B, C, ab, bc, ca]
+    self.for_distance_eliminate = [A, B, C, ab, bc, ca]
     self.names = {}
     self.short_name = 'equilateral'
 
@@ -1759,18 +1942,92 @@ class ConstructEquilateralTriangle(FundamentalTheorem):
     A, B, C, ab, bc, ca = map(mapping.get, self.for_drawing)
     return canvas.add_equilateral_triangle(A, B, C, ab, bc, ca)
 
+  # def eliminate_angle(self, mapping, canvas, chain_pos):
+  #   ab, d_ab, bc, d_bc, ca, d_ca = map(mapping.get, self.for_angle_eliminate)
+  #   d_ab.line = canvas.lines[ab]
+  #   d_bc.line = canvas.lines[bc]
+  #   d_ca.line = canvas.lines[ca]
+  #   canvas.add_free_directions(d_ab, d_bc)
+  #   return canvas.eliminate_angle(
+  #       (d_ab, d_bc), (d_ca, d_bc), 
+  #       same_sign=False, 
+  #       chain_pos=chain_pos)
+  
+  def eliminate_distance(self, mapping, canvas, chain_pos):
+    A, B, C, ab, bc, ca = map(mapping.get, self.for_distance_eliminate)
+    # ab, bc, ca = map(canvas.lines.get, [ab, bc, ca])
+    # A, B, C = map(canvas.points.get, [A, B, C])
+    canvas.add_free_points(ab, A, B)
+    canvas.add_free_points(bc, B)
+    canvas.add_points(bc, C)
+    canvas.add_free_points(ca, A)
+    canvas.add_points(ca, C)
+    r1 = canvas.eliminate_distance((A, B), (B, C), chain_pos)
+    r2 = canvas.eliminate_distance((A, B), (A, C), chain_pos)
+    return r1 + r2
+
+
+class ConstructTrapezoid(FreeConstruction):
+  
+  def build_premise_and_conclusion(self):
+
+    self.premise = []
+
+    A, B, C, D = Point('A'), Point('B'), Point('C'), Point('D')
+    ab, ab_hp, _ = line_and_halfplanes('ab')
+    bc, bc_hp, _ = line_and_halfplanes('bc')
+    cd, cd_hp, _ = line_and_halfplanes('cd')
+    da, da_hp, _ = line_and_halfplanes('da')
+
+    # AB, BC, CD, DA = Segment('AB'), Segment('BC'), Segment('CA'), Segment('DA')
+
+    conclusion = Conclusion()
+
+    d_ab = LineDirection('d_ab')
+
+    conclusion.add_critical(*
+        collinear(ab, A, B) +
+        divides_halfplanes(ab, ab_hp, p1=[C, D]) +
+        collinear(bc, B, C) +
+        divides_halfplanes(bc, bc_hp, p1=[A, D]) +
+        collinear(cd, C, D) +
+        divides_halfplanes(cd, cd_hp, p1=[A, B]) +
+        collinear(da, D, A) +
+        divides_halfplanes(cd, da_hp, p1=[D, A]) +
+        have_direction(d_ab, ab, cd)
+    )
+
+    self.conclusion = conclusion
+    self.for_drawing = [A, B, C, D, ab, bc, cd, da]
+    self.for_angle_eliminate = [ab, cd, d_ab]
+    self.names = {}
+    self.short_name = 'trapezoid'
+
+  def draw(self, mapping, canvas):
+    A, B, C, D, ab, bc, cd, da = map(mapping.get, self.for_drawing)
+    return canvas.add_trapezoid(A, B, C, D, ab, bc, cd, da)
+  
+  def eliminate_angle(self, mapping, canvas, chain_pos):
+    ab, cd, d_ab = map(mapping.get, self.for_angle_eliminate)
+    d_ab.line = canvas.lines[ab]
+    canvas.add_free_directions(d_ab)
+    return []
+
 
 class Congruences(FundamentalTheorem):
   pass
 
 
-def same_pair_skip(a, b, x, y, relations, add_skip=False):
+def same_pair_skip(a, b, x, y, relations, add_skip=False, name=None):
   """skip matching relations if set(a, b) == set(x, y)."""
-  return [Alternatives(
+  alts = Alternatives(
       [EnforceSame((a, x), (b, y))],
       [EnforceSame((a, y), (b, x))],
-      relations
-  )]
+      relations,
+  )
+  if name:
+    alts.name = name
+  return [alts]
 
 
 def premise_equal_segments(A, B, X, Y):
@@ -1779,7 +2036,10 @@ def premise_equal_segments(A, B, X, Y):
   return same_pair_skip(A, B, X, Y,
                         segment_def(AB, A, B) +
                         segment_def(XY, X, Y) +
-                        have_length('l' + A.name + B.name, AB, XY))
+                        have_length('l' + A.name + B.name, AB, XY),
+                        name='same_segment_{}{}_{}{}'.format(
+                            A.name, B.name, X.name, Y.name
+                        ))
 
 
 class NumericalCheck(object):
@@ -1831,9 +2091,12 @@ def same_pair_same_sign_skip(
     la, lb, lx, ly,
     da, db, dx, dy,
     relations,
-    add_skip=False):
+    add_skip=False,
+    name=None):
 
   alts = [
+      [EnforceSame((la, lx), (lb, ly))],
+      [EnforceSame((la, ly), (lb, lx))],
       have_direction(da, la, lx) + [EnforceSame((lb, ly))],
       have_direction(da, la, ly) + [EnforceSame((lb, lx))],
       have_direction(db, lb, lx) + [EnforceSame((la, ly))],
@@ -1853,7 +2116,10 @@ def same_pair_same_sign_skip(
       [numerical_check] + alt
       for alt in alts
   ] + [relations]
-  return Alternatives(*alts)
+  alts = Alternatives(*alts)
+  if name:
+    alts.name = name
+  return alts
 
 
 class EnforceSame(object):
@@ -1901,7 +2167,9 @@ def premise_equal_angles(name,
           ab_hp, bc_hp, de_hp, ef_hp, 
           ab, bc, de, ef,
           dAB, dBC, dDE, dEF,
-          relations)
+          relations,
+          name='same_pair_same_sign_' + name),
+      name='same_pair_skip_' + name
   )
 
 
@@ -2235,8 +2503,8 @@ class ASA(Congruences):
         divides_halfplanes(ef, ef_hp, p1=D) +
         divides_halfplanes(fd, fd_hp) +
 
-        premise_equal_angles('C', ca, bc, ca_hp, bc_hp, fd, ef, fd_hp, ef_hp) +
-        premise_equal_angles('A', ca, ab, ca_hp, ab_hp, fd, de, fd_hp, de_hp)
+        premise_equal_angles('A', ca, ab, ca_hp, ab_hp, fd, de, fd_hp, de_hp) + 
+        premise_equal_angles('C', ca, bc, ca_hp, bc_hp, fd, ef, fd_hp, ef_hp)
     )
 
     self.conclusion = Conclusion()
@@ -2351,11 +2619,16 @@ all_theorems = [
 #  A. Construct a Free Point (5)
 #   1. In N>=1 halfplane
     # ConstructFreePoint1Halfplane(),
+    ConstructFreePoint1HP(),
     # ConstructFreePoint2Halfplane(),
+    ConstructFreePoint2HP(),
     # ConstructFreePoint3Halfplane(),
+    ConstructFreePoint3HP(),
     # ConstructFreePoint4Halfplane(),
+    ConstructFreePoint4HP(),
 #   2. On a line
     # ConstructFreePointOnLine(),
+    ConstructFreePointOnLine(),
 #   3. On a line & In N>=1 halfplane
     # ConstructFreePointLine1Halfplane(),
     # ConstructFreePointLine2Halfplane(),
@@ -2370,6 +2643,7 @@ all_theorems = [
 #   3. Through a Point on a Circle
 #   4. Through a Point and a Angle.
 #   5. Through two segments
+#   6. Free.
 #  C. Construct a Point  (4)
 #   1. as intersection of 2 Lines with angle
     ConstructIntersectLineLineBecauseAngle(),
@@ -2400,6 +2674,8 @@ all_theorems = [
 #   5. Construct a Square
 #   6. Construct a Parallelogram
 #   7. Construct a Rectangle
+#   8. Construct a Trapezoid
+    ConstructTrapezoid(),
 # III. Create new equalities.  (12)
 #   1. Mid Point
     ConstructMidPoint(),  # 0.000365972518921

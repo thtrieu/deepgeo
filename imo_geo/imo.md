@@ -651,9 +651,161 @@ N == M, an == am, an contains T : autoelim
 ```
 
 
+# 16. IMO 2017 SL G4
+
+In triangle ABC, let W be the excircle opposite A. Let D, E, F be the points where W is tangent to lines BC, CA, AB respectively. The circle AEF intersects BC at P and Q. Let M be the midpoint of AD. Prove that the circle MPQ is tangent to W.
+
+```java
+normal triangle ABC :
+circle [A_] D E F : bc ca ab bc_hp[!A]
+circle [O] : A E F
+point P, Q : intersect bc [O]
+point M : midpoint A D
+circle [X] : M P Q
+tangent [X] [A_] : ?
+{1}
+point T : intersect ad [A_]
+perp ae a_e : tangent ae [A_]
+perp af a_f : tangent af [A_]
+contains [O] A_ : AFA_ = AEA_ = pi/2
+point N : midpoint D T
+A_ND = A_NT = pi/2 : SSS {A_DN} = {A_TN}
+contains [O] N : A_NA = A_EA = pi/2
+DP/DA = DN/DQ : [O] contains A P Q N
+DP/DM = DT/DQ : autoelim
+contains [X] T : DP/DM = DT/DQ
+line tr : tangent [X] T
+point R : intersect tr bc
+DRA_ = TRA_ : rSSS {DRA_} = {TRA_}
+point N_ : intersect dt ra_
+N_D = N_T : SAS {DRN_} = {TRN_}
+N_ == N : autoelim
+DNR = TNR = pi/2 : autoelim
+RT^2 = RD^2 : autoelim
+RD^2 = RN * RA_ : AAA {DRN} {A_RD}
+RN * RA_ = RQ * RP : AAA {RQN} {RA_P}
+point T_ : intersect rt [X]
+RT * RT_ = RQ * RP : AAA {RQT} {RT_P}
+RT_ = RT : autoelim
+T_ == T : autoelim
+tangent [X] [A_] :
+```
+
+# 17. IMO 2017 SL G5
+
+Let ABCC1B1A1 be a convex hexagon such that AB = BC , and suppose that the line
+segments AA1 , BB1, and CC1 have the same perpendiular bisetor. Let the diagonals AC1 and A1C meet at D, and denote by ω the circle ABC . Let ω intersect the circle A1BC1 again at E != B . Prove that the lines BB1 and DE intersect on ω
+
+```java
+triangle {ABC}, AB=BC :
+line l : free ???
+point A1 : mirror A l Ma
+point B1 : mirror B l Mb 
+point C1 : mirror C l Mc
+point D : intersect ac1 a1c
+circle [W] : A B C
+cirlce [O] : A1 B C1
+point E, B : intersect [W] [O]
+E != B :
+point X : intersect bb1 de
+[W] contains X : ?
+{0}
+point M : mirror B W
+[W] contains M : WB = WM 
+BAM = pi/2 : diameter_angle [W] B M A
+BCM = pi/2 : diameter_angle [W] B M C
+MA = MC : rSSS {BAM} {BCM}
+{1}
+circle [T] : A A1 C C1
+point R : radical_center [W] [O] [T]
+contains l R : ...
+DA = DA1 : bisector l AA1 D
+RA = RA1 : bisector l AA1 R
+ADR = A1DR : SSS {RAD} {RA1D}
+BEC = REA : midarc B AC
+line ds : bisect ADC
+point S : intersect ds ac
+point S_ : intersect em ac
+AEM = CEM : MA = MC
+AS/CS = AD/CD : bisect ds ADC
+AD/CD = AR/CR : bisect dr ADC
+AR/CR = AE/CE : bisect er CEA
+AE/CE = AS_/CS_ : bisect es_ CEA
+S_ == S : autoelim
+RDS = RES = pi/2 : autoelim
+contains [P] R E S D : RES = RDS = pi/2
+{3}
+point X : intersect bb1 de
+EXB = EDS : autoelim
+EDS = ERS : [P] contains R E S D
+ERS = EMB : autoelim
+[W] contains [X] : EXB = EMB
+```
 
 
+# X5. IMO 2017 SL G6
 
+Let n>=3 be an integer. Two regular n-gons A and B are given in the plane. Prove that the vertices of A that lie inside B or on its boundary are consecutive.
+
+# 18. IMO 2017 SL G7
+
+Convex ABCD has inscribed circle center I. Let Ia, Ib, Ic and Id be the incenters of triangles DAB, ABC, BCD, CDA respectively. Suppose that the common external tangents of the circles AIbId and CIbId meet at X, and the common external tangents of circles BIaIc and DIaIc meet at Y. Prove that XIY = pi/2
+
+```java
+convex {ABCD}, circle [I] ab bc cd da :
+circle [Ia] da ab bd :
+circle [Ib] ab bc ca :
+circle [Ic] bc cd db :
+circle [Id] cd da ac :
+circle [Oa] A Ib Id :
+circle [Ob] B Ia Ic :
+circle [Oc] C Ib Id :
+circle [Od] D Ia Ic :
+line l1, l2, Ta, Tc : common_external_tangent [Oa] [Oc]
+point X : intersect l1 l4
+line l3, l4, Tb, Td : common_external_tangent [Ob] [Od]
+point Y : intersect l3 l4
+XIY = pi/2 : ?
+{1}
+point T : intersect [Ib] ca
+point T_ : intersect [Id] ca
+AB - BC = AD - CD : incircle I AB BC CD DA
+AT = (AB+AC-BC)/2 : incircle Ib AB BC CA
+AT_ = (AD+AC-CD)/2 : incircle Id AD AC CD
+AT = AT_ : autoelim
+T == T_ : autoelim
+line ld : Id T
+perp ld ca : tangent Id ca T
+line lb : Ib T
+perp lb ca : tangent Ib ca T
+ld == lb : autoelim
+{2:1 D:A B:C Id:Ia Ib:Ic}
+  perp IaIc bd
+{3}
+line ld : bisect ADC
+line lb : bisect ABC
+contain ld I : tangent [I] da dc
+contain lb I : tangent [I] ab bc
+contain ld Id : tangent [Id] da bc
+contain lb Ib : tangent [Ib] ab bc
+OaAId = TAIb : contains [Oa] A Ib Id, perp AT IbId
+IdAD = IdAC : tangent [I] da ac
+OaAD = OaAB = DAB/2 : autoelim
+l_OaA == l_AI : autoelim
+contain l_AI Oa : autoelim
+{4:3 Oa:Ob D:A B:C}
+  contain l_BI Ob : autoelim
+{5:3 Oa:Oc D:B B:D}
+  contain l_CI Oc : autoelim
+{6:3 Oa:Od D:C B:A}
+  contain l_DI Od : autoelim
+{7}
+perp l_OaOc Id Ib : OaId=OaIb, OcId=OcIb
+point W : intersect l_OaOc l_IbId
+point Ta : intersect l1
+OaX/OcX = OaTa/OcTc : rAAA TaXOa TcXOc
+OaTa/OcTc = OaIb/OcIb = 
+```
 
 
 
